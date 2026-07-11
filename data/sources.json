@@ -1,0 +1,891 @@
+[
+  {
+    "_id": "68014c2ab3ab61433350e800",
+    "name": "404 Media",
+    "homepageUrl": "https://www.404media.co/",
+    "rssUrl": "https://www.404media.co/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:03:58.951Z",
+    "imageUrl": "https://www.404media.co/favicon.png"
+  },
+  {
+    "_id": "68014a37b3ab61433350e261",
+    "name": "American Freakshow",
+    "homepageUrl": "https://www.americanfreakshow.news/",
+    "rssUrl": "https://www.americanfreakshow.news/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:13:09.511Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!0C4k!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F62afd142-6283-4d15-9b96-58c5a2fd5c20_720x720.png"
+  },
+  {
+    "_id": "68014a4cb3ab61433350e2d2",
+    "name": "Ars Technica",
+    "homepageUrl": "https://arstechnica.com/",
+    "rssUrl": "https://arstechnica.com/feed",
+    "tags": [
+      "technology"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:20:00.325Z",
+    "imageUrl": "https://cdn.arstechnica.net/wp-content/uploads/2016/10/cropped-ars-logo-512_480-60x60.png",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "684a34a3f1c8687524352f13",
+    "name": "Axios",
+    "homepageUrl": "https://axios.com",
+    "rssUrl": "https://api.axios.com/feed/",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:12:00.270Z",
+    "imageUrl": "https://tannerfriedman.com/wp-content/uploads/2022/08/91-913031_axios-axios-logo-hd-png-download.png"
+  },
+  {
+    "_id": "684a4c46f1c86875243535af",
+    "name": "BBC",
+    "homepageUrl": "https://bbc.co.uk",
+    "rssUrl": "https://feeds.bbci.co.uk/news/rss.xml",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:07:57.518Z",
+    "imageUrl": "https://news.bbcimg.co.uk/nol/shared/img/bbc_news_120x60.gif"
+  },
+  {
+    "_id": "68014b83b3ab61433350e715",
+    "name": "BIG by Matt Stoller",
+    "homepageUrl": "https://www.thebignewsletter.com/",
+    "rssUrl": "https://www.thebignewsletter.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:10:50.537Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2Fc12cbcf7-a524-40b7-bd22-c081d3479a42_1200x1200.png"
+  },
+  {
+    "_id": "68004510fd56ec46b3efd523",
+    "name": "Boing Boing",
+    "homepageUrl": "https://boingboing.net",
+    "rssUrl": "https://boingboing.net/feed",
+    "includeSelector": "asdf",
+    "excludeSelector": "",
+    "biasScore": 0,
+    "tags": [
+      "technology"
+    ],
+    "__v": 0,
+    "imageUrl": "https://i0.wp.com/boingboing.net/wp-content/uploads/2018/04/apple-touch-icon-1.png?fit=32%2C32&#038;quality=55&#038;ssl=1",
+    "lastScrapedAt": "2026-07-11T13:02:53.700Z",
+    "hasPaywall": false
+  },
+  {
+    "_id": "6803fa41db5e0edb2dcaf5e7",
+    "name": "Boston Globe",
+    "homepageUrl": "https://www.bostonglobe.com",
+    "includeSelector": "",
+    "tags": [
+      "news",
+      "local",
+      "politics"
+    ],
+    "imageUrl": "https://www.bostonglobe.com/favicon.ico",
+    "hasPaywall": true,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:16:50.586Z",
+    "biasScore": 0,
+    "rssUrl": ""
+  },
+  {
+    "_id": "68014c8fb3ab61433350e8a5",
+    "name": "Breaking the News",
+    "homepageUrl": "https://fallows.substack.com/",
+    "rssUrl": "https://fallows.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:02:59.663Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!QpL2!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2Fd13bc915-b912-45ea-99cc-ea4e03b65417_1280x1280.png"
+  },
+  {
+    "_id": "685c30110a0fda743945d460",
+    "name": "Business Insider",
+    "homepageUrl": "https://www.businessinsider.com",
+    "rssUrl": "https://feeds.businessinsider.com/custom/all",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:22:52.434Z"
+  },
+  {
+    "_id": "68754cb0dcf1c1fdbe990139",
+    "name": "CBT for TRT",
+    "homepageUrl": "https://therapistwithtinnitus.substack.com",
+    "rssUrl": "https://therapistwithtinnitus.substack.com/feed",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:20:58.699Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!IMXr!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F46243635-3b96-4ed6-b829-517e5514985b_1280x1280.png"
+  },
+  {
+    "_id": "68014f87b51f114f513226fa",
+    "name": "Café Anne",
+    "homepageUrl": "https://annekadet.substack.com/",
+    "rssUrl": "https://annekadet.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:01:50.494Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!cEdF!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F5452f50a-e6da-4e19-8f50-5405f73ab785_500x500.png",
+    "biasScore": null,
+    "excludeSelector": null,
+    "includeSelector": null
+  },
+  {
+    "_id": "68014de9e2084ca0488745da",
+    "name": "Can We Still Govern",
+    "homepageUrl": "https://donmoynihan.substack.com/",
+    "rssUrl": "https://donmoynihan.substack.com/feed",
+    "tags": [
+      "politics"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:20:50.523Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!yWKj!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fdonmoynihan.substack.com%2Fimg%2Fsubstack.png",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "68015150b51f114f51322c75",
+    "name": "Can't Get Much Higher",
+    "homepageUrl": "https://www.cantgetmuchhigher.com/",
+    "rssUrl": "https://www.cantgetmuchhigher.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:14:50.516Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!7dPV!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Ff001ad4d-db0c-469b-bdb0-c47c1d76e400_1280x1280.png"
+  },
+  {
+    "_id": "6803fd644c5c9c3bb5cd10b9",
+    "name": "Chicago Sun-Times",
+    "homepageUrl": "https://chicago.suntimes.com",
+    "includeSelector": "main.Page-oneColumn",
+    "tags": [
+      "news",
+      "local",
+      "politics"
+    ],
+    "hasPaywall": true,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:01:57.633Z",
+    "biasScore": 0,
+    "rssUrl": "https://chicago.suntimes.com/feed",
+    "imageUrl": "https://chicago.suntimes.com/apple-touch-icon.png"
+  },
+  {
+    "_id": "68014ebfe2084ca0488746ed",
+    "name": "Citation Needed",
+    "homepageUrl": "https://www.citationneeded.news/",
+    "rssUrl": "https://www.citationneeded.news/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:21:55.587Z",
+    "imageUrl": "https://www.citationneeded.news/favicon.png"
+  },
+  {
+    "_id": "68015116b51f114f51322bb2",
+    "name": "Ctrl Alt Right Delete",
+    "homepageUrl": "https://www.altrightdelete.news/",
+    "rssUrl": "https://www.altrightdelete.news/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:20:54.664Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!lvQ3!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F7221229d-711f-44d4-b7b3-a69bd29054e8_1280x1280.png"
+  },
+  {
+    "_id": "680151f7b51f114f513231a7",
+    "name": "Curious About Everything",
+    "homepageUrl": "https://jodiettenberg.substack.com/",
+    "rssUrl": "https://jodiettenberg.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:05:58.407Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!mupx!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F3424e0c5-09d0-4009-b252-a98152f992e5_256x256.png"
+  },
+  {
+    "_id": "680050ba8d7c49c64ce03894",
+    "name": "Deadline",
+    "homepageUrl": "https://deadline.com",
+    "rssUrl": "https://deadline.com/feed/",
+    "tags": [
+      "media"
+    ],
+    "__v": 0,
+    "imageUrl": "https://deadline.com/wp-content/uploads/2019/04/cropped-icon-512x512.png?w=32",
+    "lastScrapedAt": "2026-07-11T13:20:04.516Z",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "68015134b51f114f51322bfc",
+    "name": "Disconnect",
+    "homepageUrl": "https://www.disconnect.blog/",
+    "rssUrl": "https://www.disconnect.blog/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:21:52.201Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!UfD8!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fbb52576c-6007-455a-aabf-40a74f740841_500x500.png"
+  },
+  {
+    "_id": "68014a15b3ab61433350e1ff",
+    "name": "Ed Zitron",
+    "homepageUrl": "https://www.wheresyoured.at/",
+    "rssUrl": "https://www.wheresyoured.at/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:06:50.284Z",
+    "imageUrl": "https://www.wheresyoured.at/favicon.png"
+  },
+  {
+    "_id": "68014ad0b3ab61433350e4b4",
+    "name": "Electrek",
+    "homepageUrl": "https://electrek.co/",
+    "rssUrl": "https://electrek.co/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:23:50.619Z",
+    "imageUrl": "https://electrek.co/wp-content/uploads/sites/3/2017/03/electrek.png?w=32"
+  },
+  {
+    "_id": "680151e4b51f114f5132310b",
+    "name": "Finding Gravity",
+    "homepageUrl": "https://www.findinggravity.net/",
+    "rssUrl": "https://www.findinggravity.net/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:18:54.386Z",
+    "imageUrl": "https://www.findinggravity.net/img/substack.png"
+  },
+  {
+    "_id": "685b131313f0aa1c3742cc94",
+    "name": "Hacker News",
+    "homepageUrl": "https://news.ycombinator.com",
+    "rssUrl": "https://news.ycombinator.com/rss",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:15:52.590Z",
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Y_Combinator_logo.svg/1200px-Y_Combinator_logo.svg.png"
+  },
+  {
+    "_id": "680150a8b51f114f51322ae6",
+    "name": "Hard Reset",
+    "homepageUrl": "https://hardresetmedia.substack.com/",
+    "rssUrl": "https://hardresetmedia.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:09:54.539Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!JQBy!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F21e271d2-cd0b-4ac7-b29b-d69f04d92015_800x800.png"
+  },
+  {
+    "_id": "68015033b51f114f51322871",
+    "name": "Heads Up News",
+    "homepageUrl": "https://www.headsupnews.org/",
+    "rssUrl": "https://www.headsupnews.org/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:13:13.649Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!mYtz!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F333cbc55-8c8b-4353-8db1-ea6c4501c3e0_320x320.png"
+  },
+  {
+    "_id": "6801505ab51f114f513228ea",
+    "name": "Heather Cox Richardson - Letters from an American",
+    "homepageUrl": "https://heathercoxrichardson.substack.com/",
+    "rssUrl": "https://heathercoxrichardson.substack.com/feed",
+    "tags": [
+      "politics",
+      "recommended"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:05:54.371Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!xhMO!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fheathercoxrichardson.substack.com%2Fimg%2Fsubstack.png",
+    "biasScore": 0,
+    "includeSelector": "undefined",
+    "hasPaywall": false
+  },
+  {
+    "_id": "680048daa57e029c4deeddea",
+    "name": "How Things Work",
+    "homepageUrl": "https://www.hamiltonnolan.com",
+    "rssUrl": "https://www.hamiltonnolan.com/feed",
+    "tags": [
+      "politics",
+      "recommended"
+    ],
+    "__v": 0,
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!pElr!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F4701a7e0-1785-4396-ab6c-8a19a3c87c62_1280x1280.png",
+    "lastScrapedAt": "2026-07-11T13:09:58.665Z",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "6801516db51f114f51322e7b",
+    "name": "How To Feel Alive",
+    "homepageUrl": "https://catherineprice.substack.com/",
+    "rssUrl": "https://catherineprice.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:06:53.406Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!7iqG!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fb7c3ceff-c185-40e6-af4f-320c94c342af_1080x1080.png"
+  },
+  {
+    "_id": "6801a17a21adbd2e8d2eaa5f",
+    "name": "Kottke",
+    "homepageUrl": "https://kottke.org",
+    "rssUrl": "https://feeds.kottke.org/main",
+    "includeSelector": "",
+    "tags": [
+      "recommended",
+      "politics"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:24:09.988Z",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "imageUrl": "https://kottke.org/favicon.ico"
+  },
+  {
+    "_id": "68012d04af809cb7c12f6233",
+    "name": "LA Times",
+    "homepageUrl": "https://www.latimes.com",
+    "tags": [
+      "news",
+      "local"
+    ],
+    "imageUrl": "https://www.latimes.com/apple-touch-icon.png",
+    "__v": 0,
+    "biasScore": 0,
+    "includeSelector": "",
+    "lastScrapedAt": "2026-07-11T13:12:50.290Z",
+    "hasPaywall": true,
+    "rssUrl": "https://www.latimes.com/world-nation/rss2.0.xml#nt=0000016c-0bf3-d57d-afed-2fff84fd0000-1col-7030col1",
+    "excludeSelector": ""
+  },
+  {
+    "_id": "6801474ab3ab61433350def4",
+    "name": "Lucid",
+    "homepageUrl": "https://lucid.substack.com/",
+    "rssUrl": "https://lucid.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:18:13.766Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!_eC7!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2Fe38c269b-49be-4dc5-8166-3a03b3b805fe_256x256.png"
+  },
+  {
+    "_id": "68014fb1b51f114f5132273e",
+    "name": "MGOBLOG",
+    "homepageUrl": "https://www.mgoblog.com/",
+    "rssUrl": "http://www.mgoblog.com/rss.xml",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:15:50.320Z",
+    "biasScore": 0
+  },
+  {
+    "_id": "68015024b51f114f5132283d",
+    "name": "MLB Trade Rumors",
+    "homepageUrl": "https://www.mlbtraderumors.com/",
+    "rssUrl": "https://www.mlbtraderumors.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:03:50.602Z",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "imageUrl": "https://cdn.mlbtraderumors.com/wp-content/themes/mlbtr2015/images/favicon-32x32.png?v=ngkBbGyONn",
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "685c2fc156753b048e3b53c4",
+    "name": "Marin Independent Journal",
+    "homepageUrl": "https://www.marinij.com",
+    "rssUrl": "https://www.marinij.com/feed/",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:24:21.643Z",
+    "imageUrl": "https://www.marinij.com/wp-content/uploads/2018/07/cropped-MIJ2_SI-1.png?w=32"
+  },
+  {
+    "_id": "684a3ff62e37d09425f89bd6",
+    "name": "Meditations in an Emergency",
+    "homepageUrl": "https://www.meditationsinanemergency.com",
+    "rssUrl": "https://www.meditationsinanemergency.com/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:02:50.620Z",
+    "imageUrl": "https://www.meditationsinanemergency.com/favicon.png"
+  },
+  {
+    "_id": "6801440c7612d6b22e29fc34",
+    "name": "Men Yell At Me",
+    "homepageUrl": "https://lyz.substack.com/",
+    "rssUrl": "https://lyz.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:09:50.493Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!fDuV!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fc9e18cb4-43b6-4e4c-953e-1cc4abf4307a_900x900.png"
+  },
+  {
+    "_id": "684da878821f644f18eb4754",
+    "name": "Mother Jones",
+    "homepageUrl": "https://www.motherjones.com",
+    "rssUrl": "https://www.motherjones.com/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:16:54.902Z",
+    "imageUrl": "https://www.motherjones.com/wp-content/uploads/2017/09/cropped-favicon-512x512.png?w=32"
+  },
+  {
+    "_id": "684a4dcdf1c86875243536e8",
+    "name": "National Public Radio",
+    "homepageUrl": "https://npr.org",
+    "rssUrl": "https://feeds.npr.org/1001/rss.xml",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:15:50.516Z",
+    "imageUrl": "https://media.npr.org/images/podcasts/primary/npr_generic_image_300.jpg?s=200"
+  },
+  {
+    "_id": "6800506b8d7c49c64ce0384c",
+    "name": "Pluralistic: Daily links from Cory Doctorow",
+    "homepageUrl": "https://pluralistic.net/",
+    "rssUrl": "https://pluralistic.net/feed/",
+    "tags": [
+      "recommended",
+      "politics"
+    ],
+    "__v": 0,
+    "imageUrl": "https://i0.wp.com/pluralistic.net/wp-content/uploads/2020/02/cropped-guillotine-French-Revolution.jpg?fit=32%2C32&#038;ssl=1",
+    "lastScrapedAt": "2026-07-11T13:11:50.795Z",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "68014aeeb3ab61433350e647",
+    "name": "Popular Information",
+    "homepageUrl": "https://popular.info/",
+    "rssUrl": "https://popular.info/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:22:56.804Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!Axm0!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F8bfa847f-969f-4f84-b454-840af98cbe03_178x178.png"
+  },
+  {
+    "_id": "6801476bb3ab61433350df6e",
+    "name": "Press Watch",
+    "homepageUrl": "https://criticalread.substack.com/",
+    "rssUrl": "https://criticalread.substack.com/feed",
+    "tags": [
+      "media"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:18:50.356Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!2Aos!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fa5416a68-a885-449e-bd84-1a3e6bf4b043_512x512.png",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "684a52d82f4fa43616e2f84b",
+    "name": "Quartz",
+    "homepageUrl": "https://qz.com",
+    "rssUrl": "https://cms.qz.com/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:14:50.376Z",
+    "imageUrl": "https://yt3.googleusercontent.com/ytc/AIdro_nGQMXOFmFzAkB6jrQC57xhnxg_SQj76dLkwVmFjU-CpRM=s900-c-k-c0x00ffffff-no-rj"
+  },
+  {
+    "_id": "684a4cfff1c8687524353691",
+    "name": "SF Standard",
+    "homepageUrl": "https://sfstandard.com",
+    "rssUrl": "https://sfstandard.com/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:08:57.021Z",
+    "imageUrl": "https://content.sfstandard.com/wp-content/uploads/2024/02/cropped-icon.png?w=32"
+  },
+  {
+    "_id": "68015185b51f114f51322f11",
+    "name": "Sherrilyn",
+    "homepageUrl": "https://sherrilyn.substack.com/",
+    "rssUrl": "https://sherrilyn.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:14:54.560Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!tR-P!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F3ce3be89-56c2-41d4-bc47-811ca89cc30a_1280x1280.png"
+  },
+  {
+    "_id": "68015005b51f114f513227f9",
+    "name": "Still Looking For The Joke",
+    "homepageUrl": "https://merrillmarkoe.substack.com/",
+    "rssUrl": "https://merrillmarkoe.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:00:54.364Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!swv7!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F4444bbcb-03e3-4f89-b59c-1aa22562350f_1280x1280.png"
+  },
+  {
+    "_id": "685d9e632efa0f2fbc8f4261",
+    "name": "Straight Arrow News",
+    "homepageUrl": "https://san.com",
+    "rssUrl": "https://san.com/feed/",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:00:58.547Z",
+    "imageUrl": "https://san.com/wp-content/uploads/2024/02/cropped-SAN-Logo.png?w=32"
+  },
+  {
+    "_id": "68488826df5bcc7b75cf5a75",
+    "name": "TechCrunch",
+    "homepageUrl": "https://www.techcrunch.com",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "biasScore": null,
+    "excludeSelector": null,
+    "rssUrl": "https://techcrunch.com/feed/",
+    "lastScrapedAt": "2026-07-11T13:13:58.513Z",
+    "imageUrl": "https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png?w=32"
+  },
+  {
+    "_id": "68014831b3ab61433350e056",
+    "name": "TechDirt",
+    "homepageUrl": "https://www.techdirt.com/",
+    "rssUrl": "https://www.techdirt.com/feed",
+    "tags": [
+      "technology"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:22:50.323Z",
+    "imageUrl": "https://i0.wp.com/www.techdirt.com/wp-content/uploads/2022/02/cropped-techdirt-square-512x512-1.png?fit=32%2C32&#038;ssl=1",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "68044d3984e6767a701a4d4d",
+    "name": "The Atlantic",
+    "homepageUrl": "https://www.theatlantic.com",
+    "includeSelector": "main",
+    "tags": [
+      "politics",
+      "culture",
+      "recommended"
+    ],
+    "hasPaywall": true,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:10:50.701Z",
+    "biasScore": 0,
+    "imageUrl": "https://cdn.theatlantic.com/_next/static/images/apple-touch-icon-default-b504d70343a9438df64c32ce339c7ebc.png",
+    "rssUrl": ""
+  },
+  {
+    "_id": "685c2d78b581ecb366bcfba8",
+    "name": "The Financial Times",
+    "homepageUrl": "https://www.ft.com",
+    "rssUrl": "https://www.ft.com/news-feed?format=rss",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:03:53.833Z",
+    "imageUrl": "https://seekvectors.com/files/download/04871609dac34c93a36b015b2abcc04a.jpg"
+  },
+  {
+    "_id": "680195aeac938d1d15ab755f",
+    "name": "The Guardian",
+    "homepageUrl": "https://www.theguardian.com/us",
+    "includeSelector": "",
+    "tags": [
+      "news",
+      "international",
+      "recommended"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:12:19.808Z",
+    "biasScore": 0,
+    "imageUrl": "https://assets.guim.co.uk/images/guardian-logo-rss.c45beb1bafa34b347ac333af2e6fe23f.png",
+    "hasPaywall": false,
+    "rssUrl": "https://www.theguardian.com/us/rss"
+  },
+  {
+    "_id": "68014cd6b3ab61433350e95d",
+    "name": "The Handbasket",
+    "homepageUrl": "https://www.thehandbasket.co/",
+    "rssUrl": "https://rss.beehiiv.com/feeds/40ZQ7CSldT.xml",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:06:57.461Z",
+    "biasScore": 0,
+    "includeSelector": "undefined",
+    "imageUrl": "https://media.beehiiv.com/cdn-cgi/image/fit=scale-down,format=auto,onerror=redirect,quality=80/uploads/publication/logo/f4654ef7-0051-4cff-9d6e-95f090b197b1/Untitled__4_.png"
+  },
+  {
+    "_id": "684f2f6127798f91bda94ce1",
+    "name": "The Ink",
+    "homepageUrl": "https://the.ink",
+    "rssUrl": "https://the.ink/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:07:50.391Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!O231!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F576ac1a9-6466-4fac-9e05-e2faaae2de6d_600x600.png"
+  },
+  {
+    "_id": "680150fab51f114f51322b6e",
+    "name": "The Lens",
+    "homepageUrl": "https://stephaniekelton.substack.com/",
+    "rssUrl": "https://stephaniekelton.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:05:50.347Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!jq_N!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2Ffb41764b-5034-4fe2-9f43-443b78925d24_700x700.png"
+  },
+  {
+    "_id": "680143d57612d6b22e29fbbe",
+    "name": "The Nerd Reich",
+    "homepageUrl": "https://www.thenerdreich.com/",
+    "rssUrl": "https://www.thenerdreich.com/feed",
+    "tags": [
+      "recommended",
+      "politics"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:07:54.429Z",
+    "imageUrl": "https://www.thenerdreich.com/favicon.png",
+    "biasScore": 0,
+    "hasPaywall": false,
+    "includeSelector": "undefined"
+  },
+  {
+    "_id": "67fed58dc1b67f2c01a279e9",
+    "name": "The New York Times",
+    "homepageUrl": "https://www.nytimes.com",
+    "__v": 0,
+    "biasScore": null,
+    "includeSelector": null,
+    "excludeSelector": null,
+    "tags": [
+      "popular",
+      "news"
+    ],
+    "imageUrl": "https://static01.nyt.com/images/misc/NYT_logo_rss_250x40.png",
+    "lastScrapedAt": "2026-07-11T13:16:51.481Z",
+    "rssUrl": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+    "hasPaywall": true
+  },
+  {
+    "_id": "68044dc9cedb1176f1e6a7b5",
+    "name": "The New Yorker",
+    "homepageUrl": "https://www.newyorker.com",
+    "includeSelector": "",
+    "tags": [
+      "politics",
+      "culture"
+    ],
+    "hasPaywall": true,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:17:50.264Z",
+    "biasScore": 0,
+    "rssUrl": "https://www.newyorker.com/feed/everything",
+    "imageUrl": "https://play-lh.googleusercontent.com/hL1W_sPILheE9bRhcm006GAWOpx_FFXorTmwwXETGFeaTtCD-V7a9mu7Ytb3bd4-zl93"
+  },
+  {
+    "_id": "685b1bd16b4e6d2fed6f0052",
+    "name": "The Onion",
+    "homepageUrl": "https://theonion.com",
+    "rssUrl": "https://theonion.com/feed/",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:05:00.610Z",
+    "imageUrl": "https://theonion.com/wp-content/uploads/2024/07/cropped-site-icon.png?w=32"
+  },
+  {
+    "_id": "68014fedb51f114f513227b5",
+    "name": "The Present Age",
+    "homepageUrl": "https://www.readtpa.com/",
+    "rssUrl": "https://www.readtpa.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:08:50.373Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!h9Ik!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F12043fbe-3bb2-4906-9595-9acea6400628_1280x1280.png"
+  },
+  {
+    "_id": "68015141b51f114f51322c40",
+    "name": "The Reframe",
+    "homepageUrl": "https://www.the-reframe.com/",
+    "rssUrl": "https://www.the-reframe.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:04:50.462Z",
+    "imageUrl": "https://www.the-reframe.com/favicon.png"
+  },
+  {
+    "_id": "68015043b51f114f513228a6",
+    "name": "The Snap Forward",
+    "homepageUrl": "https://alexsteffen.substack.com/",
+    "rssUrl": "https://alexsteffen.substack.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:00:50.310Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!o159!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F82fe488f-3201-4c96-8ef7-6cdf4710c94f_606x606.png"
+  },
+  {
+    "_id": "680151abb51f114f51322fa9",
+    "name": "The Sword and the Sandwich",
+    "homepageUrl": "https://buttondown.com/theswordandthesandwich",
+    "rssUrl": "https://buttondown.com/theswordandthesandwich/rss",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:04:53.556Z",
+    "imageUrl": "https://assets.buttondown.email/images/0dfa0ae1-43d0-4484-becd-cd495500ea98.webp"
+  },
+  {
+    "_id": "686a9da9253a6658eeb6b457",
+    "name": "The Unpopulist",
+    "homepageUrl": "https://www.theunpopulist.net",
+    "rssUrl": "https://www.theunpopulist.net/feed",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:13:54.481Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!J8su!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F6f75a838-25c7-497f-940a-1583c947c923_256x256.png"
+  },
+  {
+    "_id": "68014f54b51f114f5132261c",
+    "name": "User Mag",
+    "homepageUrl": "https://www.usermag.co/",
+    "rssUrl": "https://www.usermag.co/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:13:50.481Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!h-PD!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fdba39862-5a39-4d2b-be27-15dfa340269c_1280x1280.png"
+  },
+  {
+    "_id": "68015125b51f114f51322bf6",
+    "name": "Uses This",
+    "homepageUrl": "https://usesthis.com/",
+    "rssUrl": "https://usesthis.com/feed.atom",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:08:54.431Z",
+    "biasScore": 0,
+    "includeSelector": "undefined",
+    "hasPaywall": false,
+    "imageUrl": "https://usesthis.com/favicon.ico"
+  },
+  {
+    "_id": "6848a4ca7f21ef903eaf1b9b",
+    "name": "VentureBeat",
+    "homepageUrl": "https://www.venturebeat.com",
+    "rssUrl": "https://www.venturebeat.com/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:21:50.480Z",
+    "imageUrl": "https://venturebeat.com/wp-content/themes/vb-news/brand/img/logos/VB_Extended_Logo_40H.png"
+  },
+  {
+    "_id": "68014a9cb3ab61433350e3b7",
+    "name": "Very Serious",
+    "homepageUrl": "https://www.joshbarro.com/",
+    "rssUrl": "https://www.joshbarro.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:10:50.855Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!YPjw!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fbucketeer-e05bbc84-baa3-437e-9518-adb32be77984.s3.amazonaws.com%2Fpublic%2Fimages%2F47daceba-d1a3-4865-85e5-8f8a0e315dfe_256x256.png"
+  },
+  {
+    "_id": "6866ef5247046c6267ad35bb",
+    "name": "Wall Street Journal",
+    "homepageUrl": "https://wsj.com",
+    "rssUrl": "https://feeds.content.dowjones.io/public/rss/RSSWorldNews",
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:18:00.001Z",
+    "imageUrl": "http://online.wsj.com/img/wsj_sm_logo.gif"
+  },
+  {
+    "_id": "68014ab3b3ab61433350e430",
+    "name": "Weather West",
+    "homepageUrl": "https://weatherwest.com/",
+    "rssUrl": "https://weatherwest.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:00:02.518Z",
+    "imageUrl": "https://weatherwest.com/wp-content/uploads/2024/11/cropped-Weather-West-KV-Square-Clouds-32x32.jpg"
+  },
+  {
+    "_id": "680146937612d6b22e29fdaf",
+    "name": "Wired",
+    "homepageUrl": "https://www.wired.com",
+    "rssUrl": "https://www.wired.com/feed/rss",
+    "tags": [
+      "technology",
+      "recommended"
+    ],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:19:50.561Z",
+    "biasScore": 0,
+    "imageUrl": "https://media.wired.com/photos/615e2b8ce78a8cd913bbaa76/16:9/w_1280,c_limit/wired_bug.jpg",
+    "includeSelector": "main#main-content",
+    "hasPaywall": false,
+    "excludeSelector": ""
+  },
+  {
+    "_id": "68014ed9e2084ca048874752",
+    "name": "Wolf Street",
+    "homepageUrl": "https://wolfstreet.com/",
+    "rssUrl": "https://wolfstreet.com/feed",
+    "tags": [],
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:01:54.674Z"
+  },
+  {
+    "_id": "68499d72038d050d8a1fdb91",
+    "name": "Your Time Starts Now",
+    "homepageUrl": "https://loricorbetmann.substack.com",
+    "rssUrl": "https://loricorbetmann.substack.com/feed",
+    "includeSelector": null,
+    "tags": [],
+    "hasPaywall": false,
+    "__v": 0,
+    "lastScrapedAt": "2026-07-11T13:18:57.461Z",
+    "imageUrl": "https://substackcdn.com/image/fetch/$s_!0gcz!,w_256,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fcde91da3-2d99-48b2-bc3e-450723ed263b_300x300.png"
+  }
+]
