@@ -48,7 +48,7 @@ export function Nav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         <Link href="/today" className="text-lg font-bold text-brand-600">
           NewsWithFriends
         </Link>

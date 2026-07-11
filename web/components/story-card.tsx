@@ -1,20 +1,22 @@
 "use client";
 
 import { api, ApiError } from "@/lib/api";
+import { EngagementSummary } from "@/components/engagement-summary";
 import { FriendStars } from "@/components/friend-stars";
 import { useToast } from "@/components/toast";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { Story } from "@/lib/types";
+import type { Story, UUID } from "@/lib/types";
 import { useState } from "react";
 
 interface StoryCardProps {
   story: Story;
   dense?: boolean;
   onChange?: (story: Story) => void;
+  onOpen?: (storyId: UUID) => void;
 }
 
-export function StoryCard({ story, dense = false, onChange }: StoryCardProps) {
+export function StoryCard({ story, dense = false, onChange, onOpen }: StoryCardProps) {
   const { notify } = useToast();
   const [read, setRead] = useState<boolean>(story.read);
   const [starred, setStarred] = useState<boolean>(story.starred);
@@ -37,22 +39,24 @@ export function StoryCard({ story, dense = false, onChange }: StoryCardProps) {
     }
   }
 
-  async function markReadAndOpen(): Promise<void> {
+  function handleOpen(e: React.MouseEvent): void {
+    if (onOpen) {
+      e.preventDefault();
+      setRead(true);
+      onOpen(story.id);
+      return;
+    }
     if (!read) {
       setRead(true);
-      try {
-        await api.markRead(story.id, true);
-        onChange?.({ ...story, read: true });
-      } catch {
-        // non-fatal
-      }
+      void api.markRead(story.id, true).catch(() => undefined);
+      onChange?.({ ...story, read: true });
     }
   }
 
   return (
     <article
       className={`group rounded-xl border border-slate-200 bg-white transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${
-        read ? "opacity-70" : ""
+        read ? "opacity-45 grayscale" : ""
       }`}
     >
       <div className={dense ? "p-3" : "p-4"}>
@@ -62,17 +66,14 @@ export function StoryCard({ story, dense = false, onChange }: StoryCardProps) {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={story.source_image_url}
-                alt=""
-                className="h-5 w-5 shrink-0 rounded-full object-cover"
+                alt={story.source_name}
+                className="h-6 w-auto max-w-[180px] shrink-0 object-contain"
               />
             ) : (
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700">
-                {story.source_name.charAt(0)}
+              <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {story.source_name}
               </span>
             )}
-            <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
-              {story.source_name}
-            </span>
           </div>
         ) : null}
         <div className="flex gap-4">
@@ -89,7 +90,7 @@ export function StoryCard({ story, dense = false, onChange }: StoryCardProps) {
               href={story.article_url}
               target="_blank"
               rel="noreferrer noopener"
-              onClick={markReadAndOpen}
+              onClick={handleOpen}
               className="block font-semibold leading-snug text-slate-900 hover:text-brand-600 dark:text-slate-100"
             >
               {story.full_headline}
@@ -99,29 +100,38 @@ export function StoryCard({ story, dense = false, onChange }: StoryCardProps) {
                 {stripHtml(story.summary).slice(0, 280)}
               </p>
             ) : null}
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
               {story.friend_stars && story.friend_stars.length > 0 ? (
                 <FriendStars stars={story.friend_stars} />
               ) : null}
               {story.author_names.length > 0 ? (
-                <span>{story.author_names.join(", ")}</span>
+                <span className="min-w-0 truncate">
+                  {story.author_names.join(", ")}
+                </span>
               ) : null}
-              <span>{relativeTime(story.created_at)}</span>
+              <span className="ml-auto shrink-0 whitespace-nowrap">
+                {relativeTime(story.created_at)}
+              </span>
             </div>
           </div>
           <button
             onClick={toggleStar}
             disabled={busy}
-            aria-label={starred ? "Unstar" : "Star"}
+            aria-label={starred ? "Remove heart" : "Heart"}
             className={`self-start text-xl transition ${
               starred
-                ? "text-slate-900 dark:text-slate-100"
-                : "text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
+                ? "text-red-500"
+                : "text-slate-300 hover:text-red-500"
             }`}
           >
-            {starred ? "★" : "☆"}
+            {starred ? "♥" : "♡"}
           </button>
         </div>
+        {!dense ? (
+          <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+            <EngagementSummary engagement={story.engagement} />
+          </div>
+        ) : null}
       </div>
     </article>
   );

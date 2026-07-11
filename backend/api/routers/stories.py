@@ -11,9 +11,20 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.sql import ColumnElement
 
 from api.deps import CurrentUser, SessionDep
-from api.friends import display_name, friend_stars_by_story
-from api.schemas import FriendStarOut, StoryList, StoryOut, StoryWithStatus
-from core.models import Story, StoryStatus, UserSource
+from api.friends import (
+    aggregate_engagement,
+    display_name,
+    friend_activity_by_story,
+    friend_stars_by_story,
+)
+from api.schemas import (
+    FriendEngagementOut,
+    FriendStarOut,
+    StoryList,
+    StoryOut,
+    StoryWithStatus,
+)
+from core.models import Source, Story, StoryStatus, UserSource
 
 router = APIRouter(prefix="/stories", tags=["stories"])
 
@@ -156,11 +167,33 @@ async def story_updates(
 async def get_story(
     story_id: uuid.UUID, session: SessionDep, user: CurrentUser
 ) -> StoryWithStatus:
-    stmt = _with_status_columns(select(Story).where(Story.id == story_id), user.id)
+    stmt = (
+        _with_status_columns(select(Story).where(Story.id == story_id), user.id)
+        .add_columns(Source)
+        .outerjoin(Source, Source.id == Story.source_id)
+    )
     row = (await session.execute(stmt)).first()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "story not found")
-    return _rows_to_stories([row])[0]
+
+    story, read, starred, source = row
+    model = StoryWithStatus.model_validate(story)
+    model.read = bool(read)
+    model.starred = bool(starred)
+    model.source_name = source.name if source else None
+    model.source_image_url = source.image_url if source else None
+
+    friend_profiles = await friend_stars_by_story(session, user.id, [story.id])
+    model.friend_stars = [
+        FriendStarOut(user_id=p.id, display_name=display_name(p))
+        for p in friend_profiles.get(story.id, [])
+    ]
+    activity = await friend_activity_by_story(session, user.id, [story.id])
+    read_n, hearted_n, commented_n = aggregate_engagement(activity, [story.id])
+    model.engagement = FriendEngagementOut(
+        read=read_n, hearted=hearted_n, commented=commented_n
+    )
+    return model
 
 
 # Re-export for callers importing StoryOut alongside the router.

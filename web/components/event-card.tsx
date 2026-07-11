@@ -1,13 +1,15 @@
 "use client";
 
+import { EngagementSummary } from "@/components/engagement-summary";
 import { FriendStars } from "@/components/friend-stars";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { EventCoverage, EventSummary } from "@/lib/types";
+import type { EventCoverage, EventSummary, UUID } from "@/lib/types";
 import Link from "next/link";
 
 interface EventCardProps {
   event: EventSummary;
+  onOpen?: (storyId: UUID) => void;
 }
 
 function firstLine(summary: string | null): string {
@@ -24,18 +26,23 @@ function SourceName({ name }: { name: string }) {
   );
 }
 
-function CoverageRow({ item }: { item: EventCoverage }) {
+function CoverageRow({
+  item,
+  onOpen,
+}: {
+  item: EventCoverage;
+  onOpen?: (storyId: UUID) => void;
+}) {
   return (
-    <a
-      href={item.article_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-start justify-between gap-3 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+    <button
+      type="button"
+      onClick={() => onOpen?.(item.story_id)}
+      className="flex w-full items-start justify-between gap-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
     >
       <div className="min-w-0 flex-1">
         <p
           className={`text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100 ${
-            item.read ? "opacity-60" : ""
+            item.read ? "font-normal text-slate-400 dark:text-slate-500" : ""
           }`}
         >
           {item.full_headline}
@@ -47,11 +54,11 @@ function CoverageRow({ item }: { item: EventCoverage }) {
         ) : null}
       </div>
       <SourceName name={item.source_name} />
-    </a>
+    </button>
   );
 }
 
-export function EventCard({ event }: EventCardProps) {
+export function EventCard({ event, onOpen }: EventCardProps) {
   const [lead, ...others] = event.coverage;
   if (!lead) return null;
 
@@ -72,19 +79,26 @@ export function EventCard({ event }: EventCardProps) {
           <img
             src={heroImage}
             alt=""
-            className="h-24 w-24 shrink-0 rounded-lg object-cover"
+            onClick={() => onOpen?.(lead.story_id)}
+            className="h-24 w-24 shrink-0 cursor-pointer rounded-lg object-cover"
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <a href={lead.article_url} target="_blank" rel="noopener noreferrer">
+          <button
+            type="button"
+            onClick={() => onOpen?.(lead.story_id)}
+            className="block text-left"
+          >
             <h3
-              className={`line-clamp-2 text-lg font-bold leading-snug text-slate-900 hover:text-brand-600 dark:text-slate-100 ${
-                lead.read ? "opacity-60" : ""
+              className={`line-clamp-2 text-lg font-bold leading-snug hover:text-brand-600 ${
+                lead.read
+                  ? "text-slate-400 dark:text-slate-500"
+                  : "text-slate-900 dark:text-slate-100"
               }`}
             >
               {lead.full_headline}
             </h3>
-          </a>
+          </button>
           {firstLine(lead.summary) || event.friend_stars.length > 0 ? (
             <div className="mt-1 flex items-center gap-2">
               <FriendStars stars={event.friend_stars} />
@@ -109,10 +123,14 @@ export function EventCard({ event }: EventCardProps) {
       {others.length > 0 ? (
         <div className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto border-t border-slate-100 dark:divide-slate-800 dark:border-slate-800">
           {others.map((item) => (
-            <CoverageRow key={item.story_id} item={item} />
+            <CoverageRow key={item.story_id} item={item} onOpen={onOpen} />
           ))}
         </div>
       ) : null}
+
+      <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+        <EngagementSummary engagement={event.engagement} />
+      </div>
     </article>
   );
 }

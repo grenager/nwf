@@ -2,15 +2,17 @@
 
 import { EventCard } from "@/components/event-card";
 import { StoryCard } from "@/components/story-card";
+import { StoryModal } from "@/components/story-modal";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { EventSummary, Story, TodayPayload } from "@/lib/types";
+import type { EventSummary, Story, TodayPayload, UUID } from "@/lib/types";
 import { useCallback, useEffect, useState } from "react";
 
 export default function TodayPage() {
   const { notify } = useToast();
   const [data, setData] = useState<TodayPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [openStoryId, setOpenStoryId] = useState<UUID | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -39,6 +41,33 @@ export default function TodayPage() {
       },
     });
   }
+
+  const patchStatus = useCallback(
+    (storyId: UUID, patch: { read?: boolean; starred?: boolean }): void => {
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          events: {
+            ...prev.events,
+            items: prev.events.items.map((ev) => ({
+              ...ev,
+              coverage: ev.coverage.map((c) =>
+                c.story_id === storyId ? { ...c, ...patch } : c,
+              ),
+            })),
+          },
+          analysis: {
+            ...prev.analysis,
+            items: prev.analysis.items.map((s) =>
+              s.id === storyId ? { ...s, ...patch } : s,
+            ),
+          },
+        };
+      });
+    },
+    [],
+  );
 
   if (loading) {
     return <p className="text-slate-400">Loading Today…</p>;
@@ -86,7 +115,11 @@ export default function TodayPage() {
           ) : (
             <div className="space-y-3">
               {events.map((event) => (
-                <EventCard key={event.id} event={event} />
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  onOpen={setOpenStoryId}
+                />
               ))}
             </div>
           )}
@@ -103,7 +136,12 @@ export default function TodayPage() {
           ) : (
             <div className="space-y-3">
               {analysis.map((story) => (
-                <StoryCard key={story.id} story={story} onChange={onStoryChange} />
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  onChange={onStoryChange}
+                  onOpen={setOpenStoryId}
+                />
               ))}
             </div>
           )}
@@ -117,10 +155,18 @@ export default function TodayPage() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {events.length} events · {analysis.length} analysis pieces
           {data.friend_pick_count > 0
-            ? ` · ${data.friend_pick_count} starred by friends`
+            ? ` · ${data.friend_pick_count} hearted by friends`
             : ""}
         </p>
       </div>
+
+      {openStoryId ? (
+        <StoryModal
+          storyId={openStoryId}
+          onClose={() => setOpenStoryId(null)}
+          onStatusChange={patchStatus}
+        />
+      ) : null}
     </div>
   );
 }

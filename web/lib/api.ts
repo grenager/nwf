@@ -5,6 +5,9 @@ import type {
   Comment,
   Connection,
   ConnectionStatus,
+  FriendProfile,
+  FriendsOverview,
+  InviteResult,
   PreferencesUpdate,
   Profile,
   Source,
@@ -151,4 +154,15 @@ export const api = {
     }),
   deleteConnection: (targetUserId: UUID): Promise<void> =>
     request<void>(`/connections/${targetUserId}`, { method: "DELETE" }),
+
+  // --- friends (activity views) ---
+  getFriends: (): Promise<FriendsOverview> =>
+    request<FriendsOverview>("/connections/friends"),
+  getFriendProfile: (friendId: UUID): Promise<FriendProfile> =>
+    request<FriendProfile>(`/connections/friends/${friendId}`),
+  inviteFriend: (email: string): Promise<InviteResult> =>
+    request<InviteResult>("/connections/invite", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
 };

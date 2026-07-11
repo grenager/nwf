@@ -8,10 +8,25 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import Select, or_, select
 
 from api.deps import CurrentUser, SessionDep
+from api.friends import display_name
 from api.schemas import CommentCreate, CommentOut, CommentUpdate
-from core.models import Comment, Connection, ConnectionStatus
+from core.models import Comment, Connection, ConnectionStatus, Profile
 
 router = APIRouter(prefix="/comments", tags=["comments"])
+
+
+def _to_out(comment: Comment, author: Profile | None) -> CommentOut:
+    """Serialize a comment with its author's display name and avatar."""
+    return CommentOut(
+        id=comment.id,
+        story_id=comment.story_id,
+        user_id=comment.user_id,
+        author_name=display_name(author) if author else "Friend",
+        author_image_url=author.image_url if author else None,
+        text=comment.text,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+    )
 
 
 def _visible_author_ids_subquery(
@@ -40,37 +55,44 @@ async def list_comments(
     story_id: uuid.UUID | None = Query(default=None),
     limit: int = Query(default=100, le=500, ge=1),
     offset: int = Query(default=0, ge=0),
-) -> list[Comment]:
+) -> list[CommentOut]:
     visible = await _friend_ids(session, user.id)
-    stmt = select(Comment).where(Comment.user_id.in_(visible))
+    stmt = (
+        select(Comment, Profile)
+        .join(Profile, Profile.id == Comment.user_id)
+        .where(Comment.user_id.in_(visible))
+    )
     if story_id is not None:
         stmt = stmt.where(Comment.story_id == story_id)
-    stmt = stmt.order_by(Comment.created_at.desc()).limit(limit).offset(offset)
-    return list((await session.scalars(stmt)).all())
+    stmt = stmt.order_by(Comment.created_at.asc()).limit(limit).offset(offset)
+    rows = (await session.execute(stmt)).all()
+    return [_to_out(comment, author) for comment, author in rows]
 
 
 @router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
 async def create_comment(
     payload: CommentCreate, session: SessionDep, user: CurrentUser
-) -> Comment:
+) -> CommentOut:
     comment = Comment(story_id=payload.story_id, user_id=user.id, text=payload.text)
     session.add(comment)
     await session.flush()
     await session.refresh(comment)
-    return comment
+    author = await session.get(Profile, user.id)
+    return _to_out(comment, author)
 
 
 @router.get("/{comment_id}", response_model=CommentOut)
 async def get_comment(
     comment_id: uuid.UUID, session: SessionDep, user: CurrentUser
-) -> Comment:
+) -> CommentOut:
     comment = await session.get(Comment, comment_id)
     if comment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "comment not found")
     visible = await _friend_ids(session, user.id)
     if comment.user_id not in visible:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
-    return comment
+    author = await session.get(Profile, comment.user_id)
+    return _to_out(comment, author)
 
 
 @router.put("/{comment_id}", response_model=CommentOut)
@@ -79,7 +101,7 @@ async def update_comment(
     payload: CommentUpdate,
     session: SessionDep,
     user: CurrentUser,
-) -> Comment:
+) -> CommentOut:
     comment = await session.get(Comment, comment_id)
     if comment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "comment not found")
@@ -88,7 +110,8 @@ async def update_comment(
     comment.text = payload.text
     await session.flush()
     await session.refresh(comment)
-    return comment
+    author = await session.get(Profile, comment.user_id)
+    return _to_out(comment, author)
 
 
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -48,6 +48,12 @@ export interface FriendStar {
   display_name: string;
 }
 
+export interface FriendEngagement {
+  read: number;
+  hearted: number;
+  commented: number;
+}
+
 export interface Story {
   id: UUID;
   article_url: string;
@@ -69,6 +75,7 @@ export interface Story {
   read: boolean;
   starred: boolean;
   friend_stars?: FriendStar[];
+  engagement: FriendEngagement;
 }
 
 export interface StoryList {
@@ -92,6 +99,8 @@ export interface Comment {
   id: UUID;
   story_id: UUID;
   user_id: UUID;
+  author_name: string;
+  author_image_url: string | null;
   text: string;
   created_at: string;
   updated_at: string;
@@ -106,6 +115,51 @@ export interface Connection {
   status: ConnectionStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface FriendSummary {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  online: boolean;
+  last_active_at: string | null;
+  last_source_name: string | null;
+}
+
+export interface FriendsOverview {
+  friends: FriendSummary[];
+  total: number;
+  online: number;
+}
+
+export type FriendActivityKind = "read" | "hearted" | "commented";
+
+export interface FriendActivityItem {
+  kind: FriendActivityKind;
+  story_id: UUID;
+  headline: string;
+  source_name: string | null;
+  article_url: string;
+  at: string;
+  comment_text: string | null;
+}
+
+export interface FriendProfile {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  online: boolean;
+  last_active_at: string | null;
+  reads: number;
+  hearts: number;
+  comments: number;
+  recent: FriendActivityItem[];
+}
+
+export interface InviteResult {
+  status: string;
+  user_id: UUID | null;
+  message: string;
 }
 
 export interface EventCoverage {
@@ -132,6 +186,7 @@ export interface EventSummary {
   is_scoop: boolean;
   coverage: EventCoverage[];
   friend_stars: FriendStar[];
+  engagement: FriendEngagement;
   read: boolean;
 }
 

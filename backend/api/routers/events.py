@@ -10,12 +10,19 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, distinct, func, select
 
 from api.deps import CurrentUser, SessionDep
-from api.friends import display_name, friend_stars_by_story
+from api.friends import (
+    StoryActivity,
+    aggregate_engagement,
+    display_name,
+    friend_activity_by_story,
+    friend_stars_by_story,
+)
 from api.schemas import (
     EventCoverageOut,
     EventDetailOut,
     EventList,
     EventSummaryOut,
+    FriendEngagementOut,
     FriendStarOut,
     StoryList,
     StoryWithStatus,
@@ -82,6 +89,7 @@ async def _event_to_summary(
     event: Event,
     coverage: list[EventCoverageOut],
     friend_map: dict[uuid.UUID, list[FriendStarOut]],
+    activity: dict[uuid.UUID, StoryActivity] | None = None,
 ) -> EventSummaryOut:
     outlet_ids = {c.source_id for c in coverage if c.source_id is not None}
     story_ids = [c.story_id for c in coverage]
@@ -93,6 +101,8 @@ async def _event_to_summary(
                 friends.append(fs)
                 seen.add(fs.user_id)
 
+    read_n, hearted_n, commented_n = aggregate_engagement(activity or {}, story_ids)
+
     all_read = bool(coverage) and all(c.read for c in coverage)
     return EventSummaryOut(
         id=event.id,
@@ -103,6 +113,9 @@ async def _event_to_summary(
         is_scoop=len(outlet_ids) <= 1,
         coverage=coverage,
         friend_stars=friends,
+        engagement=FriendEngagementOut(
+            read=read_n, hearted=hearted_n, commented=commented_n
+        ),
         read=all_read,
     )
 
@@ -162,11 +175,14 @@ async def _events_list_for_user(
         ]
         for sid, profiles in friend_profiles.items()
     }
+    activity = await friend_activity_by_story(session, user_id, all_story_ids)
 
     summaries: list[EventSummaryOut] = []
     for event in events:
         coverage = await _build_coverage_rows(session, user_id, event.id)
-        summary = await _event_to_summary(session, user_id, event, coverage, friend_map)
+        summary = await _event_to_summary(
+            session, user_id, event, coverage, friend_map, activity
+        )
         if summary.outlet_count >= 2 or summary.is_scoop:
             summaries.append(summary)
 
@@ -201,7 +217,10 @@ async def get_event(
         sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
         for sid, profiles in friend_profiles.items()
     }
-    summary = await _event_to_summary(session, user.id, event, coverage, friend_map)
+    activity = await friend_activity_by_story(session, user.id, story_ids)
+    summary = await _event_to_summary(
+        session, user.id, event, coverage, friend_map, activity
+    )
     return EventDetailOut.model_validate(summary)
 
 
@@ -234,6 +253,7 @@ async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
     rows = (await session.execute(stmt)).all()
     story_ids = [story.id for story, _, _, _ in rows]
     friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
+    activity = await friend_activity_by_story(session, user.id, story_ids)
     analysis_items: list[StoryWithStatus] = []
     friend_pick_count = 0
     for story, source, read, starred in rows:
@@ -249,6 +269,10 @@ async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
         model.read = bool(read)
         model.starred = bool(starred)
         model.friend_stars = fs
+        read_n, hearted_n, commented_n = aggregate_engagement(activity, [story.id])
+        model.engagement = FriendEngagementOut(
+            read=read_n, hearted=hearted_n, commented=commented_n
+        )
         analysis_items.append(model)
 
     return TodayOut(

@@ -10,8 +10,8 @@ export function FriendStars({ stars, className = "" }: FriendStarsProps) {
 
   const label: string =
     stars.length === 1
-      ? `★ ${stars[0].display_name}`
-      : `★ ${stars[0].display_name} +${stars.length - 1}`;
+      ? `♥ ${stars[0].display_name}`
+      : `♥ ${stars[0].display_name} +${stars.length - 1}`;
 
   return (
     <span

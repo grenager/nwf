@@ -113,10 +113,19 @@ class StoryOut(ORMModel):
     updated_at: datetime
 
 
+class FriendEngagementOut(BaseModel):
+    """Counts of *friends* (accepted connections) who engaged with a story/event."""
+
+    read: int = 0
+    hearted: int = 0
+    commented: int = 0
+
+
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
+    engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
 
 
 class FriendStarOut(BaseModel):
@@ -152,6 +161,8 @@ class CommentOut(ORMModel):
     id: uuid.UUID
     story_id: uuid.UUID
     user_id: uuid.UUID
+    author_name: str = "Friend"
+    author_image_url: str | None = None
     text: str
     created_at: datetime
     updated_at: datetime
@@ -184,6 +195,54 @@ class ConnectionUpdate(BaseModel):
     status: ConnectionStatus
 
 
+# --- Friends (activity-oriented views) ------------------------------------
+class FriendSummaryOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    online: bool = False
+    last_active_at: datetime | None = None
+    last_source_name: str | None = None
+
+
+class FriendsOverviewOut(BaseModel):
+    friends: list[FriendSummaryOut]
+    total: int
+    online: int
+
+
+class FriendActivityItem(BaseModel):
+    kind: str  # "read" | "hearted" | "commented"
+    story_id: uuid.UUID
+    headline: str
+    source_name: str | None = None
+    article_url: str
+    at: datetime
+    comment_text: str | None = None
+
+
+class FriendProfileOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    online: bool = False
+    last_active_at: datetime | None = None
+    reads: int = 0
+    hearts: int = 0
+    comments: int = 0
+    recent: list[FriendActivityItem] = Field(default_factory=list)
+
+
+class InviteCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class InviteResult(BaseModel):
+    status: str  # "connected" | "requested"
+    user_id: uuid.UUID | None = None
+    message: str
+
+
 # --- Events (news clusters) -----------------------------------------------
 class EventCoverageOut(BaseModel):
     story_id: uuid.UUID
@@ -209,6 +268,7 @@ class EventSummaryOut(BaseModel):
     is_scoop: bool
     coverage: list[EventCoverageOut]
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
+    engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     read: bool = False
 
 
