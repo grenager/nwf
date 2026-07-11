@@ -89,7 +89,8 @@ returning (xmax = 0) as inserted
 
 
 async def main(json_path: Path) -> None:
-    raw = json.loads(json_path.read_text(encoding="utf-8"))
+    raw_text = await asyncio.to_thread(json_path.read_text, encoding="utf-8")
+    raw = json.loads(raw_text)
     mapped = [m for m in (_map(r) for r in raw) if m is not None]
     print(f"loaded {len(raw)} records -> {len(mapped)} valid sources from {json_path.name}")
 

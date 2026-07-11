@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import comments, connections, health, me, sources, stories
+from api.routers import comments, connections, events, health, me, sources, stories, today
 from core.config import get_settings
 from core.db import dispose_engine
 from core.logging import get_logger
@@ -44,6 +44,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(sources.router)
     app.include_router(stories.router)
+    app.include_router(events.router)
+    app.include_router(today.router)
     app.include_router(me.router)
     app.include_router(comments.router)
     app.include_router(connections.router)

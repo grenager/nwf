@@ -24,9 +24,9 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const KIND_STYLES: Record<ToastKind, string> = {
-  success: "bg-emerald-600",
+  success: "bg-slate-900",
   error: "bg-red-600",
-  info: "bg-slate-800",
+  info: "bg-slate-700",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {

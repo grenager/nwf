@@ -21,7 +21,7 @@ export default function LandingPage() {
           Get started
         </Link>
         <Link
-          href="/feed"
+          href="/today"
           className="rounded-lg border border-slate-300 px-6 py-3 font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
         >
           Open app

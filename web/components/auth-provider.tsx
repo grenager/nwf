@@ -26,16 +26,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    let settled = false;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (!settled) {
+        settled = true;
+        setLoading(false);
+      }
+    });
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (!settled) {
+        settled = true;
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();

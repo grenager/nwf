@@ -18,7 +18,9 @@ export default function SignInPage() {
     try {
       const supabase = getSupabaseBrowserClient();
       const redirectTo: string =
-        typeof window !== "undefined" ? `${window.location.origin}/feed` : "";
+        typeof window !== "undefined"
+          ? `${window.location.origin}/auth/callback?next=/today`
+          : "";
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: { emailRedirectTo: redirectTo },
@@ -45,7 +47,7 @@ export default function SignInPage() {
         </p>
 
         {sent ? (
-          <div className="mt-6 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+          <div className="mt-6 border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
             Check <strong>{email}</strong> for your sign-in link.
           </div>
         ) : (

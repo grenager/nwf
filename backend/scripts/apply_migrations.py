@@ -29,7 +29,7 @@ def _asyncpg_dsn() -> str:
 
 
 async def _apply(conn: asyncpg.Connection, path: Path) -> None:
-    sql = path.read_text(encoding="utf-8")
+    sql = await asyncio.to_thread(path.read_text, encoding="utf-8")
     print(f"--> applying {path.name} ({len(sql)} bytes)")
     await conn.execute(sql)
     print(f"    ok: {path.name}")
@@ -43,10 +43,35 @@ async def main(with_seed: bool) -> None:
 
     conn = await asyncpg.connect(_asyncpg_dsn(), timeout=30)
     try:
+        await conn.execute(
+            """
+            create table if not exists public.schema_migrations (
+                name text primary key,
+                applied_at timestamptz not null default now()
+            )
+            """
+        )
+        applied = {
+            r["name"]
+            for r in await conn.fetch("select name from public.schema_migrations")
+        }
         for path in files:
+            if path.name in applied:
+                print(f"--> skip {path.name} (already applied)")
+                continue
             await _apply(conn, path)
+            await conn.execute(
+                "insert into public.schema_migrations (name) values ($1)",
+                path.name,
+            )
         if with_seed and SEED_FILE.exists():
-            await _apply(conn, SEED_FILE)
+            seed_name = f"seed:{SEED_FILE.name}"
+            if seed_name not in applied:
+                await _apply(conn, SEED_FILE)
+                await conn.execute(
+                    "insert into public.schema_migrations (name) values ($1)",
+                    seed_name,
+                )
     finally:
         await conn.close()
     print("done.")

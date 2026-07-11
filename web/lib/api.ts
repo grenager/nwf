@@ -11,6 +11,8 @@ import type {
   SourceStatus,
   Story,
   StoryList,
+  TodayPayload,
+  EventSummary,
   UUID,
 } from "@/lib/types";
 
@@ -112,6 +114,11 @@ export const api = {
   searchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
   getStory: (id: UUID): Promise<Story> => request<Story>(`/stories/${id}`),
+
+  // --- today / events ---
+  getToday: (): Promise<TodayPayload> => request<TodayPayload>("/today"),
+  getEvent: (id: UUID): Promise<EventSummary> =>
+    request<EventSummary>(`/events/${id}`),
 
   // --- comments ---
   listComments: (storyId?: UUID): Promise<Comment[]> =>

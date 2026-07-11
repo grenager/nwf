@@ -82,7 +82,7 @@ export default function AdminPage() {
 
   if (forbidden || !profile?.is_admin) {
     return (
-      <div className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+      <div className="border border-slate-300 bg-slate-50 p-6 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
         <h1 className="text-lg font-bold">Admin only</h1>
         <p className="mt-1 text-sm">
           Your account isn&apos;t an admin. Ask an existing admin to set
@@ -139,7 +139,7 @@ export default function AdminPage() {
                     {row.name}
                   </div>
                   {!row.has_rss ? (
-                    <span className="text-xs text-amber-600">no RSS URL</span>
+                    <span className="text-xs text-slate-500">no RSS URL</span>
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-slate-600 dark:text-slate-300">

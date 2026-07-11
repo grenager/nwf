@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     scrape_concurrency: int = Field(default=3)
     scrape_http_timeout_seconds: float = Field(default=20.0)
 
+    # --- Embeddings (OpenAI) ----------------------------------------------
+    embeddings_api_key: str | None = Field(default=None)
+    embeddings_model: str = Field(default="text-embedding-3-small")
+    event_cluster_threshold: float = Field(
+        default=0.72,
+        description="Cosine similarity threshold for joining an existing event",
+    )
+    event_active_hours: int = Field(
+        default=48,
+        description="Only match stories against events seen within this window",
+    )
+
     # --- Logging ----------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=False)

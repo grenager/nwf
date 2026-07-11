@@ -11,7 +11,8 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.sql import ColumnElement
 
 from api.deps import CurrentUser, SessionDep
-from api.schemas import StoryList, StoryOut, StoryWithStatus
+from api.friends import display_name, friend_stars_by_story
+from api.schemas import FriendStarOut, StoryList, StoryOut, StoryWithStatus
 from core.models import Story, StoryStatus, UserSource
 
 router = APIRouter(prefix="/stories", tags=["stories"])
@@ -30,12 +31,17 @@ def _with_status_columns(
     )
 
 
-def _rows_to_stories(rows: list[Any]) -> list[StoryWithStatus]:
+def _rows_to_stories(
+    rows: list[Any],
+    friend_map: dict[uuid.UUID, list[FriendStarOut]] | None = None,
+) -> list[StoryWithStatus]:
     items: list[StoryWithStatus] = []
     for story, read, starred in rows:
         model = StoryWithStatus.model_validate(story)
         model.read = bool(read)
         model.starred = bool(starred)
+        if friend_map is not None:
+            model.friend_stars = friend_map.get(story.id, [])
         items.append(model)
     return items
 
@@ -64,8 +70,14 @@ async def search_stories(
         .offset(offset)
     )
     rows = (await session.execute(stmt)).all()
+    story_ids = [story.id for story, _, _ in rows]
+    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
+    friend_map = {
+        sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
+        for sid, profiles in friend_profiles.items()
+    }
     return StoryList(
-        items=_rows_to_stories(rows),
+        items=_rows_to_stories(rows, friend_map),
         total=int(total or 0),
         limit=limit,
         offset=offset,
@@ -95,8 +107,14 @@ async def recommended_feed(
         .offset(offset)
     )
     rows = (await session.execute(stmt)).all()
+    story_ids = [story.id for story, _, _ in rows]
+    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
+    friend_map = {
+        sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
+        for sid, profiles in friend_profiles.items()
+    }
     return StoryList(
-        items=_rows_to_stories(rows),
+        items=_rows_to_stories(rows, friend_map),
         total=int(total or 0),
         limit=limit,
         offset=offset,

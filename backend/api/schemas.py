@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.models import ConnectionStatus
+from core.models import ConnectionStatus, StoryKind
 
 
 class ORMModel(BaseModel):
@@ -97,6 +97,8 @@ class StoryOut(ORMModel):
     id: uuid.UUID
     article_url: str
     source_id: uuid.UUID | None = None
+    source_name: str | None = None
+    source_image_url: str | None = None
     full_headline: str
     summary: str | None = None
     full_text: str | None = None
@@ -104,6 +106,7 @@ class StoryOut(ORMModel):
     type: str | None = None
     image_url: str | None = None
     author_names: list[str]
+    kind: StoryKind = StoryKind.news
     archived: bool
     last_scraped_at: datetime | None = None
     created_at: datetime
@@ -113,6 +116,12 @@ class StoryOut(ORMModel):
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
+    friend_stars: list[FriendStarOut] = Field(default_factory=list)
+
+
+class FriendStarOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
 
 
 class StoryList(BaseModel):
@@ -173,3 +182,48 @@ class ConnectionCreate(BaseModel):
 
 class ConnectionUpdate(BaseModel):
     status: ConnectionStatus
+
+
+# --- Events (news clusters) -----------------------------------------------
+class EventCoverageOut(BaseModel):
+    story_id: uuid.UUID
+    source_id: uuid.UUID | None = None
+    source_name: str
+    bias_score: float | None = None
+    prominence: int = 0
+    image_url: str | None = None
+    story_image_url: str | None = None
+    full_headline: str
+    summary: str | None = None
+    article_url: str
+    read: bool = False
+    starred: bool = False
+
+
+class EventSummaryOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    first_seen_at: datetime
+    outlet_count: int
+    story_count: int
+    is_scoop: bool
+    coverage: list[EventCoverageOut]
+    friend_stars: list[FriendStarOut] = Field(default_factory=list)
+    read: bool = False
+
+
+class EventDetailOut(EventSummaryOut):
+    """Full event with all coverage rows."""
+
+
+class EventList(BaseModel):
+    items: list[EventSummaryOut]
+    total: int
+
+
+class TodayOut(BaseModel):
+    """Combined Today screen payload."""
+
+    events: EventList
+    analysis: StoryList
+    friend_pick_count: int

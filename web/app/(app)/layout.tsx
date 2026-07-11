@@ -24,13 +24,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }
 
   if (!session) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-slate-400">
+        Redirecting to sign in…
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen">
       <Nav />
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
     </div>
   );
 }

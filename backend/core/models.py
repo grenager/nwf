@@ -11,6 +11,7 @@ import enum
 import uuid
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -38,6 +39,20 @@ class ConnectionStatus(enum.StrEnum):
     pending = "pending"
     accepted = "accepted"
     blocked = "blocked"
+
+
+class SourceKind(enum.StrEnum):
+    """Whether a source is a news outlet or an author-centric publication."""
+
+    outlet = "outlet"
+    author = "author"
+
+
+class StoryKind(enum.StrEnum):
+    """News event coverage vs contextual analysis."""
+
+    news = "news"
+    analysis = "analysis"
 
 
 def _uuid_col(primary_key: bool = False) -> Mapped[uuid.UUID]:
@@ -85,6 +100,12 @@ class Source(Base):
     )
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     has_paywall: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    kind: Mapped[SourceKind] = mapped_column(
+        Enum(SourceKind, name="source_kind", create_type=False),
+        nullable=False,
+        default=SourceKind.outlet,
+    )
+    prominence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -134,6 +155,12 @@ class Story(Base):
         ARRAY(Text), nullable=False, server_default="{}"
     )
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    kind: Mapped[StoryKind] = mapped_column(
+        Enum(StoryKind, name="story_kind", create_type=False),
+        nullable=False,
+        default=StoryKind.news,
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     last_scraped_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -145,6 +172,54 @@ class Story(Base):
     )
 
     source: Mapped[Source | None] = relationship(back_populates="stories")
+    events: Mapped[list[Event]] = relationship(
+        secondary="story_events", back_populates="stories"
+    )
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    centroid: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    origin_story_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    saga_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    stories: Mapped[list[Story]] = relationship(
+        secondary="story_events", back_populates="events"
+    )
+
+
+class StoryEvent(Base):
+    __tablename__ = "story_events"
+
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class StoryStatus(Base):

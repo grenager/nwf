@@ -162,7 +162,7 @@ function ConnectionSection({
                 {actionLabel && onAction ? (
                   <button
                     onClick={() => onAction(c)}
-                    className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                    className="bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
                   >
                     {actionLabel}
                   </button>

@@ -41,10 +41,19 @@ export interface Source {
   updated_at: string;
 }
 
+export type StoryKind = "news" | "analysis";
+
+export interface FriendStar {
+  user_id: UUID;
+  display_name: string;
+}
+
 export interface Story {
   id: UUID;
   article_url: string;
   source_id: UUID | null;
+  source_name: string | null;
+  source_image_url: string | null;
   full_headline: string;
   summary: string | null;
   full_text: string | null;
@@ -52,12 +61,14 @@ export interface Story {
   type: string | null;
   image_url: string | null;
   author_names: string[];
+  kind: StoryKind;
   archived: boolean;
   last_scraped_at: string | null;
   created_at: string;
   updated_at: string;
   read: boolean;
   starred: boolean;
+  friend_stars?: FriendStar[];
 }
 
 export interface StoryList {
@@ -95,4 +106,42 @@ export interface Connection {
   status: ConnectionStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface EventCoverage {
+  story_id: UUID;
+  source_id: UUID | null;
+  source_name: string;
+  bias_score: number | null;
+  prominence: number;
+  image_url: string | null;
+  story_image_url: string | null;
+  full_headline: string;
+  summary: string | null;
+  article_url: string;
+  read: boolean;
+  starred: boolean;
+}
+
+export interface EventSummary {
+  id: UUID;
+  title: string;
+  first_seen_at: string;
+  outlet_count: number;
+  story_count: number;
+  is_scoop: boolean;
+  coverage: EventCoverage[];
+  friend_stars: FriendStar[];
+  read: boolean;
+}
+
+export interface EventList {
+  items: EventSummary[];
+  total: number;
+}
+
+export interface TodayPayload {
+  events: EventList;
+  analysis: StoryList;
+  friend_pick_count: number;
 }
