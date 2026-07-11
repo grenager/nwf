@@ -63,6 +63,8 @@ FRIENDS_RECENCY: dict[str, int] = {
     "jaspergrenager@gmail.com": 4320,            # Jasper — ~3d ago
 }
 
+REACTION_KINDS: list[str] = ["thumbsup", "heart", "laugh", "wow", "sad", "angry"]
+
 COMMENT_TEXTS: list[str] = [
     "This is a big deal — curious how it plays out.",
     "The framing here feels off compared to other outlets.",
@@ -165,6 +167,10 @@ async def main() -> None:
             text("delete from public.story_statuses where user_id = any(:ids)"),
             {"ids": friend_ids},
         )
+        await conn.execute(
+            text("delete from public.story_reactions where user_id = any(:ids)"),
+            {"ids": friend_ids},
+        )
 
         # Connect me to each friend (accepted).
         for fid in friend_ids:
@@ -214,7 +220,7 @@ async def main() -> None:
             raise SystemExit("no news stories to seed activity against")
 
         now = datetime.now(UTC)
-        total_reads = total_hearts = total_comments = 0
+        total_reads = total_reactions = total_comments = 0
 
         for email, minutes in FRIENDS_RECENCY.items():
             fid = email_to_id.get(email)
@@ -224,9 +230,7 @@ async def main() -> None:
 
             # Most-recent activity is a NEWS read (drives last_source + online).
             lead_story: uuid.UUID = rng.choice(news_ids)
-            statuses: dict[uuid.UUID, dict[str, object]] = {
-                lead_story: {"read": True, "starred": False, "ts": latest}
-            }
+            statuses: dict[uuid.UUID, datetime] = {lead_story: latest}
 
             # Additional reads spread earlier in time.
             extra = rng.sample(news_ids, k=min(12, len(news_ids))) + rng.sample(
@@ -235,39 +239,45 @@ async def main() -> None:
             for sid in extra:
                 if sid in statuses:
                     continue
-                ts = latest - timedelta(minutes=rng.randint(30, 4320))
-                statuses[sid] = {"read": True, "starred": False, "ts": ts}
+                statuses[sid] = latest - timedelta(minutes=rng.randint(30, 4320))
 
-            # Heart a few of them.
-            hearted = rng.sample(list(statuses), k=min(4, len(statuses)))
-            for sid in hearted:
-                statuses[sid]["starred"] = True
-
-            for sid, st in statuses.items():
+            for sid, ts in statuses.items():
                 await conn.execute(
                     text(
                         """
                         insert into public.story_statuses
-                            (user_id, story_id, read, starred, created_at, updated_at)
-                        values (:uid, :sid, :read, :starred, :ts, :ts)
+                            (user_id, story_id, read, created_at, updated_at)
+                        values (:uid, :sid, true, :ts, :ts)
                         on conflict (user_id, story_id) do update
-                            set read = public.story_statuses.read or excluded.read,
-                                starred = public.story_statuses.starred or excluded.starred,
+                            set read = true,
                                 updated_at = greatest(
                                     public.story_statuses.updated_at, excluded.updated_at
                                 )
                         """
                     ),
-                    {
-                        "uid": fid,
-                        "sid": sid,
-                        "read": st["read"],
-                        "starred": st["starred"],
-                        "ts": st["ts"],
-                    },
+                    {"uid": fid, "sid": sid, "ts": ts},
                 )
             total_reads += len(statuses)
-            total_hearts += len(hearted)
+
+            # React to a spread of them with varied reaction types.
+            reacted = rng.sample(list(statuses), k=min(6, len(statuses)))
+            for sid in reacted:
+                kind = rng.choice(REACTION_KINDS)
+                rts = statuses[sid]
+                await conn.execute(
+                    text(
+                        """
+                        insert into public.story_reactions
+                            (user_id, story_id, reaction, created_at, updated_at)
+                        values (:uid, :sid, :reaction, :ts, :ts)
+                        on conflict (user_id, story_id) do update
+                            set reaction = excluded.reaction,
+                                updated_at = excluded.updated_at
+                        """
+                    ),
+                    {"uid": fid, "sid": sid, "reaction": kind, "ts": rts},
+                )
+            total_reactions += len(reacted)
 
             # A couple of comments, slightly before their latest activity.
             for _ in range(rng.randint(2, 4)):
@@ -291,7 +301,7 @@ async def main() -> None:
                 total_comments += 1
 
         print(
-            f"seeded activity: {total_reads} reads, {total_hearts} hearts, "
+            f"seeded activity: {total_reads} reads, {total_reactions} reactions, "
             f"{total_comments} comments across {len(friend_ids)} friends"
         )
 

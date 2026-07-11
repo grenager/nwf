@@ -10,6 +10,8 @@ import type {
   InviteResult,
   PreferencesUpdate,
   Profile,
+  ProfileEdit,
+  ReactionKind,
   Source,
   SourceInput,
   SourceStatus,
@@ -98,6 +100,13 @@ export const api = {
   removeStar: (storyId: UUID): Promise<void> =>
     request<void>(`/me/stars/${storyId}`, { method: "DELETE" }),
   getStarred: (): Promise<StoryList> => request<StoryList>("/me/starred"),
+  setReaction: (storyId: UUID, reaction: ReactionKind): Promise<void> =>
+    request<void>("/me/reactions", {
+      method: "PUT",
+      body: JSON.stringify({ story_id: storyId, reaction }),
+    }),
+  clearReaction: (storyId: UUID): Promise<void> =>
+    request<void>(`/me/reactions/${storyId}`, { method: "DELETE" }),
 
   // --- sources ---
   listSources: (): Promise<Source[]> => request<Source[]>("/sources"),
@@ -172,6 +181,11 @@ export const api = {
     request<FriendsOverview>("/connections/friends"),
   getFriendProfile: (friendId: UUID): Promise<FriendProfile> =>
     request<FriendProfile>(`/connections/friends/${friendId}`),
+  updateProfile: (userId: UUID, payload: ProfileEdit): Promise<Profile> =>
+    request<Profile>(`/profiles/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   inviteFriend: (email: string): Promise<InviteResult> =>
     request<InviteResult>("/connections/invite", {
       method: "POST",

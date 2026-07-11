@@ -113,17 +113,26 @@ class StoryOut(ORMModel):
     updated_at: datetime
 
 
+class FriendMiniOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+
+
 class FriendEngagementOut(BaseModel):
     """Counts of *friends* (accepted connections) who engaged with a story/event."""
 
     read: int = 0
-    hearted: int = 0
     commented: int = 0
+    reactions: dict[str, int] = Field(default_factory=dict)
+    # A few reader avatars (subset of `read`) for display.
+    readers: list[FriendMiniOut] = Field(default_factory=list)
 
 
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
+    my_reaction: str | None = None
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
 
@@ -148,6 +157,11 @@ class ReadMark(BaseModel):
 
 class StarMark(BaseModel):
     story_id: uuid.UUID
+
+
+class ReactionSet(BaseModel):
+    story_id: uuid.UUID
+    reaction: str
 
 
 class UserSourcesUpdate(BaseModel):
@@ -224,13 +238,23 @@ class FriendActivityItem(BaseModel):
 class FriendProfileOut(BaseModel):
     user_id: uuid.UUID
     display_name: str
+    first: str | None = None
+    last: str | None = None
     image_url: str | None = None
     online: bool = False
     last_active_at: datetime | None = None
     reads: int = 0
     hearts: int = 0
     comments: int = 0
+    can_edit: bool = False
     recent: list[FriendActivityItem] = Field(default_factory=list)
+
+
+class ProfileEdit(BaseModel):
+    first: str | None = None
+    last: str | None = None
+    phone: str | None = None
+    image_url: str | None = None
 
 
 class InviteCreate(BaseModel):

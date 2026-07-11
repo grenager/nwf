@@ -1,7 +1,6 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
-import { FriendStars } from "@/components/friend-stars";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { EventCoverage, EventSummary, UUID } from "@/lib/types";
@@ -37,7 +36,9 @@ function CoverageRow({
     <button
       type="button"
       onClick={() => onOpen?.(item.story_id)}
-      className="flex w-full items-start justify-between gap-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+      className={`flex w-full items-start justify-between gap-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
+        item.read ? "opacity-50" : ""
+      }`}
     >
       <div className="min-w-0 flex-1">
         <p
@@ -73,7 +74,7 @@ export function EventCard({ event, onOpen }: EventCardProps) {
         event.read ? "opacity-70" : ""
       }`}
     >
-      <div className="flex gap-3">
+      <div className={`flex gap-3 ${lead.read ? "opacity-50 grayscale" : ""}`}>
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -99,9 +100,8 @@ export function EventCard({ event, onOpen }: EventCardProps) {
               {lead.full_headline}
             </h3>
           </button>
-          {firstLine(lead.summary) || event.friend_stars.length > 0 ? (
+          {firstLine(lead.summary) ? (
             <div className="mt-1 flex items-center gap-2">
-              <FriendStars stars={event.friend_stars} />
               <p className="line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
                 {firstLine(lead.summary)}
               </p>

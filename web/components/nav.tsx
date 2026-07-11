@@ -1,8 +1,10 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { useToast } from "@/components/toast";
 import { api } from "@/lib/api";
+import type { Profile } from "@/lib/types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,18 +19,19 @@ export function Nav() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { notify } = useToast();
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
+  const [profileOpen, setProfileOpen] = useState<boolean>(false);
 
   useEffect(() => {
     let active = true;
     api
       .getMe()
       .then((me) => {
-        if (active) setIsAdmin(me.is_admin);
+        if (active) setProfile(me);
       })
       .catch(() => {
-        if (active) setIsAdmin(false);
+        if (active) setProfile(null);
       });
     return () => {
       active = false;
@@ -39,7 +42,13 @@ export function Nav() {
     setMenuOpen(false);
   }, [pathname]);
 
+  const isAdmin: boolean = profile?.is_admin ?? false;
   const links = isAdmin ? [...LINKS, { href: "/admin", label: "Admin" }] : LINKS;
+  const displayName: string =
+    [profile?.first, profile?.last].filter(Boolean).join(" ") ||
+    user?.email ||
+    "You";
+  const avatarInitial: string = (displayName.charAt(0) || "?").toUpperCase();
 
   async function handleSignOut(): Promise<void> {
     await signOut();
@@ -75,14 +84,22 @@ export function Nav() {
         </nav>
 
         <div className="hidden items-center gap-3 sm:flex">
-          <span className="hidden text-xs text-slate-500 md:inline">
-            {user?.email}
-          </span>
           <button
-            onClick={handleSignOut}
-            className="border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            onClick={() => setProfileOpen(true)}
+            aria-label="Open your profile"
+            title={displayName}
+            className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[9999px] border border-slate-300 bg-slate-100 text-sm font-semibold text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
-            Sign out
+            {profile?.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.image_url}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              avatarInitial
+            )}
           </button>
         </div>
 
@@ -108,12 +125,26 @@ export function Nav() {
             </Link>
           ))}
           <button
-            onClick={handleSignOut}
-            className="mt-1 px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            onClick={() => {
+              setMenuOpen(false);
+              setProfileOpen(true);
+            }}
+            className="px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Sign out
+            My profile
           </button>
         </nav>
+      ) : null}
+
+      {profileOpen && profile ? (
+        <FriendProfileModal
+          friendId={profile.id}
+          onClose={() => setProfileOpen(false)}
+          onSignOut={() => {
+            setProfileOpen(false);
+            void handleSignOut();
+          }}
+        />
       ) : null}
     </header>
   );

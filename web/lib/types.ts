@@ -48,10 +48,25 @@ export interface FriendStar {
   display_name: string;
 }
 
+export type ReactionKind =
+  | "thumbsup"
+  | "heart"
+  | "laugh"
+  | "wow"
+  | "sad"
+  | "angry";
+
+export interface FriendMini {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+}
+
 export interface FriendEngagement {
   read: number;
-  hearted: number;
   commented: number;
+  reactions: Partial<Record<ReactionKind, number>>;
+  readers: FriendMini[];
 }
 
 export interface Story {
@@ -74,6 +89,7 @@ export interface Story {
   updated_at: string;
   read: boolean;
   starred: boolean;
+  my_reaction: ReactionKind | null;
   friend_stars?: FriendStar[];
   engagement: FriendEngagement;
 }
@@ -140,7 +156,7 @@ export interface FriendsOverview {
   online: number;
 }
 
-export type FriendActivityKind = "read" | "hearted" | "commented";
+export type FriendActivityKind = "read" | "commented" | ReactionKind;
 
 export interface FriendActivityItem {
   kind: FriendActivityKind;
@@ -155,13 +171,23 @@ export interface FriendActivityItem {
 export interface FriendProfile {
   user_id: UUID;
   display_name: string;
+  first: string | null;
+  last: string | null;
   image_url: string | null;
   online: boolean;
   last_active_at: string | null;
   reads: number;
   hearts: number;
   comments: number;
+  can_edit: boolean;
   recent: FriendActivityItem[];
+}
+
+export interface ProfileEdit {
+  first: string | null;
+  last: string | null;
+  phone: string | null;
+  image_url: string | null;
 }
 
 export interface InviteResult {

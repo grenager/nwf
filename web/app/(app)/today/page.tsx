@@ -6,7 +6,13 @@ import { StoryCard } from "@/components/story-card";
 import { StoryModal } from "@/components/story-modal";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { EventSummary, Story, TodayPayload, UUID } from "@/lib/types";
+import type {
+  EventSummary,
+  ReactionKind,
+  Story,
+  TodayPayload,
+  UUID,
+} from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -54,7 +60,10 @@ export default function TodayPage() {
   }
 
   const patchStatus = useCallback(
-    (storyId: UUID, patch: { read?: boolean; starred?: boolean }): void => {
+    (
+      storyId: UUID,
+      patch: { read?: boolean; my_reaction?: ReactionKind | null },
+    ): void => {
       setData((prev) => {
         if (!prev) return prev;
         return {
@@ -224,7 +233,7 @@ export default function TodayPage() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {events.length} events · {analysis.length} analysis pieces
           {data.friend_pick_count > 0
-            ? ` · ${data.friend_pick_count} hearted by friends`
+            ? ` · ${data.friend_pick_count} with friend reactions`
             : ""}
         </p>
       </div>

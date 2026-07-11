@@ -1,13 +1,11 @@
 "use client";
 
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { EngagementSummary } from "@/components/engagement-summary";
-import { FriendStars } from "@/components/friend-stars";
-import { useToast } from "@/components/toast";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Story, UUID } from "@/lib/types";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface StoryCardProps {
   story: Story;
@@ -17,27 +15,11 @@ interface StoryCardProps {
 }
 
 export function StoryCard({ story, dense = false, onChange, onOpen }: StoryCardProps) {
-  const { notify } = useToast();
   const [read, setRead] = useState<boolean>(story.read);
-  const [starred, setStarred] = useState<boolean>(story.starred);
-  const [busy, setBusy] = useState<boolean>(false);
 
-  async function toggleStar(): Promise<void> {
-    if (busy) return;
-    setBusy(true);
-    const next: boolean = !starred;
-    setStarred(next);
-    try {
-      if (next) await api.addStar(story.id);
-      else await api.removeStar(story.id);
-      onChange?.({ ...story, starred: next });
-    } catch (err) {
-      setStarred(!next);
-      notify(err instanceof ApiError ? err.message : "Failed to update star", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
+  useEffect(() => {
+    if (story.read) setRead(true);
+  }, [story.read]);
 
   function handleOpen(e: React.MouseEvent): void {
     if (onOpen) {
@@ -101,9 +83,6 @@ export function StoryCard({ story, dense = false, onChange, onOpen }: StoryCardP
               </p>
             ) : null}
             <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-              {story.friend_stars && story.friend_stars.length > 0 ? (
-                <FriendStars stars={story.friend_stars} />
-              ) : null}
               {story.author_names.length > 0 ? (
                 <span className="min-w-0 truncate">
                   {story.author_names.join(", ")}
@@ -114,18 +93,6 @@ export function StoryCard({ story, dense = false, onChange, onOpen }: StoryCardP
               </span>
             </div>
           </div>
-          <button
-            onClick={toggleStar}
-            disabled={busy}
-            aria-label={starred ? "Remove heart" : "Heart"}
-            className={`self-start text-xl transition ${
-              starred
-                ? "text-red-500"
-                : "text-slate-300 hover:text-red-500"
-            }`}
-          >
-            {starred ? "♥" : "♡"}
-          </button>
         </div>
         {!dense ? (
           <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">

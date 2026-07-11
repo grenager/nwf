@@ -1,7 +1,7 @@
 "use client";
 
-import { StoryCard } from "@/components/story-card";
 import { useToast } from "@/components/toast";
+import { stripHtml } from "@/lib/html";
 import { api, ApiError } from "@/lib/api";
 import type { Source, Story } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -235,14 +235,41 @@ export default function SourcesPage() {
                   </div>
                 </div>
               </header>
-              <div className="max-h-[70vh] space-y-2 overflow-y-auto p-2">
+              <div className="h-56 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
                 {(bySource[source.id] ?? []).length === 0 ? (
-                  <p className="px-2 py-4 text-center text-xs text-slate-400">
+                  <p className="px-3 py-3 text-center text-xs text-slate-400">
                     No recent stories
                   </p>
                 ) : (
                   (bySource[source.id] ?? []).map((story) => (
-                    <StoryCard key={story.id} story={story} dense />
+                    <a
+                      key={story.id}
+                      href={story.article_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex items-center gap-2 px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    >
+                      {story.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={story.image_url}
+                          alt=""
+                          className="h-9 w-9 shrink-0 object-cover"
+                        />
+                      ) : (
+                        <div className="h-9 w-9 shrink-0 bg-slate-100 dark:bg-slate-800" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
+                          {story.full_headline}
+                        </p>
+                        {story.summary ? (
+                          <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                            {stripHtml(story.summary)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </a>
                   ))
                 )}
               </div>

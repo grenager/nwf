@@ -12,10 +12,14 @@ from sqlalchemy import case, distinct, func, select
 from api.deps import CurrentUser, SessionDep
 from api.friends import (
     StoryActivity,
+    accepted_friend_ids,
     aggregate_engagement,
     display_name,
     friend_activity_by_story,
+    friend_profiles_map,
     friend_stars_by_story,
+    my_reactions_by_story,
+    top_readers,
 )
 from api.schemas import (
     EventCoverageOut,
@@ -23,12 +27,23 @@ from api.schemas import (
     EventList,
     EventSummaryOut,
     FriendEngagementOut,
+    FriendMiniOut,
     FriendStarOut,
     StoryList,
     StoryWithStatus,
     TodayOut,
 )
-from core.models import Event, Source, Story, StoryEvent, StoryKind, StoryStatus, UserSource
+from core.models import (
+    Event,
+    Profile,
+    Source,
+    Story,
+    StoryEvent,
+    StoryKind,
+    StoryReaction,
+    StoryStatus,
+    UserSource,
+)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -90,6 +105,7 @@ async def _event_to_summary(
     coverage: list[EventCoverageOut],
     friend_map: dict[uuid.UUID, list[FriendStarOut]],
     activity: dict[uuid.UUID, StoryActivity] | None = None,
+    profiles: dict[uuid.UUID, Profile] | None = None,
 ) -> EventSummaryOut:
     outlet_ids = {c.source_id for c in coverage if c.source_id is not None}
     story_ids = [c.story_id for c in coverage]
@@ -101,7 +117,13 @@ async def _event_to_summary(
                 friends.append(fs)
                 seen.add(fs.user_id)
 
-    read_n, hearted_n, commented_n = aggregate_engagement(activity or {}, story_ids)
+    read_ids, commented_n, reactions = aggregate_engagement(activity or {}, story_ids)
+    readers = [
+        FriendMiniOut(
+            user_id=p.id, display_name=display_name(p), image_url=p.image_url
+        )
+        for p in top_readers(read_ids, profiles or {})
+    ]
 
     all_read = bool(coverage) and all(c.read for c in coverage)
     return EventSummaryOut(
@@ -114,7 +136,10 @@ async def _event_to_summary(
         coverage=coverage,
         friend_stars=friends,
         engagement=FriendEngagementOut(
-            read=read_n, hearted=hearted_n, commented=commented_n
+            read=len(read_ids),
+            commented=commented_n,
+            reactions=reactions,
+            readers=readers,
         ),
         read=all_read,
     )
@@ -176,12 +201,13 @@ async def _events_list_for_user(
         for sid, profiles in friend_profiles.items()
     }
     activity = await friend_activity_by_story(session, user_id, all_story_ids)
+    profiles = await friend_profiles_map(session, user_id)
 
     summaries: list[EventSummaryOut] = []
     for event in events:
         coverage = await _build_coverage_rows(session, user_id, event.id)
         summary = await _event_to_summary(
-            session, user_id, event, coverage, friend_map, activity
+            session, user_id, event, coverage, friend_map, activity, profiles
         )
         if summary.outlet_count >= 2 or summary.is_scoop:
             summaries.append(summary)
@@ -218,8 +244,9 @@ async def get_event(
         for sid, profiles in friend_profiles.items()
     }
     activity = await friend_activity_by_story(session, user.id, story_ids)
+    profiles = await friend_profiles_map(session, user.id)
     summary = await _event_to_summary(
-        session, user.id, event, coverage, friend_map, activity
+        session, user.id, event, coverage, friend_map, activity, profiles
     )
     return EventDetailOut.model_validate(summary)
 
@@ -235,6 +262,20 @@ async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
         Story.archived.is_(False),
     )
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
+
+    # Rank analysis by number of reactions from friends first, then recency.
+    friends = await accepted_friend_ids(session, user.id)
+    likes_col = func.count(StoryReaction.story_id)
+    likes_sq = (
+        select(
+            StoryReaction.story_id.label("sid"),
+            likes_col.label("likes"),
+        )
+        .where(StoryReaction.user_id.in_(friends))
+        .group_by(StoryReaction.story_id)
+        .subquery()
+    )
+    friend_likes = func.coalesce(likes_sq.c.likes, 0)
     stmt = (
         select(Story, Source, StoryStatus.read, StoryStatus.starred)
         .outerjoin(Source, Source.id == Story.source_id)
@@ -242,18 +283,21 @@ async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
             StoryStatus,
             (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user.id),
         )
+        .outerjoin(likes_sq, likes_sq.c.sid == Story.id)
         .where(
             Story.source_id.in_(followed),
             Story.kind == StoryKind.analysis,
             Story.archived.is_(False),
         )
-        .order_by(Story.created_at.desc())
+        .order_by(friend_likes.desc(), Story.created_at.desc())
         .limit(20)
     )
     rows = (await session.execute(stmt)).all()
     story_ids = [story.id for story, _, _, _ in rows]
     friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
     activity = await friend_activity_by_story(session, user.id, story_ids)
+    my_reactions = await my_reactions_by_story(session, user.id, story_ids)
+    profiles = await friend_profiles_map(session, user.id)
     analysis_items: list[StoryWithStatus] = []
     friend_pick_count = 0
     for story, source, read, starred in rows:
@@ -268,10 +312,19 @@ async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
         model.source_image_url = source.image_url if source else None
         model.read = bool(read)
         model.starred = bool(starred)
+        model.my_reaction = my_reactions.get(story.id)
         model.friend_stars = fs
-        read_n, hearted_n, commented_n = aggregate_engagement(activity, [story.id])
+        read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
         model.engagement = FriendEngagementOut(
-            read=read_n, hearted=hearted_n, commented=commented_n
+            read=len(read_ids),
+            commented=commented_n,
+            reactions=reactions,
+            readers=[
+                FriendMiniOut(
+                    user_id=p.id, display_name=display_name(p), image_url=p.image_url
+                )
+                for p in top_readers(read_ids, profiles)
+            ],
         )
         analysis_items.append(model)
 

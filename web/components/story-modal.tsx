@@ -2,19 +2,20 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { EngagementSummary } from "@/components/engagement-summary";
+import { ReactionPicker } from "@/components/reaction-picker";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { Comment, Story, UUID } from "@/lib/types";
-import { useCallback, useEffect, useState } from "react";
+import type { Comment, ReactionKind, Story, UUID } from "@/lib/types";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface StoryModalProps {
   storyId: UUID;
   onClose: () => void;
   onStatusChange?: (
     storyId: UUID,
-    patch: { read?: boolean; starred?: boolean },
+    patch: { read?: boolean; my_reaction?: ReactionKind | null },
   ) => void;
 }
 
@@ -41,12 +42,38 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   const { user } = useAuth();
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [starred, setStarred] = useState<boolean>(false);
-  const [starBusy, setStarBusy] = useState<boolean>(false);
+  const [reaction, setReaction] = useState<ReactionKind | null>(null);
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState<string>("");
   const [posting, setPosting] = useState<boolean>(false);
+  const commentRef = useRef<HTMLTextAreaElement | null>(null);
+
+  async function share(): Promise<void> {
+    if (!story) return;
+    const url: string = story.article_url;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: story.full_headline, url });
+        return;
+      } catch {
+        return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      notify("Link copied to clipboard", "success");
+    } catch {
+      notify("Could not copy link", "error");
+    }
+  }
+
+  function focusComment(): void {
+    const el = commentRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.focus();
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -76,7 +103,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
         ]);
         if (cancelled) return;
         setStory(detail);
-        setStarred(detail.starred);
+        setReaction(detail.my_reaction);
         setComments(threadRaw);
         if (!detail.read) {
           markReadNow();
@@ -97,25 +124,10 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
     };
   }, [storyId, notify, markReadNow]);
 
-  const toggleHeart = useCallback(async (): Promise<void> => {
-    if (starBusy) return;
-    setStarBusy(true);
-    const next: boolean = !starred;
-    setStarred(next);
-    try {
-      if (next) await api.addStar(storyId);
-      else await api.removeStar(storyId);
-      onStatusChange?.(storyId, { starred: next });
-    } catch (err) {
-      setStarred(!next);
-      notify(
-        err instanceof ApiError ? err.message : "Failed to update",
-        "error",
-      );
-    } finally {
-      setStarBusy(false);
-    }
-  }, [starBusy, starred, storyId, onStatusChange, notify]);
+  function updateReaction(next: ReactionKind | null): void {
+    setReaction(next);
+    onStatusChange?.(storyId, { my_reaction: next });
+  }
 
   async function submitComment(): Promise<void> {
     const text: string = draft.trim();
@@ -179,7 +191,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
               <img
                 src={story.image_url}
                 alt=""
-                className="h-56 w-full object-cover"
+                className="h-72 w-full object-cover"
               />
             ) : null}
 
@@ -189,11 +201,10 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={story.source_image_url}
-                    alt=""
-                    className="h-5 w-5 shrink-0 rounded-full object-cover"
+                    alt={story.source_name ?? ""}
+                    className="h-6 w-auto max-w-[180px] shrink-0 object-contain"
                   />
-                ) : null}
-                {story.source_name ? (
+                ) : story.source_name ? (
                   <span className="font-semibold text-slate-700 dark:text-slate-200">
                     {story.source_name}
                   </span>
@@ -212,41 +223,50 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                 </p>
               ) : null}
 
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  onClick={() => void toggleHeart()}
-                  disabled={starBusy}
-                  aria-label={starred ? "Remove heart" : "Heart"}
-                  className={`flex items-center gap-1.5 border px-3 py-1.5 text-sm font-semibold transition ${
-                    starred
-                      ? "border-red-500 bg-red-500 text-white"
-                      : "border-slate-300 text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-300"
-                  }`}
-                >
-                  <span>{starred ? "♥" : "♡"}</span>
-                  {starred ? "Hearted" : "Heart"}
-                </button>
-                <a
-                  href={story.article_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-300"
-                >
-                  Read at source ↗
-                </a>
-              </div>
+              <a
+                href={story.article_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-1.5 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+              >
+                {story.source_name ? `Read on ${story.source_name}` : "Read at source"}{" "}
+                ↗
+              </a>
 
               {body ? (
-                <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
+                <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
                   {body}
                 </p>
               ) : null}
 
-              <div className="mt-6 border-t border-slate-200 pt-3 dark:border-slate-800">
+              <div className="mt-5 pb-2">
                 <EngagementSummary engagement={story.engagement} />
               </div>
 
-              <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
+              <div className="grid grid-cols-3 border-y border-slate-200 dark:border-slate-800">
+                <button
+                  onClick={() => void share()}
+                  className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <span className="text-base">↗</span>
+                  Share
+                </button>
+                <ReactionPicker
+                  storyId={storyId}
+                  value={reaction}
+                  onChange={updateReaction}
+                  variant="bar"
+                />
+                <button
+                  onClick={focusComment}
+                  className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <span className="text-base">💬</span>
+                  Comment
+                </button>
+              </div>
+
+              <div className="mt-5">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                   Friends&apos; comments
                 </h3>
@@ -291,6 +311,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
 
                 <div className="mt-5">
                   <textarea
+                    ref={commentRef}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     placeholder="Add a comment for your friends…"

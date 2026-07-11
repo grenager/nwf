@@ -30,6 +30,7 @@ from core.models import (
     Source,
     Story,
     StoryKind,
+    StoryReaction,
     StoryStatus,
 )
 
@@ -149,10 +150,14 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
 async def friend_profile(
     friend_id: uuid.UUID, session: SessionDep, user: CurrentUser
 ) -> FriendProfileOut:
-    """Detailed profile + recent activity for an accepted friend."""
-    friend_ids = await accepted_friend_ids(session, user.id)
-    if friend_id not in friend_ids:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not your friend")
+    """Detailed profile + recent activity for an accepted friend or yourself."""
+    is_self: bool = friend_id == user.id
+    viewer = await session.get(Profile, user.id)
+    is_admin: bool = user.is_admin or bool(viewer and viewer.is_admin)
+    if not is_self and not is_admin:
+        friend_ids = await accepted_friend_ids(session, user.id)
+        if friend_id not in friend_ids:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "not your friend")
 
     profile = await session.get(Profile, friend_id)
 
@@ -163,8 +168,8 @@ async def friend_profile(
     )
     hearts = await session.scalar(
         select(func.count())
-        .select_from(StoryStatus)
-        .where(StoryStatus.user_id == friend_id, StoryStatus.starred.is_(True))
+        .select_from(StoryReaction)
+        .where(StoryReaction.user_id == friend_id)
     )
     comments = await session.scalar(
         select(func.count()).select_from(Comment).where(Comment.user_id == friend_id)
@@ -175,16 +180,26 @@ async def friend_profile(
             select(
                 Story,
                 Source,
-                StoryStatus.starred,
                 StoryStatus.updated_at,
             )
             .join(StoryStatus, StoryStatus.story_id == Story.id)
             .outerjoin(Source, Source.id == Story.source_id)
             .where(
                 StoryStatus.user_id == friend_id,
-                or_(StoryStatus.read.is_(True), StoryStatus.starred.is_(True)),
+                StoryStatus.read.is_(True),
             )
             .order_by(StoryStatus.updated_at.desc())
+            .limit(15)
+        )
+    ).all()
+
+    reaction_rows = (
+        await session.execute(
+            select(Story, Source, StoryReaction.reaction, StoryReaction.updated_at)
+            .join(StoryReaction, StoryReaction.story_id == Story.id)
+            .outerjoin(Source, Source.id == Story.source_id)
+            .where(StoryReaction.user_id == friend_id)
+            .order_by(StoryReaction.updated_at.desc())
             .limit(15)
         )
     ).all()
@@ -201,10 +216,21 @@ async def friend_profile(
     ).all()
 
     items: list[FriendActivityItem] = []
-    for story, source, starred, updated_at in status_rows:
+    for story, source, updated_at in status_rows:
         items.append(
             FriendActivityItem(
-                kind="hearted" if starred else "read",
+                kind="read",
+                story_id=story.id,
+                headline=story.full_headline,
+                source_name=source.name if source else None,
+                article_url=story.article_url,
+                at=updated_at,
+            )
+        )
+    for story, source, reaction, updated_at in reaction_rows:
+        items.append(
+            FriendActivityItem(
+                kind=reaction,
                 story_id=story.id,
                 headline=story.full_headline,
                 source_name=source.name if source else None,
@@ -233,12 +259,15 @@ async def friend_profile(
     return FriendProfileOut(
         user_id=friend_id,
         display_name=display_name(profile) if profile else "Friend",
+        first=profile.first if profile else None,
+        last=profile.last if profile else None,
         image_url=profile.image_url if profile else None,
         online=online,
         last_active_at=last_active,
         reads=int(reads or 0),
         hearts=int(hearts or 0),
         comments=int(comments or 0),
+        can_edit=is_self or is_admin,
         recent=items[:15],
     )
 
