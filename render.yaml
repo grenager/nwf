@@ -1,0 +1,43 @@
+# Render blueprint: FastAPI API (web service) + scraper (background worker).
+# The web frontend deploys separately on Vercel; the database + auth on Supabase.
+services:
+  - type: web
+    name: nwf-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerCommand: nwf-api
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ADMIN_API_SECRET
+        generateValue: true
+      - key: API_PORT
+        value: "8000"
+      - key: LOG_JSON
+        value: "true"
+
+  - type: worker
+    name: nwf-scraper
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerCommand: nwf-scraper
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SCRAPE_INTERVAL_SECONDS
+        value: "300"
+      - key: SCRAPE_BATCH_SIZE
+        value: "5"
+      - key: LOG_JSON
+        value: "true"

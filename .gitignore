@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Env / secrets — ignore ALL env files anywhere except the committed examples
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+service-account*.json
+
+# Coverage / test artifacts
+.coverage
+coverage.xml
+htmlcov/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Next.js / Vercel / build tooling
+.vercel/
+.turbo/
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
