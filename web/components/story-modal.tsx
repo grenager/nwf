@@ -25,12 +25,12 @@ function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
       <img
         src={imageUrl}
         alt=""
-        className="h-7 w-7 shrink-0 rounded-full object-cover"
+        className="h-7 w-7 shrink-0 rounded-[9999px] object-cover"
       />
     );
   }
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9999px] bg-slate-200 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
       {name.charAt(0).toUpperCase()}
     </span>
   );

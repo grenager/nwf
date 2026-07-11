@@ -97,10 +97,10 @@ export function FriendProfileModal({ friendId, onClose }: FriendProfileModalProp
                 <img
                   src={profile.image_url}
                   alt=""
-                  className="h-16 w-16 shrink-0 rounded-full object-cover"
+                  className="h-16 w-16 shrink-0 rounded-[9999px] object-cover"
                 />
               ) : (
-                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-200 text-2xl font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[9999px] bg-slate-200 text-2xl font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
                   {profile.display_name.charAt(0).toUpperCase()}
                 </span>
               )}
@@ -111,7 +111,7 @@ export function FriendProfileModal({ friendId, onClose }: FriendProfileModalProp
                 <p className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
                   {profile.online ? (
                     <>
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="h-2 w-2 rounded-[9999px] bg-emerald-500" />
                       Online now
                     </>
                   ) : profile.last_active_at ? (

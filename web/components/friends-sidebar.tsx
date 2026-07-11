@@ -15,15 +15,15 @@ function FriendAvatar({ friend }: { friend: FriendSummary }) {
         <img
           src={friend.image_url}
           alt=""
-          className="h-9 w-9 rounded-full object-cover"
+          className="h-9 w-9 rounded-[9999px] object-cover"
         />
       ) : (
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+        <span className="flex h-9 w-9 items-center justify-center rounded-[9999px] bg-slate-200 text-sm font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
           {friend.display_name.charAt(0).toUpperCase()}
         </span>
       )}
       {friend.online ? (
-        <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-slate-900" />
+        <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-[9999px] border-2 border-white bg-emerald-500 dark:border-slate-900" />
       ) : null}
     </span>
   );

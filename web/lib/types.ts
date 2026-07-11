@@ -85,6 +85,14 @@ export interface StoryList {
   offset: number;
 }
 
+export interface SourceInput {
+  name: string;
+  homepage_url: string;
+  rss_url: string | null;
+  image_url: string | null;
+  has_paywall: boolean;
+}
+
 export interface SourceStatus {
   id: UUID;
   name: string;

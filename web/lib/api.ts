@@ -11,6 +11,7 @@ import type {
   PreferencesUpdate,
   Profile,
   Source,
+  SourceInput,
   SourceStatus,
   Story,
   StoryList,
@@ -109,6 +110,17 @@ export const api = {
   scrapeSource: (id: UUID): Promise<{ status: string; ingested: string }> =>
     request<{ status: string; ingested: string }>(`/sources/${id}/scrape`, {
       method: "POST",
+    }),
+  getSource: (id: UUID): Promise<Source> => request<Source>(`/sources/${id}`),
+  createSource: (payload: SourceInput): Promise<Source> =>
+    request<Source>("/sources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateSource: (id: UUID, payload: SourceInput): Promise<Source> =>
+    request<Source>(`/sources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
     }),
 
   // --- stories ---
