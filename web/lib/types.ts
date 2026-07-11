@@ -67,6 +67,16 @@ export interface StoryList {
   offset: number;
 }
 
+export interface SourceStatus {
+  id: UUID;
+  name: string;
+  rss_url: string | null;
+  has_rss: boolean;
+  last_scraped_at: string | null;
+  story_count: number;
+  newest_story_at: string | null;
+}
+
 export interface Comment {
   id: UUID;
   story_id: UUID;

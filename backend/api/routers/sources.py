@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from api.deps import AdminUser, CurrentUser, SessionDep
-from api.schemas import SourceCreate, SourceOut, SourceUpdate
-from core.models import Source
+from api.schemas import SourceCreate, SourceOut, SourceStatus, SourceUpdate
+from core.models import Source, Story
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -42,6 +42,37 @@ async def search_sources(
         .limit(limit)
     )
     return list(result.all())
+
+
+@router.get("/status", response_model=list[SourceStatus])
+async def sources_status(session: SessionDep, _admin: AdminUser) -> list[SourceStatus]:
+    """Admin: per-source scraper progress (last scrape, story counts)."""
+    stmt = (
+        select(
+            Source.id,
+            Source.name,
+            Source.rss_url,
+            Source.last_scraped_at,
+            func.count(Story.id).label("story_count"),
+            func.max(Story.created_at).label("newest_story_at"),
+        )
+        .outerjoin(Story, Story.source_id == Source.id)
+        .group_by(Source.id)
+        .order_by(Source.last_scraped_at.desc().nulls_last())
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        SourceStatus(
+            id=row.id,
+            name=row.name,
+            rss_url=row.rss_url,
+            has_rss=row.rss_url is not None,
+            last_scraped_at=row.last_scraped_at,
+            story_count=int(row.story_count),
+            newest_story_at=row.newest_story_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{source_id}", response_model=SourceOut)

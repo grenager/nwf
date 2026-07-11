@@ -2,8 +2,10 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
+import { api } from "@/lib/api";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const LINKS: { href: string; label: string }[] = [
   { href: "/feed", label: "Feed" },
@@ -17,6 +19,26 @@ export function Nav() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { notify } = useToast();
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getMe()
+      .then((me) => {
+        if (active) setIsAdmin(me.is_admin);
+      })
+      .catch(() => {
+        if (active) setIsAdmin(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  const links = isAdmin
+    ? [...LINKS, { href: "/admin", label: "Admin" }]
+    : LINKS;
 
   async function handleSignOut(): Promise<void> {
     await signOut();
@@ -31,7 +53,7 @@ export function Nav() {
           NewsWithFriends
         </Link>
         <nav className="flex items-center gap-1">
-          {LINKS.map((link) => {
+          {links.map((link) => {
             const active: boolean = pathname === link.href;
             return (
               <Link

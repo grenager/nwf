@@ -8,6 +8,7 @@ import type {
   PreferencesUpdate,
   Profile,
   Source,
+  SourceStatus,
   Story,
   StoryList,
   UUID,
@@ -96,6 +97,14 @@ export const api = {
   listSources: (): Promise<Source[]> => request<Source[]>("/sources"),
   searchSources: (q: string): Promise<Source[]> =>
     request<Source[]>(`/sources/search?q=${encodeURIComponent(q)}`),
+
+  // --- admin ---
+  getSourcesStatus: (): Promise<SourceStatus[]> =>
+    request<SourceStatus[]>("/sources/status"),
+  scrapeSource: (id: UUID): Promise<{ status: string; ingested: string }> =>
+    request<{ status: string; ingested: string }>(`/sources/${id}/scrape`, {
+      method: "POST",
+    }),
 
   // --- stories ---
   getRecommended: (): Promise<StoryList> =>

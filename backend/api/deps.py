@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import AuthError, AuthUser, verify_token
 from core.config import Settings, get_settings
 from core.db import get_session
+from core.models import Profile
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -45,9 +46,10 @@ CurrentUser = Annotated[AuthUser, Depends(get_current_user)]
 async def require_admin(
     user: CurrentUser,
     settings: SettingsDep,
+    session: SessionDep,
     x_admin_secret: Annotated[str | None, Header(alias="X-Admin-Secret")] = None,
 ) -> AuthUser:
-    """Allow admin-claim users, or a matching shared admin secret header."""
+    """Allow admins (JWT claim or profiles.is_admin), or a shared secret header."""
     if user.is_admin:
         return user
     if (
@@ -55,6 +57,11 @@ async def require_admin(
         and x_admin_secret
         and x_admin_secret == settings.admin_api_secret
     ):
+        return user
+    # Fall back to the DB profile flag so admin can be granted without
+    # re-issuing tokens (app_metadata claims require a fresh session).
+    profile = await session.get(Profile, user.id)
+    if profile is not None and profile.is_admin:
         return user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

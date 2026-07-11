@@ -56,6 +56,18 @@ class SourceOut(ORMModel):
     updated_at: datetime
 
 
+class SourceStatus(BaseModel):
+    """Per-source scraper progress (admin view)."""
+
+    id: uuid.UUID
+    name: str
+    rss_url: str | None = None
+    has_rss: bool
+    last_scraped_at: datetime | None = None
+    story_count: int
+    newest_story_at: datetime | None = None
+
+
 class SourceCreate(BaseModel):
     name: str
     homepage_url: str
