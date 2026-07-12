@@ -39,7 +39,7 @@ export default function EventCoveragePage() {
     return (
       <div className="text-center">
         <p className="text-slate-500">Event not found.</p>
-        <Link href="/today" className="mt-4 inline-block text-brand-600 underline">
+        <Link href="/" className="mt-4 inline-block text-brand-600 underline">
           Back to Today
         </Link>
       </div>
@@ -52,7 +52,7 @@ export default function EventCoveragePage() {
 
   return (
     <div>
-      <Link href="/today" className="text-sm text-brand-600 hover:underline">
+      <Link href="/" className="text-sm text-brand-600 hover:underline">
         ← Today
       </Link>
 

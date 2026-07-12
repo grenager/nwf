@@ -43,6 +43,26 @@ async def get_current_user(
 CurrentUser = Annotated[AuthUser, Depends(get_current_user)]
 
 
+async def get_optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    settings: SettingsDep,
+) -> AuthUser | None:
+    """Return the authenticated user, or None when no bearer token is sent."""
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        return verify_token(credentials.credentials, settings)
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"invalid token: {exc}",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+OptionalUser = Annotated[AuthUser | None, Depends(get_optional_user)]
+
+
 async def require_admin(
     user: CurrentUser,
     settings: SettingsDep,

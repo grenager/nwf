@@ -1,10 +1,13 @@
 "use client";
 
+import { useAuth } from "@/components/auth-provider";
+import { useAuthGate } from "@/components/auth-gate";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import type { FriendSummary, UUID } from "@/lib/types";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 function FriendAvatar({ friend }: { friend: FriendSummary }) {
@@ -75,7 +78,31 @@ function FriendRow({
   );
 }
 
+function GuestFriendsCta() {
+  return (
+    <div className="border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+        Friends
+      </h2>
+      <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+        See what your friends are reading and compare coverage across outlets.
+      </p>
+      <p className="mt-2 text-xs text-slate-400">
+        Your friends list is empty until you sign up.
+      </p>
+      <Link
+        href="/signin"
+        className="mt-4 block w-full bg-brand-600 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-brand-700"
+      >
+        Create free account to add friends
+      </Link>
+    </div>
+  );
+}
+
 export function FriendsSidebar() {
+  const { session } = useAuth();
+  const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -87,7 +114,13 @@ export function FriendsSidebar() {
   const [email, setEmail] = useState<string>("");
   const [sending, setSending] = useState<boolean>(false);
 
+  const isGuest: boolean = !session;
+
   const load = useCallback(async (): Promise<void> => {
+    if (isGuest) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await api.getFriends();
@@ -102,14 +135,20 @@ export function FriendsSidebar() {
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [isGuest, notify]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  function startInvite(): void {
+    if (!requireAuth("invite friends")) return;
+    setInviting((v) => !v);
+  }
+
   async function sendInvite(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    if (!requireAuth("invite friends")) return;
     const value: string = email.trim();
     if (!value || sending) return;
     setSending(true);
@@ -129,6 +168,10 @@ export function FriendsSidebar() {
     }
   }
 
+  if (isGuest) {
+    return <GuestFriendsCta />;
+  }
+
   return (
     <div className="border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 dark:border-slate-800">
@@ -142,7 +185,7 @@ export function FriendsSidebar() {
           </p>
         </div>
         <button
-          onClick={() => setInviting((v) => !v)}
+          onClick={startInvite}
           className="bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
         >
           {inviting ? "Cancel" : "Invite"}

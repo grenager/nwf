@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { REACTIONS, reactionEmoji, reactionLabel } from "@/lib/reactions";
@@ -22,11 +23,13 @@ export function ReactionPicker({
   variant = "pill",
 }: ReactionPickerProps) {
   const { notify } = useToast();
+  const { requireAuth } = useAuthGate();
   const [open, setOpen] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
 
   async function pick(kind: ReactionKind): Promise<void> {
     if (busy) return;
+    if (!requireAuth("react to stories")) return;
     setOpen(false);
     const next: ReactionKind | null = value === kind ? null : kind;
     const prev: ReactionKind | null = value;
@@ -70,6 +73,7 @@ export function ReactionPicker({
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
+          if (!requireAuth("react to stories")) return;
           setOpen((o) => !o);
         }}
         className={triggerClass}

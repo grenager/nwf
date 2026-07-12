@@ -13,7 +13,6 @@ import type {
   TodayPayload,
   UUID,
 } from "@/lib/types";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tab = "news" | "analysis" | "friends";
@@ -129,11 +128,8 @@ export default function TodayPage() {
   if (totalItems === 0) {
     return (
       <div className="border border-dashed border-slate-300 p-10 text-center text-slate-500">
-        Follow sources on the{" "}
-        <Link href="/sources" className="text-brand-600 underline">
-          Sources
-        </Link>{" "}
-        page to build your briefing.
+        No stories in the briefing yet — check back soon as we gather news from
+        top sources.
       </div>
     );
   }

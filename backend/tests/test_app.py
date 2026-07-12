@@ -26,5 +26,5 @@ def test_openapi_schema_exposed() -> None:
 
 def test_protected_route_requires_auth() -> None:
     client = TestClient(create_app())
-    resp = client.get("/sources")
+    resp = client.get("/me")
     assert resp.status_code == 401

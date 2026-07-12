@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 
-from api.deps import AdminUser, CurrentUser, SessionDep
+from api.deps import AdminUser, CurrentUser, OptionalUser, SessionDep
 from api.schemas import SourceCreate, SourceOut, SourceStatus, SourceUpdate
 from core.models import Source, Story
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 @router.get("", response_model=list[SourceOut])
 async def list_sources(
     session: SessionDep,
-    _user: CurrentUser,
+    _user: OptionalUser,
     limit: int = Query(default=200, le=500, ge=1),
     offset: int = Query(default=0, ge=0),
 ) -> list[Source]:
@@ -30,7 +30,7 @@ async def list_sources(
 @router.get("/search", response_model=list[SourceOut])
 async def search_sources(
     session: SessionDep,
-    _user: CurrentUser,
+    _user: OptionalUser,
     q: str = Query(min_length=1),
     limit: int = Query(default=50, le=200, ge=1),
 ) -> list[Source]:

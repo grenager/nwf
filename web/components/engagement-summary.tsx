@@ -4,6 +4,7 @@ import type { FriendEngagement, FriendMini } from "@/lib/types";
 interface EngagementSummaryProps {
   engagement: FriendEngagement;
   className?: string;
+  scope?: "friends" | "global";
 }
 
 function ReaderAvatars({
@@ -51,6 +52,7 @@ function ReaderAvatars({
 export function EngagementSummary({
   engagement,
   className = "",
+  scope = "friends",
 }: EngagementSummaryProps) {
   const { read, commented, reactions, readers } = engagement;
   const reactionEntries = REACTIONS.map((meta) => ({
@@ -63,13 +65,15 @@ export function EngagementSummary({
     0,
   );
   const total: number = read + commented + reactionTotal;
+  const emptyLabel: string =
+    scope === "global" ? "No activity yet" : "No friend activity yet";
 
   if (total === 0) {
     return (
       <p
         className={`text-[11px] text-slate-400 dark:text-slate-500 ${className}`}
       >
-        No friend activity yet
+        {emptyLabel}
       </p>
     );
   }
@@ -80,7 +84,11 @@ export function EngagementSummary({
     >
       <span className="justify-self-start">
         {read > 0 ? (
-          <ReaderAvatars readers={readers} read={read} />
+          scope === "global" ? (
+            `${read} read`
+          ) : (
+            <ReaderAvatars readers={readers} read={read} />
+          )
         ) : (
           "0 read"
         )}
