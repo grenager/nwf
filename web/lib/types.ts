@@ -102,8 +102,8 @@ export interface StoryList {
 }
 
 export interface SourceInput {
-  name: string;
-  homepage_url: string;
+  name: string | null;
+  homepage_url: string | null;
   rss_url: string | null;
   image_url: string | null;
   has_paywall: boolean;

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import struct_time
 from typing import Any
+from urllib.parse import urlparse
 
 import feedparser
 import httpx
@@ -31,6 +33,80 @@ def _struct_to_datetime(value: struct_time | None) -> datetime | None:
         return datetime(*value[:6], tzinfo=UTC)
     except (ValueError, TypeError):
         return None
+
+
+@dataclass(frozen=True)
+class FeedMetadata:
+    """Source-level metadata inferred from an RSS/Atom feed's channel."""
+
+    title: str | None = None
+    homepage_url: str | None = None
+    image_url: str | None = None
+
+
+def _clean_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _origin(url: str | None) -> str | None:
+    """Scheme + host of a URL (e.g. ``https://example.com``)."""
+    if not url:
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return None
+
+
+def _hostname_label(url: str | None) -> str | None:
+    """Human-ish label from a URL's host (``www.`` stripped)."""
+    if not url:
+        return None
+    host: str | None = urlparse(url).hostname
+    if not host:
+        return None
+    return host[4:] if host.startswith("www.") else host
+
+
+def _feed_image(feed: Any) -> str | None:
+    image: Any = getattr(feed, "image", None)
+    if isinstance(image, dict):
+        href = _clean_str(image.get("href")) or _clean_str(image.get("url"))
+        if href:
+            return href
+    return _clean_str(getattr(feed, "logo", None)) or _clean_str(
+        getattr(feed, "icon", None)
+    )
+
+
+def _feed_metadata(feed_text: str) -> FeedMetadata:
+    """Extract channel-level title/homepage/logo from raw feed text."""
+    parsed = feedparser.parse(feed_text)
+    feed: Any = getattr(parsed, "feed", None)
+    if not feed:
+        return FeedMetadata()
+    return FeedMetadata(
+        title=_clean_str(getattr(feed, "title", None)),
+        homepage_url=_clean_str(getattr(feed, "link", None)),
+        image_url=_feed_image(feed),
+    )
+
+
+async def fetch_feed_metadata(rss_url: str) -> FeedMetadata:
+    """Fetch an RSS feed and infer its source-level metadata."""
+    settings = get_settings()
+    async with httpx.AsyncClient(
+        timeout=settings.scrape_http_timeout_seconds,
+        follow_redirects=True,
+        headers={"User-Agent": "NewsWithFriends/0.1 (+https://newswithfriends.app)"},
+    ) as client:
+        resp = await client.get(rss_url)
+        resp.raise_for_status()
+        feed_text = resp.text
+    return _feed_metadata(feed_text)
 
 
 def _entry_authors(entry: Any) -> list[str]:
