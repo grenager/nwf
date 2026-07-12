@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
@@ -78,7 +79,11 @@ async def _main() -> None:
         seconds=settings.scrape_interval_seconds,
         max_instances=1,
         coalesce=True,
-        next_run_time=None,
+        # Fire the first scheduled cycle one interval from now; the immediate
+        # cycle below covers startup. (Passing next_run_time=None would leave
+        # the job paused and it would never run.)
+        next_run_time=datetime.now(timezone.utc)
+        + timedelta(seconds=settings.scrape_interval_seconds),
     )
     scheduler.start()
 
