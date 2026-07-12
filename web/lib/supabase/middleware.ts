@@ -37,6 +37,13 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     const url = request.nextUrl.clone();
     url.pathname = target;
     url.search = "";
+    // Behind Railway's proxy the request host is the internal `localhost:<port>`;
+    // prefer the forwarded host so redirects stay on the public domain.
+    const forwardedHost: string | null = request.headers.get("x-forwarded-host");
+    if (forwardedHost) {
+      url.host = forwardedHost;
+      url.protocol = request.headers.get("x-forwarded-proto") ?? "https";
+    }
     const redirect = NextResponse.redirect(url);
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirect.cookies.set(cookie);

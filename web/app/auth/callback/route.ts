@@ -13,10 +13,25 @@ function safeNextPath(next: string | null): string {
   return next;
 }
 
+/**
+ * Public origin of the request. Behind Railway's proxy the raw request URL
+ * resolves to the internal `localhost:<port>`, so prefer the forwarded host
+ * headers when present to avoid redirecting users off-site.
+ */
+function publicOrigin(request: Request, fallbackOrigin: string): string {
+  const forwardedHost: string | null = request.headers.get("x-forwarded-host");
+  if (!forwardedHost) {
+    return fallbackOrigin;
+  }
+  const forwardedProto: string = request.headers.get("x-forwarded-proto") ?? "https";
+  return `${forwardedProto}://${forwardedHost}`;
+}
+
 export async function GET(request: Request): Promise<NextResponse> {
   const { searchParams, origin } = new URL(request.url);
   const code: string | null = searchParams.get("code");
   const next: string = safeNextPath(searchParams.get("next"));
+  const base: string = publicOrigin(request, origin);
 
   if (code) {
     const cookieStore = await cookies();
@@ -36,9 +51,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${base}${next}`);
     }
   }
 
-  return NextResponse.redirect(`${origin}/signin`);
+  return NextResponse.redirect(`${base}/signin`);
 }
