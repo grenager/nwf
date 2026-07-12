@@ -27,11 +27,11 @@ enabled = true
 # Local dev values; production uses https://newswithfriends.org (set in the
 # Supabase dashboard under Auth -> URL Configuration).
 site_url = "http://localhost:3000"
+# Wildcards so any post-auth path (e.g. /auth/callback?next=…) is accepted.
 additional_redirect_urls = [
-    "http://localhost:3000",
-    "http://localhost:3000/feed",
-    "https://newswithfriends.org/feed",
-    "https://www.newswithfriends.org/feed",
+    "http://localhost:3000/**",
+    "https://newswithfriends.org/**",
+    "https://www.newswithfriends.org/**",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
@@ -42,3 +42,16 @@ enable_signup = true
 double_confirm_changes = true
 # Magic-link / OTP sign-in (no passwords).
 enable_confirmations = false
+
+# Custom SMTP via Resend. Replaces Supabase's tiny built-in email limit.
+# Secrets come from the environment (never commit the API key). Set
+# RESEND_SMTP_PASSWORD to a Resend API key (starts with "re_").
+# Set enabled = false to fall back to local Inbucket during `supabase start`.
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_SMTP_PASSWORD)"
+admin_email = "noreply@newswithfriends.org"
+sender_name = "NewsWithFriends"
