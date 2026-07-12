@@ -23,7 +23,7 @@ export default function SignInPage() {
       const supabase = getSupabaseBrowserClient();
       const redirectTo: string =
         typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback?next=/today`
+          ? `${window.location.origin}/auth/callback?next=/`
           : "";
       const { error } = await supabase.auth.signInWithOtp({
         email,

@@ -30,12 +30,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic: boolean =
-    pathname === "/" ||
-    pathname === "/signin" ||
-    pathname.startsWith("/auth") ||
-    pathname === "/today" ||
-    pathname.startsWith("/today/");
 
   const redirectTo = (target: string): NextResponse => {
     // Behind Railway's proxy the request host/port is the internal
@@ -52,8 +46,15 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     return redirect;
   };
 
-  if (user && (pathname === "/" || pathname === "/signin")) {
-    return redirectTo("/today");
+  if (pathname === "/today" || pathname.startsWith("/today/")) {
+    return redirectTo("/");
+  }
+
+  const isPublic: boolean =
+    pathname === "/" || pathname === "/signin" || pathname.startsWith("/auth");
+
+  if (user && pathname === "/signin") {
+    return redirectTo("/");
   }
 
   if (!user && !isPublic) {

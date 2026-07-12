@@ -12,7 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const LINKS: { href: string; label: string }[] = [
-  { href: "/today", label: "Today" },
+  { href: "/", label: "Today" },
   { href: "/sources", label: "Sources" },
 ];
 
@@ -54,7 +54,7 @@ export function Nav() {
 
   const isAdmin: boolean = profile?.is_admin ?? false;
   const links = isGuest
-    ? [{ href: "/today", label: "Today" }]
+    ? [{ href: "/", label: "Today" }]
     : isAdmin
       ? [...LINKS, { href: "/admin", label: "Admin" }]
       : LINKS;
@@ -91,7 +91,7 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link href="/today" className="text-lg font-bold text-brand-600">
+        <Link href="/" className="text-lg font-bold text-brand-600">
           NewsWithFriends
         </Link>
 
