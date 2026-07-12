@@ -69,8 +69,10 @@ class SourceStatus(BaseModel):
 
 
 class SourceCreate(BaseModel):
-    name: str
-    homepage_url: str
+    # name/homepage are inferred from the RSS feed when omitted; supply an
+    # rss_url, or provide name + homepage_url manually for feed-less sources.
+    name: str | None = None
+    homepage_url: str | None = None
     rss_url: str | None = None
     include_selector: str | None = None
     exclude_selector: str | None = None

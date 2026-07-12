@@ -112,17 +112,19 @@ export default function AdminPage() {
   }
 
   async function saveForm(): Promise<void> {
-    const name: string = form.name.trim();
-    const homepageUrl: string = form.homepage_url.trim();
-    if (!name || !homepageUrl) {
-      notify("Name and homepage URL are required", "error");
-      return;
-    }
+    const name: string = form.name?.trim() ?? "";
+    const homepageUrl: string = form.homepage_url?.trim() ?? "";
     const rssUrl: string = form.rss_url?.trim() ?? "";
     const imageUrl: string = form.image_url?.trim() ?? "";
+    // RSS URL alone is enough — the backend infers name/homepage/logo from the
+    // feed. Feed-less sources still need a name and homepage entered by hand.
+    if (!rssUrl && (!name || !homepageUrl)) {
+      notify("Enter an RSS URL, or a name and homepage URL", "error");
+      return;
+    }
     const payload: SourceInput = {
-      name,
-      homepage_url: homepageUrl,
+      name: name.length > 0 ? name : null,
+      homepage_url: homepageUrl.length > 0 ? homepageUrl : null,
       rss_url: rssUrl.length > 0 ? rssUrl : null,
       image_url: imageUrl.length > 0 ? imageUrl : null,
       has_paywall: form.has_paywall,
@@ -131,10 +133,10 @@ export default function AdminPage() {
     try {
       if (editingId) {
         await api.updateSource(editingId, payload);
-        notify(`Updated ${name}`, "success");
+        notify(`Updated ${name || homepageUrl || rssUrl}`, "success");
       } else {
         await api.createSource(payload);
-        notify(`Added ${name}`, "success");
+        notify("Source added", "success");
       }
       setFormOpen(false);
       setRows(await api.getSourcesStatus());
@@ -265,12 +267,27 @@ export default function AdminPage() {
             <div className="space-y-4">
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                  RSS URL
+                </span>
+                <input
+                  value={form.rss_url ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, rss_url: e.target.value }))}
+                  placeholder="https://www.nytimes.com/rss.xml"
+                  className="w-full border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+                <span className="mt-1 block text-xs text-slate-400">
+                  The only field you need — name, homepage, and logo are pulled
+                  from the feed. Fill the rest to override.
+                </span>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
                   Name
                 </span>
                 <input
-                  value={form.name}
+                  value={form.name ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="The New York Times"
+                  placeholder="Auto-filled from feed"
                   className="w-full border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>
@@ -279,22 +296,11 @@ export default function AdminPage() {
                   Homepage URL
                 </span>
                 <input
-                  value={form.homepage_url}
+                  value={form.homepage_url ?? ""}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, homepage_url: e.target.value }))
                   }
-                  placeholder="https://www.nytimes.com"
-                  className="w-full border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                  RSS URL
-                </span>
-                <input
-                  value={form.rss_url ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, rss_url: e.target.value }))}
-                  placeholder="https://www.nytimes.com/rss.xml"
+                  placeholder="Auto-filled from feed"
                   className="w-full border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>
@@ -307,7 +313,7 @@ export default function AdminPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, image_url: e.target.value }))
                   }
-                  placeholder="https://…/logo.png"
+                  placeholder="Auto-filled from feed"
                   className="w-full border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>

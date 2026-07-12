@@ -89,7 +89,48 @@ async def get_source(
 async def create_source(
     payload: SourceCreate, session: SessionDep, _admin: AdminUser
 ) -> Source:
-    source = Source(**payload.model_dump())
+    data: dict[str, object] = payload.model_dump()
+    rss_url: str | None = (payload.rss_url or "").strip() or None
+    name: str | None = (payload.name or "").strip() or None
+    homepage_url: str | None = (payload.homepage_url or "").strip() or None
+    image_url: str | None = (payload.image_url or "").strip() or None
+
+    if rss_url and not (name and homepage_url and image_url):
+        # Lazy import keeps the API free of a hard scraper dependency at load.
+        from scraper.ingest import _hostname_label, _origin, fetch_feed_metadata
+
+        try:
+            meta = await fetch_feed_metadata(rss_url)
+        except Exception as exc:  # network / parse failure — fall back to URL
+            if not (name and homepage_url):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"could not read RSS feed to infer source details: {exc}",
+                ) from exc
+            meta = None
+
+        homepage_url = (
+            homepage_url or (meta.homepage_url if meta else None) or _origin(rss_url)
+        )
+        name = (
+            name
+            or (meta.title if meta else None)
+            or _hostname_label(homepage_url or rss_url)
+        )
+        image_url = image_url or (meta.image_url if meta else None)
+
+    if not name or not homepage_url:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "provide an rss_url, or both name and homepage_url",
+        )
+
+    data["rss_url"] = rss_url
+    data["name"] = name
+    data["homepage_url"] = homepage_url
+    data["image_url"] = image_url
+
+    source = Source(**data)
     session.add(source)
     await session.flush()
     await session.refresh(source)

@@ -84,7 +84,9 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
                 .where(StoryStatus.user_id.in_(friend_ids))
                 .group_by(StoryStatus.user_id)
             )
-        ).all()
+        )
+        .tuples()
+        .all()
     )
     comment_last: dict[uuid.UUID, datetime] = dict(
         (
@@ -93,7 +95,9 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
                 .where(Comment.user_id.in_(friend_ids))
                 .group_by(Comment.user_id)
             )
-        ).all()
+        )
+        .tuples()
+        .all()
     )
 
     # Most recent news source each friend read (Postgres DISTINCT ON).
@@ -111,7 +115,9 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
                 .order_by(StoryStatus.user_id, StoryStatus.updated_at.desc())
                 .distinct(StoryStatus.user_id)
             )
-        ).all()
+        )
+        .tuples()
+        .all()
     )
 
     now = datetime.now(UTC)
