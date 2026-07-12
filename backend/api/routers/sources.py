@@ -97,7 +97,12 @@ async def create_source(
 
     if rss_url and not (name and homepage_url and image_url):
         # Lazy import keeps the API free of a hard scraper dependency at load.
-        from scraper.ingest import _hostname_label, _origin, fetch_feed_metadata
+        from scraper.ingest import (
+            _compose_source_name,
+            _hostname_label,
+            _origin,
+            fetch_feed_metadata,
+        )
 
         try:
             meta = await fetch_feed_metadata(rss_url)
@@ -112,11 +117,12 @@ async def create_source(
         homepage_url = (
             homepage_url or (meta.homepage_url if meta else None) or _origin(rss_url)
         )
-        name = (
-            name
-            or (meta.title if meta else None)
-            or _hostname_label(homepage_url or rss_url)
-        )
+        if not name:
+            # The feed <title> is often a section (e.g. "National"), so prefix
+            # the outlet domain to keep sources recognizable in the list.
+            outlet: str | None = _hostname_label(homepage_url or rss_url)
+            section: str | None = meta.title if meta else None
+            name = _compose_source_name(outlet, section)
         image_url = image_url or (meta.image_url if meta else None)
 
     if not name or not homepage_url:

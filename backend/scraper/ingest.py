@@ -71,6 +71,24 @@ def _hostname_label(url: str | None) -> str | None:
     return host[4:] if host.startswith("www.") else host
 
 
+def _compose_source_name(outlet: str | None, section: str | None) -> str | None:
+    """Build a source name from a domain outlet and the feed's channel title.
+
+    Section feeds (e.g. WaPo's ``National``) declare the *section* as their
+    ``<title>``, not the publication, so we prefix the outlet domain. When the
+    feed title already names the outlet, we keep the title as-is to avoid
+    duplication like ``washingtonpost.com — The Washington Post``.
+    """
+    if not section:
+        return outlet
+    if not outlet:
+        return section
+    core = outlet.split(".", 1)[0].lower()
+    if core and core in re.sub(r"[^a-z0-9]", "", section.lower()):
+        return section
+    return f"{outlet} — {section}"
+
+
 def _feed_image(feed: Any) -> str | None:
     image: Any = getattr(feed, "image", None)
     if isinstance(image, dict):
