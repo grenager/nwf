@@ -312,11 +312,11 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
             .order_by(Story.created_at.desc())
             .limit(20)
         )
-        rows = (await session.execute(stmt)).all()
-        story_ids = [story.id for story, _ in rows]
+        guest_rows = (await session.execute(stmt)).all()
+        story_ids = [story.id for story, _ in guest_rows]
         activity = await global_activity_by_story(session, story_ids)
         analysis_items: list[StoryWithStatus] = []
-        for story, source in rows:
+        for story, source in guest_rows:
             model = StoryWithStatus.model_validate(story)
             model.source_name = source.name if source else None
             model.source_image_url = source.image_url if source else None
@@ -354,12 +354,12 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         .subquery()
     )
     friend_likes = func.coalesce(likes_sq.c.likes, 0)
-    stmt = (
+    auth_stmt = (
         select(Story, Source, StoryStatus.read, StoryStatus.starred)
         .outerjoin(Source, Source.id == Story.source_id)
         .outerjoin(
             StoryStatus,
-            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user.id),
+            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
         )
         .outerjoin(likes_sq, likes_sq.c.sid == Story.id)
         .where(
@@ -370,15 +370,15 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         .order_by(friend_likes.desc(), Story.created_at.desc())
         .limit(20)
     )
-    rows = (await session.execute(stmt)).all()
-    story_ids = [story.id for story, _, _, _ in rows]
-    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
-    activity = await friend_activity_by_story(session, user.id, story_ids)
-    my_reactions = await my_reactions_by_story(session, user.id, story_ids)
-    profiles = await friend_profiles_map(session, user.id)
-    analysis_items: list[StoryWithStatus] = []
+    auth_rows = (await session.execute(auth_stmt)).all()
+    story_ids = [story.id for story, _, _, _ in auth_rows]
+    friend_profiles = await friend_stars_by_story(session, user_id, story_ids)
+    activity = await friend_activity_by_story(session, user_id, story_ids)
+    my_reactions = await my_reactions_by_story(session, user_id, story_ids)
+    profiles = await friend_profiles_map(session, user_id)
+    auth_analysis_items: list[StoryWithStatus] = []
     friend_pick_count = 0
-    for story, source, read, starred in rows:
+    for story, source, read, starred in auth_rows:
         fs = [
             FriendStarOut(user_id=p.id, display_name=display_name(p))
             for p in friend_profiles.get(story.id, [])
@@ -404,10 +404,12 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
                 for p in top_readers(read_ids, profiles)
             ],
         )
-        analysis_items.append(model)
+        auth_analysis_items.append(model)
 
     return TodayOut(
         events=events,
-        analysis=StoryList(items=analysis_items, total=int(total or 0), limit=20, offset=0),
+        analysis=StoryList(
+            items=auth_analysis_items, total=int(total or 0), limit=20, offset=0
+        ),
         friend_pick_count=friend_pick_count,
     )

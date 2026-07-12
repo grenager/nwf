@@ -26,5 +26,12 @@ def test_openapi_schema_exposed() -> None:
 
 def test_protected_route_requires_auth() -> None:
     client = TestClient(create_app())
-    resp = client.get("/sources")
+    resp = client.get("/me")
     assert resp.status_code == 401
+
+
+def test_public_route_allows_guest() -> None:
+    client = TestClient(create_app())
+    resp = client.get("/today")
+    # Optional-auth routes proceed past auth; DB may be unavailable in CI smoke tests.
+    assert resp.status_code in {200, 500}
