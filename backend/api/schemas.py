@@ -151,6 +151,14 @@ class StoryList(BaseModel):
     offset: int
 
 
+class StoryCreate(BaseModel):
+    """User-submitted story we may have missed. Parsing is faked for now."""
+
+    url: str = Field(min_length=4)
+    kind: StoryKind = StoryKind.news
+    title: str | None = None
+
+
 # --- Story status actions -------------------------------------------------
 class ReadMark(BaseModel):
     story_id: uuid.UUID

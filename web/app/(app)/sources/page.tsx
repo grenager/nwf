@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { stripHtml } from "@/lib/html";
 import { api, ApiError } from "@/lib/api";
@@ -8,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export default function SourcesPage() {
   const { notify } = useToast();
+  const { requireAuth } = useAuthGate();
   const [sources, setSources] = useState<Source[]>([]);
   const [allSources, setAllSources] = useState<Source[]>([]);
   const [bySource, setBySource] = useState<Record<string, Story[]>>({});
@@ -72,6 +74,7 @@ export default function SourcesPage() {
   }, [allSources, followedIds, query]);
 
   async function persistOrder(next: Source[]): Promise<void> {
+    if (!requireAuth("customize your sources")) return;
     setSources(next);
     try {
       await api.setMySources(next.map((s) => s.id));
@@ -92,6 +95,7 @@ export default function SourcesPage() {
   }
 
   async function toggleFollow(source: Source): Promise<void> {
+    if (!requireAuth("customize your sources")) return;
     const isFollowed: boolean = followedIds.has(source.id);
     const nextIds: string[] = isFollowed
       ? sources.filter((s) => s.id !== source.id).map((s) => s.id)
@@ -118,7 +122,10 @@ export default function SourcesPage() {
             Drag headers to reorder
           </p>
           <button
-            onClick={() => setAddOpen((v) => !v)}
+            onClick={() => {
+              if (!requireAuth("customize your sources")) return;
+              setAddOpen((v) => !v);
+            }}
             className="bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
           >
             {addOpen ? "Done" : "Add source"}
@@ -177,7 +184,10 @@ export default function SourcesPage() {
         <div className="border border-dashed border-slate-300 p-10 text-center text-slate-500 dark:border-slate-700">
           You aren&apos;t following any sources yet.{" "}
           <button
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              if (!requireAuth("customize your sources")) return;
+              setAddOpen(true);
+            }}
             className="font-semibold text-brand-600 underline"
           >
             Add some sources

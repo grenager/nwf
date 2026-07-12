@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { useAuthGate } from "@/components/auth-gate";
 import { EngagementSummary } from "@/components/engagement-summary";
 import { ReactionPicker } from "@/components/reaction-picker";
 import { useToast } from "@/components/toast";
@@ -8,6 +9,7 @@ import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Comment, ReactionKind, Story, UUID } from "@/lib/types";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface StoryModalProps {
@@ -37,9 +39,42 @@ function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
   );
 }
 
+const BLUR_PLACEHOLDERS: string[] = [
+  "Really interesting take on how this affects the region.",
+  "Worth reading the full piece — the data section is eye-opening.",
+  "Curious what everyone thinks about the policy angle here.",
+  "This lines up with what I heard on the ground last month.",
+  "Good context compared to last week's coverage.",
+];
+
+function BlurredCommentRow({ index }: { index: number }) {
+  const placeholder: string =
+    BLUR_PLACEHOLDERS[index % BLUR_PLACEHOLDERS.length] ?? BLUR_PLACEHOLDERS[0];
+  return (
+    <div className="flex gap-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9999px] bg-slate-200 text-xs font-bold text-slate-500 dark:bg-slate-700">
+        ?
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="select-none text-sm font-semibold text-slate-400 blur-sm">
+            Reader
+          </span>
+          <span className="text-xs text-slate-300">·</span>
+        </div>
+        <p className="mt-0.5 select-none text-sm text-slate-600 blur-md dark:text-slate-400">
+          {placeholder}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps) {
   const { notify } = useToast();
-  const { user } = useAuth();
+  const { session, user } = useAuth();
+  const { requireAuth } = useAuthGate();
+  const isGuest: boolean = !session;
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [reaction, setReaction] = useState<ReactionKind | null>(null);
@@ -69,6 +104,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   }
 
   function focusComment(): void {
+    if (!requireAuth("comment on stories")) return;
     const el = commentRef.current;
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -88,25 +124,31 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   }, [onClose]);
 
   const markReadNow = useCallback((): void => {
+    if (isGuest) return;
     void api.markRead(storyId, true).catch(() => undefined);
     onStatusChange?.(storyId, { read: true });
-  }, [storyId, onStatusChange]);
+  }, [isGuest, storyId, onStatusChange]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     void (async () => {
       try {
-        const [detail, threadRaw] = await Promise.all([
-          api.getStory(storyId),
-          api.listComments(storyId).catch((): Comment[] => []),
-        ]);
+        const detail: Story = await api.getStory(storyId);
         if (cancelled) return;
         setStory(detail);
         setReaction(detail.my_reaction);
-        setComments(threadRaw);
-        if (!detail.read) {
-          markReadNow();
+
+        if (isGuest) {
+          setComments([]);
+        } else {
+          const threadRaw: Comment[] = await api
+            .listComments(storyId)
+            .catch((): Comment[] => []);
+          if (!cancelled) setComments(threadRaw);
+          if (!detail.read) {
+            markReadNow();
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -122,7 +164,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
     return () => {
       cancelled = true;
     };
-  }, [storyId, notify, markReadNow]);
+  }, [storyId, notify, markReadNow, isGuest]);
 
   function updateReaction(next: ReactionKind | null): void {
     setReaction(next);
@@ -130,6 +172,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   }
 
   async function submitComment(): Promise<void> {
+    if (!requireAuth("comment on stories")) return;
     const text: string = draft.trim();
     if (!text || posting) return;
     setPosting(true);
@@ -164,6 +207,10 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   const body: string = story
     ? stripHtml(story.full_text ?? story.summary ?? "")
     : "";
+
+  const blurredCount: number = story
+    ? Math.min(Math.max(story.engagement.commented, 1), 5)
+    : 0;
 
   return (
     <div
@@ -240,7 +287,10 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
               ) : null}
 
               <div className="mt-5 pb-2">
-                <EngagementSummary engagement={story.engagement} />
+                <EngagementSummary
+                  engagement={story.engagement}
+                  scope={isGuest ? "global" : "friends"}
+                />
               </div>
 
               <div className="grid grid-cols-3 border-y border-slate-200 dark:border-slate-800">
@@ -268,66 +318,100 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
 
               <div className="mt-5">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                  Friends&apos; comments
+                  {isGuest ? "Comments" : "Friends' comments"}
                 </h3>
 
-                <div className="mt-4 space-y-4">
-                  {comments.length === 0 ? (
-                    <p className="text-sm text-slate-400">
-                      No comments yet from you or your friends.
-                    </p>
-                  ) : (
-                    comments.map((c) => (
-                      <div key={c.id} className="flex gap-3">
-                        <Avatar
-                          name={c.author_name}
-                          imageUrl={c.author_image_url}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                              {c.author_name}
-                            </span>
-                            <span className="text-xs text-slate-400">
-                              {relativeTime(c.created_at)}
-                            </span>
-                            {user && c.user_id === user.id ? (
-                              <button
-                                onClick={() => void removeComment(c.id)}
-                                className="text-xs text-slate-400 hover:text-red-600"
-                              >
-                                Delete
-                              </button>
-                            ) : null}
-                          </div>
-                          <p className="mt-0.5 whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
-                            {c.text}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="mt-5">
-                  <textarea
-                    ref={commentRef}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    placeholder="Add a comment for your friends…"
-                    rows={3}
-                    className="w-full resize-none border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      onClick={() => void submitComment()}
-                      disabled={posting || draft.trim().length === 0}
-                      className="bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-                    >
-                      {posting ? "Posting…" : "Post"}
-                    </button>
+                {isGuest ? (
+                  <div className="relative mt-4">
+                    <div className="space-y-4" aria-hidden>
+                      {Array.from({ length: blurredCount }, (_, i) => (
+                        <BlurredCommentRow key={i} index={i} />
+                      ))}
+                    </div>
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/60 to-white dark:via-slate-900/60 dark:to-slate-900" />
+                    <div className="relative mt-4 border border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-800 dark:bg-slate-950">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {story.engagement.commented > 0
+                          ? `${story.engagement.commented} ${
+                              story.engagement.commented === 1
+                                ? "comment"
+                                : "comments"
+                            } on this story`
+                          : "Join the conversation"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Create a free account and verify your email to read and
+                        post comments.
+                      </p>
+                      <Link
+                        href="/signin"
+                        className="mt-3 inline-block bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+                      >
+                        Create free account
+                      </Link>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="mt-4 space-y-4">
+                      {comments.length === 0 ? (
+                        <p className="text-sm text-slate-400">
+                          No comments yet from you or your friends.
+                        </p>
+                      ) : (
+                        comments.map((c) => (
+                          <div key={c.id} className="flex gap-3">
+                            <Avatar
+                              name={c.author_name}
+                              imageUrl={c.author_image_url}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                  {c.author_name}
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  {relativeTime(c.created_at)}
+                                </span>
+                                {user && c.user_id === user.id ? (
+                                  <button
+                                    onClick={() => void removeComment(c.id)}
+                                    className="text-xs text-slate-400 hover:text-red-600"
+                                  >
+                                    Delete
+                                  </button>
+                                ) : null}
+                              </div>
+                              <p className="mt-0.5 whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
+                                {c.text}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="mt-5">
+                      <textarea
+                        ref={commentRef}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder="Add a comment for your friends…"
+                        rows={3}
+                        className="w-full resize-none border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      />
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          onClick={() => void submitComment()}
+                          disabled={posting || draft.trim().length === 0}
+                          className="bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                        >
+                          {posting ? "Posting…" : "Post"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

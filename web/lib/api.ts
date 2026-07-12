@@ -16,6 +16,7 @@ import type {
   SourceInput,
   SourceStatus,
   Story,
+  StoryKind,
   StoryList,
   TodayPayload,
   EventSummary,
@@ -137,6 +138,13 @@ export const api = {
     request<StoryList>("/stories/recommended"),
   searchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
+  titleSearchStories: (q: string): Promise<StoryList> =>
+    request<StoryList>(`/stories/title-search?q=${encodeURIComponent(q)}`),
+  addStory: (url: string, kind: StoryKind): Promise<Story> =>
+    request<Story>("/stories", {
+      method: "POST",
+      body: JSON.stringify({ url, kind }),
+    }),
   getStory: (id: UUID): Promise<Story> => request<Story>(`/stories/${id}`),
 
   // --- today / events ---

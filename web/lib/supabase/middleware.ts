@@ -31,7 +31,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   const { pathname } = request.nextUrl;
   const isPublic: boolean =
-    pathname === "/" || pathname === "/signin" || pathname.startsWith("/auth");
+    pathname === "/" ||
+    pathname === "/signin" ||
+    pathname.startsWith("/auth") ||
+    pathname === "/today" ||
+    pathname.startsWith("/today/");
 
   const redirectTo = (target: string): NextResponse => {
     // Behind Railway's proxy the request host/port is the internal

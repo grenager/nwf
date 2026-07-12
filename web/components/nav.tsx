@@ -1,6 +1,8 @@
 "use client";
 
+import { AddStoryModal } from "@/components/add-story-modal";
 import { useAuth } from "@/components/auth-provider";
+import { useAuthGate } from "@/components/auth-gate";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { useToast } from "@/components/toast";
 import { api } from "@/lib/api";
@@ -17,13 +19,21 @@ const LINKS: { href: string; label: string }[] = [
 export function Nav() {
   const pathname: string = usePathname();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { session, user, signOut } = useAuth();
+  const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [profileOpen, setProfileOpen] = useState<boolean>(false);
+  const [addOpen, setAddOpen] = useState<boolean>(false);
+
+  const isGuest: boolean = !session;
 
   useEffect(() => {
+    if (!user?.id) {
+      setProfile(null);
+      return;
+    }
     let active = true;
     api
       .getMe()
@@ -43,7 +53,11 @@ export function Nav() {
   }, [pathname]);
 
   const isAdmin: boolean = profile?.is_admin ?? false;
-  const links = isAdmin ? [...LINKS, { href: "/admin", label: "Admin" }] : LINKS;
+  const links = isGuest
+    ? [{ href: "/today", label: "Today" }]
+    : isAdmin
+      ? [...LINKS, { href: "/admin", label: "Admin" }]
+      : LINKS;
   const displayName: string =
     [profile?.first, profile?.last].filter(Boolean).join(" ") ||
     user?.email ||
@@ -54,6 +68,16 @@ export function Nav() {
     await signOut();
     notify("Signed out", "info");
     router.push("/");
+  }
+
+  function openAddStory(): void {
+    if (!requireAuth("add stories")) return;
+    setAddOpen(true);
+  }
+
+  function openProfile(): void {
+    if (!requireAuth("edit your profile")) return;
+    setProfileOpen(true);
   }
 
   function linkClass(active: boolean): string {
@@ -83,24 +107,60 @@ export function Nav() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 sm:flex">
-          <button
-            onClick={() => setProfileOpen(true)}
-            aria-label="Open your profile"
-            title={displayName}
-            className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[9999px] border border-slate-300 bg-slate-100 text-sm font-semibold text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            {profile?.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile.image_url}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              avatarInitial
-            )}
-          </button>
+        <div className="hidden items-center gap-2 sm:flex">
+          {isGuest ? (
+            <Link
+              href="/signin"
+              className="bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              Create free account
+            </Link>
+          ) : (
+            <>
+              <button
+                onClick={openAddStory}
+                className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+              >
+                <span className="text-base leading-none">+</span>
+                Add
+              </button>
+              <Link
+                href="/search"
+                aria-label="Search"
+                title="Search"
+                className="flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="h-4 w-4"
+                >
+                  <circle cx="9" cy="9" r="6" />
+                  <path d="m14 14 4 4" strokeLinecap="round" />
+                </svg>
+              </Link>
+              <button
+                onClick={openProfile}
+                aria-label="Open your profile"
+                title={displayName}
+                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[9999px] border border-slate-300 bg-slate-100 text-sm font-semibold text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {profile?.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.image_url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  avatarInitial
+                )}
+              </button>
+            </>
+          )}
         </div>
 
         <button
@@ -124,16 +184,49 @@ export function Nav() {
               {link.label}
             </Link>
           ))}
-          <button
-            onClick={() => {
-              setMenuOpen(false);
-              setProfileOpen(true);
-            }}
-            className="px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            My profile
-          </button>
+          {isGuest ? (
+            <Link
+              href="/signin"
+              className="px-3 py-1.5 text-left text-sm font-semibold text-brand-600"
+            >
+              Create free account
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/search"
+                className="px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Search
+              </Link>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  openAddStory();
+                }}
+                className="px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Add story
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  openProfile();
+                }}
+                className="px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                My profile
+              </button>
+            </>
+          )}
         </nav>
+      ) : null}
+
+      {addOpen ? (
+        <AddStoryModal
+          onClose={() => setAddOpen(false)}
+          onAdded={() => router.refresh()}
+        />
       ) : null}
 
       {profileOpen && profile ? (

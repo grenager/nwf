@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,9 +15,12 @@ from core.models import (
     Connection,
     ConnectionStatus,
     Profile,
+    Source,
     StoryReaction,
     StoryStatus,
 )
+
+CURATED_SOURCE_LIMIT: int = 40
 
 
 @dataclass
@@ -27,6 +31,65 @@ class StoryActivity:
     commented: set[uuid.UUID] = field(default_factory=set)
     # reaction type -> set of friend ids who used that reaction
     reactions: dict[str, set[uuid.UUID]] = field(default_factory=dict)
+
+
+def curated_source_subquery(limit: int = CURATED_SOURCE_LIMIT) -> Any:
+    """Top global sources by prominence for guest feeds."""
+    return (
+        select(Source.id)
+        .order_by(Source.prominence.desc().nulls_last(), Source.name)
+        .limit(limit)
+        .scalar_subquery()
+    )
+
+
+async def global_activity_by_story(
+    session: AsyncSession,
+    story_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, StoryActivity]:
+    """Map story_id -> global read/reaction/comment activity (all users)."""
+    if not story_ids:
+        return {}
+
+    activity: dict[uuid.UUID, StoryActivity] = {}
+
+    status_rows = (
+        await session.execute(
+            select(StoryStatus.story_id, StoryStatus.user_id, StoryStatus.read).where(
+                StoryStatus.story_id.in_(story_ids),
+                StoryStatus.read.is_(True),
+            )
+        )
+    ).all()
+    for story_id, user_id, read in status_rows:
+        entry = activity.setdefault(story_id, StoryActivity())
+        if read:
+            entry.read.add(user_id)
+
+    reaction_rows = (
+        await session.execute(
+            select(
+                StoryReaction.story_id,
+                StoryReaction.user_id,
+                StoryReaction.reaction,
+            ).where(StoryReaction.story_id.in_(story_ids))
+        )
+    ).all()
+    for story_id, user_id, reaction in reaction_rows:
+        entry = activity.setdefault(story_id, StoryActivity())
+        entry.reactions.setdefault(reaction, set()).add(user_id)
+
+    comment_rows = (
+        await session.execute(
+            select(Comment.story_id, Comment.user_id).where(
+                Comment.story_id.in_(story_ids)
+            )
+        )
+    ).all()
+    for story_id, user_id in comment_rows:
+        activity.setdefault(story_id, StoryActivity()).commented.add(user_id)
+
+    return activity
 
 
 async def accepted_friend_ids(session: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:

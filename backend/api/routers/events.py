@@ -9,15 +9,17 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, distinct, func, select
 
-from api.deps import CurrentUser, SessionDep
+from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
     StoryActivity,
     accepted_friend_ids,
     aggregate_engagement,
+    curated_source_subquery,
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
     friend_stars_by_story,
+    global_activity_by_story,
     my_reactions_by_story,
     top_readers,
 )
@@ -52,29 +54,63 @@ def _followed_subquery(user_id: uuid.UUID) -> Any:
     return select(UserSource.source_id).where(UserSource.user_id == user_id).scalar_subquery()
 
 
+def _source_subquery(user_id: uuid.UUID | None) -> Any:
+    """Followed sources for a user, or the curated global list for guests."""
+    if user_id is not None:
+        return _followed_subquery(user_id)
+    return curated_source_subquery()
+
+
 async def _build_coverage_rows(
     session: SessionDep,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     event_id: uuid.UUID,
 ) -> list[EventCoverageOut]:
-    stmt = (
-        select(Story, Source, StoryStatus.read, StoryStatus.starred)
+    base = (
+        select(Story, Source)
         .join(StoryEvent, StoryEvent.story_id == Story.id)
         .outerjoin(Source, Source.id == Story.source_id)
-        .outerjoin(
-            StoryStatus,
-            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
-        )
         .where(StoryEvent.event_id == event_id)
         .order_by(
             Source.prominence.desc().nulls_last(),
             Source.name,
         )
     )
-    rows = (await session.execute(stmt)).all()
-    coverage: list[EventCoverageOut] = []
-    for story, source, read, starred in rows:
-        bias: float | None = (
+    if user_id is not None:
+        stmt = base.add_columns(StoryStatus.read, StoryStatus.starred).outerjoin(
+            StoryStatus,
+            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
+        )
+        rows = (await session.execute(stmt)).all()
+        coverage: list[EventCoverageOut] = []
+        for story, source, read, starred in rows:
+            bias: float | None = (
+                float(source.bias_score)
+                if source and source.bias_score is not None
+                else None
+            )
+            coverage.append(
+                EventCoverageOut(
+                    story_id=story.id,
+                    source_id=story.source_id,
+                    source_name=source.name if source else "Unknown",
+                    bias_score=bias,
+                    prominence=int(source.prominence) if source else 0,
+                    image_url=source.image_url if source else story.image_url,
+                    story_image_url=story.image_url,
+                    full_headline=story.full_headline,
+                    summary=story.summary,
+                    article_url=story.article_url,
+                    read=bool(read),
+                    starred=bool(starred),
+                )
+            )
+        return coverage
+
+    rows = (await session.execute(base)).all()
+    coverage = []
+    for story, source in rows:
+        bias = (
             float(source.bias_score)
             if source and source.bias_score is not None
             else None
@@ -91,8 +127,8 @@ async def _build_coverage_rows(
                 full_headline=story.full_headline,
                 summary=story.summary,
                 article_url=story.article_url,
-                read=bool(read),
-                starred=bool(starred),
+                read=False,
+                starred=False,
             )
         )
     return coverage
@@ -100,7 +136,7 @@ async def _build_coverage_rows(
 
 async def _event_to_summary(
     session: SessionDep,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     event: Event,
     coverage: list[EventCoverageOut],
     friend_map: dict[uuid.UUID, list[FriendStarOut]],
@@ -147,22 +183,17 @@ async def _event_to_summary(
 
 async def _load_events_for_user(
     session: SessionDep,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     *,
     hours: int = 48,
     limit: int = 15,
 ) -> list[Event]:
-    """Recent events touching a followed source, ranked by breadth of coverage.
-
-    Counts distinct outlets across *all* stories in the event (not just
-    followed ones) so cross-outlet clusters surface first, while still
-    requiring at least one followed source to be involved.
-    """
+    """Recent events touching a followed/curated source, ranked by breadth of coverage."""
     since = datetime.now(UTC) - timedelta(hours=hours)
-    followed = _followed_subquery(user_id)
+    sources = _source_subquery(user_id)
     outlet_count = func.count(distinct(Story.source_id))
-    followed_hits = func.count(
-        distinct(case((Story.source_id.in_(followed), Story.source_id)))
+    source_hits = func.count(
+        distinct(case((Story.source_id.in_(sources), Story.source_id)))
     )
     stmt = (
         select(Event)
@@ -173,7 +204,7 @@ async def _load_events_for_user(
             Story.kind == StoryKind.news,
         )
         .group_by(Event.id)
-        .having(followed_hits > 0)
+        .having(source_hits > 0)
         .order_by(outlet_count.desc(), Event.first_seen_at.desc())
         .limit(limit)
     )
@@ -182,7 +213,7 @@ async def _load_events_for_user(
 
 async def _events_list_for_user(
     session: SessionDep,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     *,
     limit: int = 15,
 ) -> EventList:
@@ -193,15 +224,20 @@ async def _events_list_for_user(
         coverage = await _build_coverage_rows(session, user_id, event.id)
         all_story_ids.extend(c.story_id for c in coverage)
 
-    friend_profiles = await friend_stars_by_story(session, user_id, all_story_ids)
-    friend_map: dict[uuid.UUID, list[FriendStarOut]] = {
-        sid: [
-            FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles
-        ]
-        for sid, profiles in friend_profiles.items()
-    }
-    activity = await friend_activity_by_story(session, user_id, all_story_ids)
-    profiles = await friend_profiles_map(session, user_id)
+    if user_id is None:
+        friend_map: dict[uuid.UUID, list[FriendStarOut]] = {}
+        activity = await global_activity_by_story(session, all_story_ids)
+        profiles: dict[uuid.UUID, Profile] = {}
+    else:
+        friend_profiles = await friend_stars_by_story(session, user_id, all_story_ids)
+        friend_map = {
+            sid: [
+                FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles
+            ]
+            for sid, profiles in friend_profiles.items()
+        }
+        activity = await friend_activity_by_story(session, user_id, all_story_ids)
+        profiles = await friend_profiles_map(session, user_id)
 
     summaries: list[EventSummaryOut] = []
     for event in events:
@@ -251,20 +287,62 @@ async def get_event(
     return EventDetailOut.model_validate(summary)
 
 
-async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
+async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
     """Build the combined Today screen payload."""
-    events = await _events_list_for_user(session, user.id, limit=15)
+    user_id: uuid.UUID | None = user.id if user is not None else None
+    events = await _events_list_for_user(session, user_id, limit=15)
 
-    followed = _followed_subquery(user.id)
+    sources = _source_subquery(user_id)
     base = select(Story).where(
-        Story.source_id.in_(followed),
+        Story.source_id.in_(sources),
         Story.kind == StoryKind.analysis,
         Story.archived.is_(False),
     )
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
 
+    if user_id is None:
+        stmt = (
+            select(Story, Source)
+            .outerjoin(Source, Source.id == Story.source_id)
+            .where(
+                Story.source_id.in_(sources),
+                Story.kind == StoryKind.analysis,
+                Story.archived.is_(False),
+            )
+            .order_by(Story.created_at.desc())
+            .limit(20)
+        )
+        rows = (await session.execute(stmt)).all()
+        story_ids = [story.id for story, _ in rows]
+        activity = await global_activity_by_story(session, story_ids)
+        analysis_items: list[StoryWithStatus] = []
+        for story, source in rows:
+            model = StoryWithStatus.model_validate(story)
+            model.source_name = source.name if source else None
+            model.source_image_url = source.image_url if source else None
+            model.read = False
+            model.starred = False
+            model.my_reaction = None
+            model.friend_stars = []
+            read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
+            model.engagement = FriendEngagementOut(
+                read=len(read_ids),
+                commented=commented_n,
+                reactions=reactions,
+                readers=[],
+            )
+            analysis_items.append(model)
+
+        return TodayOut(
+            events=events,
+            analysis=StoryList(
+                items=analysis_items, total=int(total or 0), limit=20, offset=0
+            ),
+            friend_pick_count=0,
+        )
+
     # Rank analysis by number of reactions from friends first, then recency.
-    friends = await accepted_friend_ids(session, user.id)
+    friends = await accepted_friend_ids(session, user_id)
     likes_col = func.count(StoryReaction.story_id)
     likes_sq = (
         select(
@@ -285,7 +363,7 @@ async def today_payload(session: SessionDep, user: CurrentUser) -> TodayOut:
         )
         .outerjoin(likes_sq, likes_sq.c.sid == Story.id)
         .where(
-            Story.source_id.in_(followed),
+            Story.source_id.in_(sources),
             Story.kind == StoryKind.analysis,
             Story.archived.is_(False),
         )
