@@ -34,17 +34,14 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     pathname === "/" || pathname === "/signin" || pathname.startsWith("/auth");
 
   const redirectTo = (target: string): NextResponse => {
-    const url = request.nextUrl.clone();
-    url.pathname = target;
-    url.search = "";
-    // Behind Railway's proxy the request host is the internal `localhost:<port>`;
-    // prefer the forwarded host so redirects stay on the public domain.
+    // Behind Railway's proxy the request host/port is the internal
+    // `localhost:<port>`; prefer the forwarded host so redirects stay on the
+    // public domain (and don't leak the internal port).
     const forwardedHost: string | null = request.headers.get("x-forwarded-host");
-    if (forwardedHost) {
-      url.host = forwardedHost;
-      url.protocol = request.headers.get("x-forwarded-proto") ?? "https";
-    }
-    const redirect = NextResponse.redirect(url);
+    const base: string = forwardedHost
+      ? `${request.headers.get("x-forwarded-proto") ?? "https"}://${forwardedHost}`
+      : request.nextUrl.origin;
+    const redirect = NextResponse.redirect(new URL(target, base));
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirect.cookies.set(cookie);
     });
