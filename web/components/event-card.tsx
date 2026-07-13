@@ -9,6 +9,7 @@ import Link from "next/link";
 interface EventCardProps {
   event: EventSummary;
   onOpen?: (storyId: UUID) => void;
+  onDismiss?: (eventId: UUID) => void;
 }
 
 function firstLine(summary: string | null): string {
@@ -59,7 +60,7 @@ function CoverageRow({
   );
 }
 
-export function EventCard({ event, onOpen }: EventCardProps) {
+export function EventCard({ event, onOpen, onDismiss }: EventCardProps) {
   const [lead, ...others] = event.coverage;
   if (!lead) return null;
 
@@ -70,10 +71,22 @@ export function EventCard({ event, onOpen }: EventCardProps) {
 
   return (
     <article
-      className={`rounded-xl border border-slate-200 bg-white p-4 transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${
+      className={`relative rounded-xl border border-slate-200 bg-white p-4 transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${
         event.read ? "opacity-70" : ""
       }`}
     >
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={() => onDismiss(event.id)}
+          aria-label="Dismiss event"
+          title="Dismiss"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        >
+          ✕
+        </button>
+      ) : null}
+
       <div className={`flex gap-3 ${lead.read ? "opacity-50 grayscale" : ""}`}>
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -84,7 +97,7 @@ export function EventCard({ event, onOpen }: EventCardProps) {
             className="h-24 w-24 shrink-0 cursor-pointer rounded-lg object-cover"
           />
         ) : null}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-6">
           <button
             type="button"
             onClick={() => onOpen?.(lead.story_id)}

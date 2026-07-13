@@ -60,6 +60,16 @@ class Settings(BaseSettings):
         description="Only match stories against events seen within this window",
     )
 
+    # --- Inbox ------------------------------------------------------------
+    inbox_candidate_days: int = Field(
+        default=7,
+        description="How far back to look for inbox candidates (events + analysis)",
+    )
+    event_min_outlets: int = Field(
+        default=3,
+        description="Minimum distinct outlets for an event to enter the news inbox",
+    )
+
     # --- Logging ----------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=False)

@@ -89,6 +89,7 @@ export interface Story {
   updated_at: string;
   read: boolean;
   starred: boolean;
+  dismissed: boolean;
   my_reaction: ReactionKind | null;
   friend_stars?: FriendStar[];
   engagement: FriendEngagement;
@@ -222,6 +223,7 @@ export interface EventSummary {
   friend_stars: FriendStar[];
   engagement: FriendEngagement;
   read: boolean;
+  dismissed: boolean;
 }
 
 export interface EventList {
@@ -233,4 +235,5 @@ export interface TodayPayload {
   events: EventList;
   analysis: StoryList;
   friend_pick_count: number;
+  new_since: string | null;
 }

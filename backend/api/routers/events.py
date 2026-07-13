@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import case, distinct, func, select
+from sqlalchemy import case, distinct, func, or_, select, union
 
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
@@ -35,8 +35,11 @@ from api.schemas import (
     StoryWithStatus,
     TodayOut,
 )
+from core.config import get_settings
 from core.models import (
+    Comment,
     Event,
+    EventStatus,
     Profile,
     Source,
     Story,
@@ -142,6 +145,9 @@ async def _event_to_summary(
     friend_map: dict[uuid.UUID, list[FriendStarOut]],
     activity: dict[uuid.UUID, StoryActivity] | None = None,
     profiles: dict[uuid.UUID, Profile] | None = None,
+    *,
+    event_read: bool = False,
+    event_dismissed: bool = False,
 ) -> EventSummaryOut:
     outlet_ids = {c.source_id for c in coverage if c.source_id is not None}
     story_ids = [c.story_id for c in coverage]
@@ -161,7 +167,6 @@ async def _event_to_summary(
         for p in top_readers(read_ids, profiles or {})
     ]
 
-    all_read = bool(coverage) and all(c.read for c in coverage)
     return EventSummaryOut(
         id=event.id,
         title=event.title,
@@ -177,7 +182,8 @@ async def _event_to_summary(
             reactions=reactions,
             readers=readers,
         ),
-        read=all_read,
+        read=event_read,
+        dismissed=event_dismissed,
     )
 
 
@@ -185,30 +191,60 @@ async def _load_events_for_user(
     session: SessionDep,
     user_id: uuid.UUID | None,
     *,
-    hours: int = 48,
-    limit: int = 15,
-) -> list[Event]:
-    """Recent events touching a followed/curated source, ranked by breadth of coverage."""
-    since = datetime.now(UTC) - timedelta(hours=hours)
+    days: int | None = None,
+    limit: int = 50,
+) -> list[tuple[Event, bool, bool]]:
+    """Recent inbox candidate events.
+
+    Returns (event, read, dismissed) tuples. Dismissed rows are excluded for
+    authenticated users; guests always get (event, False, False).
+    """
+    settings = get_settings()
+    window_days: int = days if days is not None else settings.inbox_candidate_days
+    since = datetime.now(UTC) - timedelta(days=window_days)
     sources = _source_subquery(user_id)
     outlet_count = func.count(distinct(Story.source_id))
     source_hits = func.count(
         distinct(case((Story.source_id.in_(sources), Story.source_id)))
     )
+
+    if user_id is None:
+        stmt = (
+            select(Event)
+            .join(StoryEvent, StoryEvent.event_id == Event.id)
+            .join(Story, Story.id == StoryEvent.story_id)
+            .where(
+                Event.first_seen_at >= since,
+                Story.kind == StoryKind.news,
+            )
+            .group_by(Event.id)
+            .having(source_hits > 0)
+            .order_by(outlet_count.desc(), Event.first_seen_at.desc())
+            .limit(limit)
+        )
+        events = list((await session.scalars(stmt)).unique().all())
+        return [(e, False, False) for e in events]
+
     stmt = (
-        select(Event)
+        select(Event, EventStatus.read, EventStatus.dismissed)
         .join(StoryEvent, StoryEvent.event_id == Event.id)
         .join(Story, Story.id == StoryEvent.story_id)
+        .outerjoin(
+            EventStatus,
+            (EventStatus.event_id == Event.id) & (EventStatus.user_id == user_id),
+        )
         .where(
             Event.first_seen_at >= since,
             Story.kind == StoryKind.news,
+            or_(EventStatus.dismissed.is_(False), EventStatus.dismissed.is_(None)),
         )
-        .group_by(Event.id)
+        .group_by(Event.id, EventStatus.read, EventStatus.dismissed)
         .having(source_hits > 0)
         .order_by(outlet_count.desc(), Event.first_seen_at.desc())
         .limit(limit)
     )
-    return list((await session.scalars(stmt)).unique().all())
+    rows = (await session.execute(stmt)).all()
+    return [(event, bool(read), bool(dismissed)) for event, read, dismissed in rows]
 
 
 async def _events_list_for_user(
@@ -217,11 +253,16 @@ async def _events_list_for_user(
     *,
     limit: int = 15,
 ) -> EventList:
-    events = await _load_events_for_user(session, user_id, limit=limit)
+    settings = get_settings()
+    min_outlets: int = settings.event_min_outlets
+    # Fetch a wider candidate pool, then filter by outlet threshold.
+    loaded = await _load_events_for_user(session, user_id, limit=max(limit * 3, 45))
     all_story_ids: list[uuid.UUID] = []
 
-    for event in events:
+    coverage_by_event: dict[uuid.UUID, list[EventCoverageOut]] = {}
+    for event, _read, _dismissed in loaded:
         coverage = await _build_coverage_rows(session, user_id, event.id)
+        coverage_by_event[event.id] = coverage
         all_story_ids.extend(c.story_id for c in coverage)
 
     if user_id is None:
@@ -240,15 +281,23 @@ async def _events_list_for_user(
         profiles = await friend_profiles_map(session, user_id)
 
     summaries: list[EventSummaryOut] = []
-    for event in events:
-        coverage = await _build_coverage_rows(session, user_id, event.id)
+    for event, event_read, event_dismissed in loaded:
+        coverage = coverage_by_event[event.id]
         summary = await _event_to_summary(
-            session, user_id, event, coverage, friend_map, activity, profiles
+            session,
+            user_id,
+            event,
+            coverage,
+            friend_map,
+            activity,
+            profiles,
+            event_read=event_read,
+            event_dismissed=event_dismissed,
         )
-        if summary.outlet_count >= 2 or summary.is_scoop:
+        if summary.outlet_count >= min_outlets:
             summaries.append(summary)
 
-    summaries.sort(key=lambda e: (-e.outlet_count, -e.first_seen_at.timestamp()))
+    summaries.sort(key=lambda e: (e.read, -e.outlet_count, -e.first_seen_at.timestamp()))
     return EventList(items=summaries[:limit], total=len(summaries))
 
 
@@ -258,7 +307,7 @@ async def events_today(
     user: CurrentUser,
     limit: int = Query(default=15, le=50, ge=1),
 ) -> EventList:
-    """News event clusters from the user's followed sources (last 48h)."""
+    """News event clusters from the user's followed sources (inbox candidates)."""
     return await _events_list_for_user(session, user.id, limit=limit)
 
 
@@ -281,24 +330,42 @@ async def get_event(
     }
     activity = await friend_activity_by_story(session, user.id, story_ids)
     profiles = await friend_profiles_map(session, user.id)
+
+    status_row = await session.get(
+        EventStatus, {"user_id": user.id, "event_id": event_id}
+    )
+    event_read = bool(status_row.read) if status_row is not None else False
+    event_dismissed = bool(status_row.dismissed) if status_row is not None else False
+
     summary = await _event_to_summary(
-        session, user.id, event, coverage, friend_map, activity, profiles
+        session,
+        user.id,
+        event,
+        coverage,
+        friend_map,
+        activity,
+        profiles,
+        event_read=event_read,
+        event_dismissed=event_dismissed,
     )
     return EventDetailOut.model_validate(summary)
 
 
 async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
-    """Build the combined Today screen payload."""
+    """Build the combined inbox Today screen payload."""
+    settings = get_settings()
     user_id: uuid.UUID | None = user.id if user is not None else None
-    events = await _events_list_for_user(session, user_id, limit=15)
+    window_since = datetime.now(UTC) - timedelta(days=settings.inbox_candidate_days)
 
+    new_since: datetime | None = None
+    if user_id is not None:
+        profile = await session.get(Profile, user_id)
+        if profile is not None:
+            new_since = profile.last_opened_at
+            profile.last_opened_at = datetime.now(UTC)
+
+    events = await _events_list_for_user(session, user_id, limit=30)
     sources = _source_subquery(user_id)
-    base = select(Story).where(
-        Story.source_id.in_(sources),
-        Story.kind == StoryKind.analysis,
-        Story.archived.is_(False),
-    )
-    total = await session.scalar(select(func.count()).select_from(base.subquery()))
 
     if user_id is None:
         stmt = (
@@ -308,9 +375,10 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
                 Story.source_id.in_(sources),
                 Story.kind == StoryKind.analysis,
                 Story.archived.is_(False),
+                Story.created_at >= window_since,
             )
             .order_by(Story.created_at.desc())
-            .limit(20)
+            .limit(30)
         )
         guest_rows = (await session.execute(stmt)).all()
         story_ids = [story.id for story, _ in guest_rows]
@@ -322,6 +390,7 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
             model.source_image_url = source.image_url if source else None
             model.read = False
             model.starred = False
+            model.dismissed = False
             model.my_reaction = None
             model.friend_stars = []
             read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
@@ -336,13 +405,19 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         return TodayOut(
             events=events,
             analysis=StoryList(
-                items=analysis_items, total=int(total or 0), limit=20, offset=0
+                items=analysis_items, total=len(analysis_items), limit=30, offset=0
             ),
             friend_pick_count=0,
+            new_since=None,
         )
 
-    # Rank analysis by number of reactions from friends first, then recency.
+    # Analysis inbox = followed sources UNION friend reacted/commented.
     friends = await accepted_friend_ids(session, user_id)
+    friend_signal = union(
+        select(StoryReaction.story_id).where(StoryReaction.user_id.in_(friends)),
+        select(Comment.story_id).where(Comment.user_id.in_(friends)),
+    ).subquery()
+
     likes_col = func.count(StoryReaction.story_id)
     likes_sq = (
         select(
@@ -355,7 +430,7 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
     )
     friend_likes = func.coalesce(likes_sq.c.likes, 0)
     auth_stmt = (
-        select(Story, Source, StoryStatus.read, StoryStatus.starred)
+        select(Story, Source, StoryStatus.read, StoryStatus.starred, StoryStatus.dismissed)
         .outerjoin(Source, Source.id == Story.source_id)
         .outerjoin(
             StoryStatus,
@@ -363,22 +438,27 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         )
         .outerjoin(likes_sq, likes_sq.c.sid == Story.id)
         .where(
-            Story.source_id.in_(sources),
+            or_(
+                Story.source_id.in_(sources),
+                Story.id.in_(select(friend_signal.c.story_id)),
+            ),
             Story.kind == StoryKind.analysis,
             Story.archived.is_(False),
+            Story.created_at >= window_since,
+            or_(StoryStatus.dismissed.is_(False), StoryStatus.dismissed.is_(None)),
         )
         .order_by(friend_likes.desc(), Story.created_at.desc())
-        .limit(20)
+        .limit(40)
     )
     auth_rows = (await session.execute(auth_stmt)).all()
-    story_ids = [story.id for story, _, _, _ in auth_rows]
+    story_ids = [story.id for story, _, _, _, _ in auth_rows]
     friend_profiles = await friend_stars_by_story(session, user_id, story_ids)
     activity = await friend_activity_by_story(session, user_id, story_ids)
     my_reactions = await my_reactions_by_story(session, user_id, story_ids)
     profiles = await friend_profiles_map(session, user_id)
     auth_analysis_items: list[StoryWithStatus] = []
     friend_pick_count = 0
-    for story, source, read, starred in auth_rows:
+    for story, source, read, starred, dismissed in auth_rows:
         fs = [
             FriendStarOut(user_id=p.id, display_name=display_name(p))
             for p in friend_profiles.get(story.id, [])
@@ -390,6 +470,7 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         model.source_image_url = source.image_url if source else None
         model.read = bool(read)
         model.starred = bool(starred)
+        model.dismissed = bool(dismissed)
         model.my_reaction = my_reactions.get(story.id)
         model.friend_stars = fs
         read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
@@ -406,10 +487,17 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         )
         auth_analysis_items.append(model)
 
+    # Unread first (stable within each group via prior friend_likes/recency order).
+    auth_analysis_items.sort(key=lambda s: s.read)
+
     return TodayOut(
         events=events,
         analysis=StoryList(
-            items=auth_analysis_items, total=int(total or 0), limit=20, offset=0
+            items=auth_analysis_items,
+            total=len(auth_analysis_items),
+            limit=40,
+            offset=0,
         ),
         friend_pick_count=friend_pick_count,
+        new_since=new_since,
     )

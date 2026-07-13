@@ -134,6 +134,7 @@ class FriendEngagementOut(BaseModel):
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
+    dismissed: bool = False
     my_reaction: str | None = None
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
@@ -166,6 +167,10 @@ class ReadMark(BaseModel):
 
 
 class StarMark(BaseModel):
+    story_id: uuid.UUID
+
+
+class DismissMark(BaseModel):
     story_id: uuid.UUID
 
 
@@ -304,6 +309,7 @@ class EventSummaryOut(BaseModel):
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     read: bool = False
+    dismissed: bool = False
 
 
 class EventDetailOut(EventSummaryOut):
@@ -321,3 +327,4 @@ class TodayOut(BaseModel):
     events: EventList
     analysis: StoryList
     friend_pick_count: int
+    new_since: datetime | None = None

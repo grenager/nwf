@@ -84,6 +84,10 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   const [posting, setPosting] = useState<boolean>(false);
   const commentRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [bodyExpanded, setBodyExpanded] = useState<boolean>(false);
+  const [bodyOverflows, setBodyOverflows] = useState<boolean>(false);
+  const bodyRef = useRef<HTMLParagraphElement | null>(null);
+
   async function share(): Promise<void> {
     if (!story) return;
     const url: string = story.article_url;
@@ -132,6 +136,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setBodyExpanded(false);
     void (async () => {
       try {
         const detail: Story = await api.getStory(storyId);
@@ -208,6 +213,14 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
     ? stripHtml(story.full_text ?? story.summary ?? "")
     : "";
 
+  // Detect whether the clamped body actually spills past 5 lines so the
+  // more/less toggle only appears when there is hidden text to reveal.
+  useEffect(() => {
+    const el: HTMLParagraphElement | null = bodyRef.current;
+    if (!el || bodyExpanded) return;
+    setBodyOverflows(el.scrollHeight > el.clientHeight + 1);
+  }, [body, loading, bodyExpanded]);
+
   const blurredCount: number = story
     ? Math.min(Math.max(story.engagement.commented, 1), 5)
     : 0;
@@ -281,9 +294,24 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
               </a>
 
               {body ? (
-                <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
-                  {body}
-                </p>
+                <div className="mt-4">
+                  <p
+                    ref={bodyRef}
+                    className={`whitespace-pre-line text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 ${
+                      bodyExpanded ? "" : "line-clamp-5"
+                    }`}
+                  >
+                    {body}
+                  </p>
+                  {bodyOverflows ? (
+                    <button
+                      onClick={() => setBodyExpanded((v) => !v)}
+                      className="mt-1 text-sm font-semibold text-brand-600 transition hover:underline dark:text-brand-400"
+                    >
+                      {bodyExpanded ? "Show less" : "Show more"}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
 
               <div className="mt-5 pb-2">

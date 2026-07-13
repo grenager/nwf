@@ -93,6 +93,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ story_id: storyId, read }),
     }),
+  dismissStory: (storyId: UUID): Promise<void> =>
+    request<void>("/me/dismiss", {
+      method: "POST",
+      body: JSON.stringify({ story_id: storyId }),
+    }),
+  undismissStory: (storyId: UUID): Promise<void> =>
+    request<void>(`/me/dismiss/${storyId}`, { method: "DELETE" }),
+  markEventRead: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/read`, { method: "POST" }),
+  unmarkEventRead: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/read`, { method: "DELETE" }),
+  dismissEvent: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/dismiss`, { method: "POST" }),
+  undismissEvent: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/dismiss`, { method: "DELETE" }),
   addStar: (storyId: UUID): Promise<void> =>
     request<void>("/me/stars", {
       method: "POST",

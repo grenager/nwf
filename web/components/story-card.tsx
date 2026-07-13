@@ -12,9 +12,16 @@ interface StoryCardProps {
   dense?: boolean;
   onChange?: (story: Story) => void;
   onOpen?: (storyId: UUID) => void;
+  onDismiss?: (storyId: UUID) => void;
 }
 
-export function StoryCard({ story, dense = false, onChange, onOpen }: StoryCardProps) {
+export function StoryCard({
+  story,
+  dense = false,
+  onChange,
+  onOpen,
+  onDismiss,
+}: StoryCardProps) {
   const [read, setRead] = useState<boolean>(story.read);
 
   useEffect(() => {
@@ -37,13 +44,24 @@ export function StoryCard({ story, dense = false, onChange, onOpen }: StoryCardP
 
   return (
     <article
-      className={`group rounded-xl border border-slate-200 bg-white transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${
+      className={`group relative rounded-xl border border-slate-200 bg-white transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${
         read ? "opacity-45 grayscale" : ""
       }`}
     >
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={() => onDismiss(story.id)}
+          aria-label="Dismiss article"
+          title="Dismiss"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        >
+          ✕
+        </button>
+      ) : null}
       <div className={dense ? "p-3" : "p-4"}>
         {!dense && story.source_name ? (
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-2 pr-6">
             {story.source_image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img

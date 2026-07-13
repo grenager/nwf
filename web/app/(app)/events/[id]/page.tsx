@@ -20,6 +20,7 @@ export default function EventCoveragePage() {
     setLoading(true);
     try {
       setEvent(await api.getEvent(params.id));
+      void api.markEventRead(params.id).catch(() => undefined);
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to load event", "error");
     } finally {

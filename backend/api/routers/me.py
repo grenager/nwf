@@ -1,6 +1,8 @@
-"""Current-user endpoints: profile, preferences, sources, read/star state."""
+"""Current-user endpoints: profile, preferences, sources, read/star/dismiss state."""
 
 from __future__ import annotations
+
+import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import delete, func, select
@@ -8,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
 from api.schemas import (
+    DismissMark,
     PreferencesUpdate,
     ProfileOut,
     ReactionSet,
@@ -18,7 +21,16 @@ from api.schemas import (
     StoryWithStatus,
     UserSourcesUpdate,
 )
-from core.models import Profile, Source, Story, StoryReaction, StoryStatus, UserSource
+from core.models import (
+    Event,
+    EventStatus,
+    Profile,
+    Source,
+    Story,
+    StoryReaction,
+    StoryStatus,
+    UserSource,
+)
 from core.reactions import REACTION_SET
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -81,19 +93,143 @@ async def set_my_sources(
 async def mark_read(
     payload: ReadMark, session: SessionDep, user: CurrentUser
 ) -> None:
+    read_at = func.now() if payload.read else None
     stmt = (
         pg_insert(StoryStatus)
         .values(
             user_id=user.id,
             story_id=payload.story_id,
             read=payload.read,
+            read_at=read_at,
         )
         .on_conflict_do_update(
             index_elements=[StoryStatus.user_id, StoryStatus.story_id],
-            set_={"read": payload.read, "updated_at": func.now()},
+            set_={
+                "read": payload.read,
+                "read_at": read_at,
+                "updated_at": func.now(),
+            },
         )
     )
     await session.execute(stmt)
+
+
+@router.post("/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_story(
+    payload: DismissMark, session: SessionDep, user: CurrentUser
+) -> None:
+    """Dismiss a story from the inbox (analysis lane)."""
+    stmt = (
+        pg_insert(StoryStatus)
+        .values(
+            user_id=user.id,
+            story_id=payload.story_id,
+            dismissed=True,
+            dismissed_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[StoryStatus.user_id, StoryStatus.story_id],
+            set_={
+                "dismissed": True,
+                "dismissed_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/dismiss/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def undismiss_story(
+    story_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    status_row = await session.get(
+        StoryStatus, {"user_id": user.id, "story_id": story_id}
+    )
+    if status_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not dismissed")
+    status_row.dismissed = False
+    status_row.dismissed_at = None
+
+
+@router.post("/events/{event_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_event_read(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    event = await session.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event not found")
+    stmt = (
+        pg_insert(EventStatus)
+        .values(
+            user_id=user.id,
+            event_id=event_id,
+            read=True,
+            read_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[EventStatus.user_id, EventStatus.event_id],
+            set_={
+                "read": True,
+                "read_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/events/{event_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def unmark_event_read(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    status_row = await session.get(
+        EventStatus, {"user_id": user.id, "event_id": event_id}
+    )
+    if status_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event status not found")
+    status_row.read = False
+    status_row.read_at = None
+
+
+@router.post("/events/{event_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_event(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    event = await session.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event not found")
+    stmt = (
+        pg_insert(EventStatus)
+        .values(
+            user_id=user.id,
+            event_id=event_id,
+            dismissed=True,
+            dismissed_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[EventStatus.user_id, EventStatus.event_id],
+            set_={
+                "dismissed": True,
+                "dismissed_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/events/{event_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def undismiss_event(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    status_row = await session.get(
+        EventStatus, {"user_id": user.id, "event_id": event_id}
+    )
+    if status_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event status not found")
+    status_row.dismissed = False
+    status_row.dismissed_at = None
 
 
 @router.post("/stars", status_code=status.HTTP_204_NO_CONTENT)
@@ -163,7 +299,7 @@ async def list_starred(
     offset: int = Query(default=0, ge=0),
 ) -> StoryList:
     base = (
-        select(Story, StoryStatus.read, StoryStatus.starred)
+        select(Story, StoryStatus.read, StoryStatus.starred, StoryStatus.dismissed)
         .join(StoryStatus, StoryStatus.story_id == Story.id)
         .where(StoryStatus.user_id == user.id, StoryStatus.starred.is_(True))
     )
@@ -176,9 +312,10 @@ async def list_starred(
         await session.execute(base.order_by(Story.created_at.desc()).limit(limit).offset(offset))
     ).all()
     items: list[StoryWithStatus] = []
-    for story, read, starred in rows:
+    for story, read, starred, dismissed in rows:
         model = StoryWithStatus.model_validate(story)
         model.read = bool(read)
         model.starred = bool(starred)
+        model.dismissed = bool(dismissed)
         items.append(model)
     return StoryList(items=items, total=int(total or 0), limit=limit, offset=offset)
