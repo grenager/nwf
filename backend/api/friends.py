@@ -113,12 +113,18 @@ async def friend_stars_by_story(
     session: AsyncSession,
     user_id: uuid.UUID,
     story_ids: list[uuid.UUID],
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, list[Profile]]:
     """Map story_id -> profiles of friends who reacted to it (any reaction)."""
     if not story_ids:
         return {}
 
-    friends = await accepted_friend_ids(session, user_id)
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, user_id)
+    )
     if not friends:
         return {}
 

@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:54322/postgres"
     )
-    db_pool_size: int = Field(default=5)
-    db_max_overflow: int = Field(default=10)
+    db_pool_size: int = Field(default=10)
+    db_max_overflow: int = Field(default=20)
     db_echo: bool = Field(default=False)
 
     # --- Supabase auth (JWT verification) --------------------------------

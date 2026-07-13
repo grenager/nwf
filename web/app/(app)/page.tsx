@@ -19,6 +19,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tab = "news" | "analysis" | "friends";
+type LaneMode = "inbox" | "archived";
 
 const TAB_ORDER: Tab[] = ["news", "analysis", "friends"];
 const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
@@ -54,11 +55,11 @@ function InboxLaneSection({
   const [open, setOpen] = useState<boolean>(defaultOpen);
   if (count === 0) return null;
   return (
-    <div className="mt-4">
+    <div className="mt-5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mb-2 flex w-full items-center justify-between text-left text-xs font-semibold uppercase tracking-wide text-slate-400"
+        className="mb-1 flex w-full items-center justify-between text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400"
       >
         <span>
           {title} ({count})
@@ -83,6 +84,11 @@ export default function TodayPage() {
     () => new Set<UUID>(),
   );
   const [tab, setTab] = useState<Tab>("news");
+  const [laneMode, setLaneMode] = useState<LaneMode>("inbox");
+  const [archivedEvents, setArchivedEvents] = useState<EventSummary[]>([]);
+  const [archivedAnalysis, setArchivedAnalysis] = useState<Story[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState<boolean>(false);
+  const [archivedLoaded, setArchivedLoaded] = useState<boolean>(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const exitTimers = useRef<Map<UUID, number>>(new Map());
 
@@ -101,12 +107,44 @@ export default function TodayPage() {
           items: sortReadToBottom(payload.analysis.items),
         },
       });
+      setArchivedLoaded(false);
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to load Today", "error");
     } finally {
       setLoading(false);
     }
   }, [notify]);
+
+  const loadArchived = useCallback(async (): Promise<void> => {
+    if (!requireAuth("view archived items")) return;
+    setArchivedLoading(true);
+    try {
+      const [eventsRes, analysisRes] = await Promise.all([
+        api.getArchivedEvents(),
+        api.getArchivedAnalysis(),
+      ]);
+      setArchivedEvents(eventsRes.items);
+      setArchivedAnalysis(analysisRes.items);
+      setArchivedLoaded(true);
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : "Failed to load archived",
+        "error",
+      );
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, [notify, requireAuth]);
+
+  function switchLaneMode(next: LaneMode): void {
+    if (next === "archived") {
+      if (!requireAuth("view archived items")) return;
+      setLaneMode("archived");
+      if (!archivedLoaded) void loadArchived();
+      return;
+    }
+    setLaneMode("inbox");
+  }
 
   useEffect(() => {
     void load();
@@ -233,8 +271,74 @@ export default function TodayPage() {
     );
   }
 
+  function markEventAsRead(eventId: UUID): void {
+    if (!requireAuth("mark items as read")) return;
+    const event: EventSummary | undefined = data?.events.items.find(
+      (e) => e.id === eventId,
+    );
+    if (!event || event.read) return;
+
+    beginExit(eventId, () => {
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          events: {
+            ...prev.events,
+            items: prev.events.items.map((ev) =>
+              ev.id === eventId ? { ...ev, read: true } : ev,
+            ),
+          },
+        };
+      });
+    });
+
+    void api.markEventRead(eventId).catch(() => undefined);
+  }
+
+  function markStoryAsRead(storyId: UUID): void {
+    if (!requireAuth("mark items as read")) return;
+    const story: Story | undefined = data?.analysis.items.find(
+      (s) => s.id === storyId,
+    );
+    if (!story || story.read) return;
+
+    beginExit(storyId, () => {
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          analysis: {
+            ...prev.analysis,
+            items: prev.analysis.items.map((s) =>
+              s.id === storyId ? { ...s, read: true } : s,
+            ),
+          },
+        };
+      });
+    });
+
+    void api.markRead(storyId, true).catch(() => undefined);
+  }
+
   function dismissEvent(eventId: UUID): void {
     if (!requireAuth("archive items")) return;
+    if (laneMode === "archived") {
+      const removed: EventSummary | undefined = archivedEvents.find(
+        (e) => e.id === eventId,
+      );
+      if (!removed) return;
+      beginExit(eventId, () => {
+        setArchivedEvents((prev) => prev.filter((e) => e.id !== eventId));
+        restoreEvent({ ...removed, dismissed: false });
+      });
+      void api.undismissEvent(eventId).catch(() => {
+        setArchivedEvents((prev) => [removed, ...prev]);
+        notify("Could not restore event", "error");
+      });
+      return;
+    }
+
     if (!data) return;
     const removed: EventSummary | undefined = data.events.items.find(
       (e) => e.id === eventId,
@@ -254,6 +358,12 @@ export default function TodayPage() {
             }
           : prev,
       );
+      if (archivedLoaded) {
+        setArchivedEvents((prev) => [
+          { ...removed, dismissed: true },
+          ...prev.filter((e) => e.id !== eventId),
+        ]);
+      }
     });
 
     void api.dismissEvent(eventId).catch(() => {
@@ -263,13 +373,32 @@ export default function TodayPage() {
     notify("Archived", "info", {
       label: "Undo",
       onClick: () => {
-        void api.undismissEvent(eventId).then(() => restoreEvent(removed));
+        void api.undismissEvent(eventId).then(() => {
+          restoreEvent(removed);
+          setArchivedEvents((prev) => prev.filter((e) => e.id !== eventId));
+        });
       },
     });
   }
 
   function dismissStory(storyId: UUID): void {
     if (!requireAuth("archive items")) return;
+    if (laneMode === "archived") {
+      const removed: Story | undefined = archivedAnalysis.find(
+        (s) => s.id === storyId,
+      );
+      if (!removed) return;
+      beginExit(storyId, () => {
+        setArchivedAnalysis((prev) => prev.filter((s) => s.id !== storyId));
+        restoreStory({ ...removed, dismissed: false });
+      });
+      void api.undismissStory(storyId).catch(() => {
+        setArchivedAnalysis((prev) => [removed, ...prev]);
+        notify("Could not restore article", "error");
+      });
+      return;
+    }
+
     if (!data) return;
     const removed: Story | undefined = data.analysis.items.find(
       (s) => s.id === storyId,
@@ -289,6 +418,12 @@ export default function TodayPage() {
             }
           : prev,
       );
+      if (archivedLoaded) {
+        setArchivedAnalysis((prev) => [
+          { ...removed, dismissed: true },
+          ...prev.filter((s) => s.id !== storyId),
+        ]);
+      }
     });
 
     void api.dismissStory(storyId).catch(() => {
@@ -298,7 +433,10 @@ export default function TodayPage() {
     notify("Archived", "info", {
       label: "Undo",
       onClick: () => {
-        void api.undismissStory(storyId).then(() => restoreStory(removed));
+        void api.undismissStory(storyId).then(() => {
+          restoreStory(removed);
+          setArchivedAnalysis((prev) => prev.filter((s) => s.id !== storyId));
+        });
       },
     });
   }
@@ -386,35 +524,54 @@ export default function TodayPage() {
     );
   }
 
-  const events: EventSummary[] = data.events.items;
-  const analysis: Story[] = data.analysis.items;
-  const newsParts = partitionByRead(events);
-  const analysisParts = partitionByRead(analysis);
+  const events: EventSummary[] =
+    laneMode === "archived" ? archivedEvents : data.events.items;
+  const analysis: Story[] =
+    laneMode === "archived" ? archivedAnalysis : data.analysis.items;
+  const newsParts = partitionByRead(data.events.items);
+  const analysisParts = partitionByRead(data.analysis.items);
   const unreadTotal: number =
     newsParts.unread.length + analysisParts.unread.length;
-  const totalItems: number = events.length + analysis.length;
+  const inboxTotal: number =
+    data.events.items.length + data.analysis.items.length;
   const openEventData: EventSummary | undefined = openEventId
-    ? events.find((e) => e.id === openEventId)
+    ? [...data.events.items, ...archivedEvents].find((e) => e.id === openEventId)
     : undefined;
 
-  if (totalItems === 0) {
+  if (inboxTotal === 0 && laneMode === "inbox") {
     return (
-      <div className="border border-dashed border-slate-300 p-10 text-center text-slate-500">
-        No stories in the briefing yet — check back soon as we gather news from
-        top sources.
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => switchLaneMode("archived")}
+            className="text-[11px] font-medium text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            Archived
+          </button>
+        </div>
+        <div className="border border-dashed border-zinc-300 p-10 text-center text-zinc-500">
+          No stories in the briefing yet — check back soon as we gather news from
+          top sources.
+        </div>
       </div>
     );
   }
 
-  function renderNewsList(items: EventSummary[]): React.ReactNode {
+  function renderNewsList(
+    items: EventSummary[],
+    archivedView: boolean = false,
+  ): React.ReactNode {
     return (
-      <div className="space-y-3">
+      <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {items.map((event) => (
           <EventCard
             key={event.id}
             event={event}
             exiting={exitingIds.has(event.id)}
+            archivedView={archivedView}
             onOpen={handleOpenEvent}
+            onRead={archivedView ? undefined : markEventAsRead}
             onDismiss={dismissEvent}
           />
         ))}
@@ -422,16 +579,21 @@ export default function TodayPage() {
     );
   }
 
-  function renderAnalysisList(items: Story[]): React.ReactNode {
+  function renderAnalysisList(
+    items: Story[],
+    archivedView: boolean = false,
+  ): React.ReactNode {
     return (
-      <div className="space-y-3">
+      <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {items.map((story) => (
           <StoryCard
             key={story.id}
             story={story}
             exiting={exitingIds.has(story.id)}
+            archivedView={archivedView}
             onChange={onStoryChange}
             onOpen={handleOpenStory}
+            onRead={archivedView ? undefined : markStoryAsRead}
             onDismiss={dismissStory}
           />
         ))}
@@ -439,8 +601,35 @@ export default function TodayPage() {
     );
   }
 
+  function LaneHeader({ title }: { title: string }): React.ReactNode {
+    return (
+      <div className="mb-1 flex items-end justify-between gap-3 border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
+        <h2 className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          {title}
+        </h2>
+        <button
+          type="button"
+          onClick={() =>
+            switchLaneMode(laneMode === "inbox" ? "archived" : "inbox")
+          }
+          className="pb-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 underline-offset-2 hover:text-zinc-800 hover:underline dark:hover:text-zinc-200"
+        >
+          {laneMode === "inbox" ? "Archived" : "Inbox"}
+        </button>
+      </div>
+    );
+  }
+
   const newsContent =
-    events.length === 0 ? (
+    laneMode === "archived" ? (
+      archivedLoading && !archivedLoaded ? (
+        <p className="text-sm text-slate-400">Loading archived…</p>
+      ) : events.length === 0 ? (
+        <p className="text-sm text-slate-400">No archived news events.</p>
+      ) : (
+        renderNewsList(events, true)
+      )
+    ) : events.length === 0 ? (
       <p className="text-sm text-slate-400">
         No news events in your inbox — follow more outlets or wait for broader
         coverage.
@@ -459,7 +648,15 @@ export default function TodayPage() {
     );
 
   const analysisContent =
-    analysis.length === 0 ? (
+    laneMode === "archived" ? (
+      archivedLoading && !archivedLoaded ? (
+        <p className="text-sm text-slate-400">Loading archived…</p>
+      ) : analysis.length === 0 ? (
+        <p className="text-sm text-slate-400">No archived analysis.</p>
+      ) : (
+        renderAnalysisList(analysis, true)
+      )
+    ) : analysis.length === 0 ? (
       <p className="text-sm text-slate-400">
         No analysis in your inbox — follow outlets/authors or wait for friends to
         engage.
@@ -485,30 +682,37 @@ export default function TodayPage() {
   function tabClass(active: boolean): string {
     return `flex-1 border-b-2 px-3 py-2 text-sm font-semibold transition ${
       active
-        ? "border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100"
-        : "border-transparent text-slate-400"
+        ? "border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
+        : "border-transparent text-zinc-400"
     }`;
   }
 
   return (
     <div className="space-y-8">
-      <div className="hidden gap-8 lg:grid lg:grid-cols-2">
-        <section>
-          <h2 className="mb-3 border-b border-slate-200 pb-2 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800">
-            The News
-          </h2>
+      <div className="hidden lg:grid lg:grid-cols-2 lg:gap-0">
+        <section className="pr-8">
+          <LaneHeader title="The News" />
           {newsContent}
         </section>
-        <section>
-          <h2 className="mb-3 border-b border-slate-200 pb-2 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800">
-            Analysis
-          </h2>
+        <section className="border-l border-zinc-200 pl-8 dark:border-zinc-800">
+          <LaneHeader title="Analysis" />
           {analysisContent}
         </section>
       </div>
 
       <div className="lg:hidden">
-        <div className="sticky top-14 z-10 mb-3 flex border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() =>
+              switchLaneMode(laneMode === "inbox" ? "archived" : "inbox")
+            }
+            className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 underline-offset-2 hover:text-zinc-800 hover:underline dark:hover:text-zinc-200"
+          >
+            {laneMode === "inbox" ? "Archived" : "Inbox"}
+          </button>
+        </div>
+        <div className="sticky top-14 z-10 mb-3 flex border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
           <button onClick={() => selectTab("news")} className={tabClass(tab === "news")}>
             The News
           </button>
@@ -538,15 +742,21 @@ export default function TodayPage() {
         </div>
       </div>
 
-      <div className="border border-slate-200 bg-slate-50 p-6 text-center dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {unreadTotal === 0 ? "You're caught up" : "Inbox"}
+      <div className="border-y border-zinc-900 py-5 text-center dark:border-zinc-100">
+        <p className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          {laneMode === "archived"
+            ? "Archived"
+            : unreadTotal === 0
+              ? "You're caught up"
+              : "Inbox"}
         </p>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {unreadTotal === 0
-            ? `${events.length} events · ${analysis.length} analysis pieces`
-            : `${newsParts.unread.length} unread events · ${analysisParts.unread.length} unread analysis`}
-          {data.friend_pick_count > 0
+        <p className="mt-1 text-[12px] uppercase tracking-[0.08em] text-zinc-400">
+          {laneMode === "archived"
+            ? `${archivedEvents.length} events · ${archivedAnalysis.length} analysis pieces`
+            : unreadTotal === 0
+              ? `${data.events.items.length} events · ${data.analysis.items.length} analysis pieces`
+              : `${newsParts.unread.length} unread events · ${analysisParts.unread.length} unread analysis`}
+          {laneMode === "inbox" && data.friend_pick_count > 0
             ? ` · ${data.friend_pick_count} with friend reactions`
             : ""}
         </p>

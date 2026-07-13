@@ -9,8 +9,15 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
+from api.routers.events import (
+    _build_source_names_and_leads,
+    _event_to_summary,
+)
 from api.schemas import (
     DismissMark,
+    EventList,
+    EventSummaryOut,
+    FriendEngagementOut,
     PreferencesUpdate,
     ProfileOut,
     ReactionSet,
@@ -27,6 +34,7 @@ from core.models import (
     Profile,
     Source,
     Story,
+    StoryKind,
     StoryReaction,
     StoryStatus,
     UserSource,
@@ -230,6 +238,96 @@ async def undismiss_event(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "event status not found")
     status_row.dismissed = False
     status_row.dismissed_at = None
+
+
+@router.get("/archived/events", response_model=EventList)
+async def list_archived_events(
+    session: SessionDep,
+    user: CurrentUser,
+    limit: int = Query(default=50, le=100, ge=1),
+) -> EventList:
+    """Dismissed news events, most recently archived first."""
+    rows = (
+        await session.execute(
+            select(Event, EventStatus.read, EventStatus.dismissed)
+            .join(
+                EventStatus,
+                (EventStatus.event_id == Event.id)
+                & (EventStatus.user_id == user.id),
+            )
+            .where(EventStatus.dismissed.is_(True))
+            .order_by(EventStatus.dismissed_at.desc().nulls_last())
+            .limit(limit)
+        )
+    ).all()
+    event_ids = [event.id for event, _read, _dismissed in rows]
+    names_by_event, leads = await _build_source_names_and_leads(
+        session, user.id, event_ids
+    )
+    items: list[EventSummaryOut] = []
+    for event, event_read, event_dismissed in rows:
+        lead = leads.get(event.id)
+        coverage = [lead] if lead is not None else []
+        summary = await _event_to_summary(
+            session,
+            user.id,
+            event,
+            coverage,
+            {},
+            None,
+            None,
+            event_read=bool(event_read),
+            event_dismissed=bool(event_dismissed),
+            source_names=names_by_event.get(event.id, []),
+        )
+        summary.story_count = max(event.outlet_count, len(summary.source_names), 1)
+        summary.outlet_count = event.outlet_count
+        summary.is_scoop = event.outlet_count <= 1
+        items.append(summary)
+    return EventList(items=items, total=len(items))
+
+
+@router.get("/archived/analysis", response_model=StoryList)
+async def list_archived_analysis(
+    session: SessionDep,
+    user: CurrentUser,
+    limit: int = Query(default=50, le=100, ge=1),
+) -> StoryList:
+    """Dismissed analysis stories, most recently archived first."""
+    rows = (
+        await session.execute(
+            select(
+                Story,
+                StoryStatus.read,
+                StoryStatus.starred,
+                StoryStatus.dismissed,
+                Source,
+            )
+            .join(
+                StoryStatus,
+                (StoryStatus.story_id == Story.id)
+                & (StoryStatus.user_id == user.id),
+            )
+            .outerjoin(Source, Source.id == Story.source_id)
+            .where(
+                StoryStatus.dismissed.is_(True),
+                Story.kind == StoryKind.analysis,
+            )
+            .order_by(StoryStatus.dismissed_at.desc().nulls_last())
+            .limit(limit)
+        )
+    ).all()
+    items: list[StoryWithStatus] = []
+    for story, read, starred, dismissed, source in rows:
+        model = StoryWithStatus.model_validate(story)
+        model.read = bool(read)
+        model.starred = bool(starred)
+        model.dismissed = bool(dismissed)
+        model.source_name = source.name if source else None
+        model.source_image_url = source.image_url if source else None
+        model.engagement = FriendEngagementOut()
+        items.append(model)
+    return StoryList(items=items, total=len(items), limit=limit, offset=0)
 
 
 @router.post("/stars", status_code=status.HTTP_204_NO_CONTENT)

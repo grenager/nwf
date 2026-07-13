@@ -305,7 +305,8 @@ class EventSummaryOut(BaseModel):
     outlet_count: int
     story_count: int
     is_scoop: bool
-    coverage: list[EventCoverageOut]
+    source_names: list[str] = Field(default_factory=list)
+    coverage: list[EventCoverageOut] = Field(default_factory=list)
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     read: bool = False

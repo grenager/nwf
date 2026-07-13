@@ -2,6 +2,7 @@
 
 import { api } from "@/lib/api";
 import { EngagementSummary } from "@/components/engagement-summary";
+import { InboxCardActions } from "@/components/inbox-card-actions";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Story, UUID } from "@/lib/types";
@@ -11,8 +12,10 @@ interface StoryCardProps {
   story: Story;
   dense?: boolean;
   exiting?: boolean;
+  archivedView?: boolean;
   onChange?: (story: Story) => void;
   onOpen?: (storyId: UUID) => void;
+  onRead?: (storyId: UUID) => void;
   onDismiss?: (storyId: UUID) => void;
 }
 
@@ -20,8 +23,10 @@ export function StoryCard({
   story,
   dense = false,
   exiting = false,
+  archivedView = false,
   onChange,
   onOpen,
+  onRead,
   onDismiss,
 }: StoryCardProps) {
   const [read, setRead] = useState<boolean>(story.read);
@@ -46,50 +51,38 @@ export function StoryCard({
 
   return (
     <article
-      className={`group relative overflow-hidden rounded-xl border border-slate-200 bg-white transition-all duration-300 ease-out dark:border-slate-800 dark:bg-slate-900 ${
+      className={`group relative py-4 transition-opacity duration-300 ease-out ${
         exiting
-          ? "pointer-events-none -translate-y-1 scale-[0.98] opacity-0"
-          : `opacity-100 hover:shadow-md ${read ? "opacity-45 grayscale" : ""}`
+          ? "pointer-events-none opacity-0"
+          : read
+            ? "opacity-45"
+            : "opacity-100"
       }`}
     >
-      {onDismiss ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDismiss(story.id);
-          }}
-          aria-label="Archive article"
-          title="Archive"
-          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-        >
-          ✕
-        </button>
-      ) : null}
-      <div className={dense ? "p-3" : "p-4"}>
+      <div>
         {!dense && story.source_name ? (
-          <div className="mb-2 flex items-center gap-2 pr-6">
+          <div className="mb-1.5 flex items-center gap-2">
             {story.source_image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={story.source_image_url}
                 alt={story.source_name}
-                className="h-6 w-auto max-w-[180px] shrink-0 object-contain"
+                className="h-5 w-auto max-w-[160px] shrink-0 object-contain"
               />
             ) : (
-              <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <span className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
                 {story.source_name}
               </span>
             )}
           </div>
         ) : null}
-        <div className="flex gap-4">
+        <div className={dense ? "" : "flex gap-3"}>
           {story.image_url && !dense ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={story.image_url}
               alt=""
-              className="h-24 w-24 shrink-0 rounded-lg object-cover"
+              className="h-20 w-20 shrink-0 object-cover"
             />
           ) : null}
           <div className="min-w-0 flex-1">
@@ -98,16 +91,16 @@ export function StoryCard({
               target="_blank"
               rel="noreferrer noopener"
               onClick={handleOpen}
-              className="block font-semibold leading-snug text-slate-900 hover:text-brand-600 dark:text-slate-100"
+              className="font-serif text-[1.05rem] font-semibold leading-snug tracking-tight text-zinc-900 hover:underline dark:text-zinc-50"
             >
               {story.full_headline}
             </a>
             {!dense && story.summary ? (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+              <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400">
                 {stripHtml(story.summary).slice(0, 280)}
               </p>
             ) : null}
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-zinc-400">
               {story.author_names.length > 0 ? (
                 <span className="min-w-0 truncate">
                   {story.author_names.join(", ")}
@@ -120,8 +113,39 @@ export function StoryCard({
           </div>
         </div>
         {!dense ? (
-          <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
-            <EngagementSummary engagement={story.engagement} />
+          <div className="mt-2.5 flex items-end justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <EngagementSummary engagement={story.engagement} />
+            </div>
+            <InboxCardActions
+              read={read}
+              onRead={
+                archivedView || !onRead
+                  ? undefined
+                  : () => {
+                      setRead(true);
+                      onRead(story.id);
+                    }
+              }
+              onArchive={onDismiss ? () => onDismiss(story.id) : undefined}
+              archiveLabel={archivedView ? "Restore" : "Archive"}
+            />
+          </div>
+        ) : onRead || onDismiss ? (
+          <div className="mt-2 flex justify-end">
+            <InboxCardActions
+              read={read}
+              onRead={
+                archivedView || !onRead
+                  ? undefined
+                  : () => {
+                      setRead(true);
+                      onRead(story.id);
+                    }
+              }
+              onArchive={onDismiss ? () => onDismiss(story.id) : undefined}
+              archiveLabel={archivedView ? "Restore" : "Archive"}
+            />
           </div>
         ) : null}
       </div>

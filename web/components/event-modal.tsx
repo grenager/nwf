@@ -2,10 +2,12 @@
 
 import { EngagementSummary } from "@/components/engagement-summary";
 import { FriendStars } from "@/components/friend-stars";
+import { useToast } from "@/components/toast";
+import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { EventCoverage, EventSummary, UUID } from "@/lib/types";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface EventModalProps {
   event: EventSummary;
@@ -74,6 +76,12 @@ function CoverageListItem({
 }
 
 export function EventModal({ event, onClose, onOpenStory }: EventModalProps) {
+  const { notify } = useToast();
+  const [detail, setDetail] = useState<EventSummary>(event);
+  const [loadingCoverage, setLoadingCoverage] = useState<boolean>(
+    event.coverage.length <= 1,
+  );
+
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.key === "Escape") onClose();
@@ -86,7 +94,32 @@ export function EventModal({ event, onClose, onOpenStory }: EventModalProps) {
     };
   }, [onClose]);
 
-  const coverage: EventCoverage[] = [...event.coverage].sort(
+  // Today only ships a lead teaser; fetch full coverage when the modal opens.
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(event);
+    setLoadingCoverage(true);
+    void (async () => {
+      try {
+        const full: EventSummary = await api.getEvent(event.id);
+        if (!cancelled) setDetail(full);
+      } catch (err) {
+        if (!cancelled) {
+          notify(
+            err instanceof ApiError ? err.message : "Failed to load coverage",
+            "error",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoadingCoverage(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [event, notify]);
+
+  const coverage: EventCoverage[] = [...detail.coverage].sort(
     (a, b) => (b.prominence ?? 0) - (a.prominence ?? 0),
   );
 
@@ -111,22 +144,22 @@ export function EventModal({ event, onClose, onOpenStory }: EventModalProps) {
         <div className="max-h-[85vh] overflow-y-auto">
           <div className="border-b border-slate-100 p-6 pr-12 dark:border-slate-800">
             <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              {event.is_scoop ? (
+              {detail.is_scoop ? (
                 <span className="bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   Original reporting
                 </span>
               ) : (
-                <span>{event.outlet_count} outlets covering this</span>
+                <span>{detail.outlet_count} outlets covering this</span>
               )}
               <span aria-hidden>·</span>
-              <span>{relativeTime(event.first_seen_at)}</span>
-              <FriendStars stars={event.friend_stars} />
+              <span>{relativeTime(detail.first_seen_at)}</span>
+              <FriendStars stars={detail.friend_stars} />
             </div>
             <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100">
-              {event.title}
+              {detail.title}
             </h2>
             <div className="mt-4">
-              <EngagementSummary engagement={event.engagement} />
+              <EngagementSummary engagement={detail.engagement} />
             </div>
           </div>
 
@@ -134,13 +167,17 @@ export function EventModal({ event, onClose, onOpenStory }: EventModalProps) {
             <p className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Coverage
             </p>
-            {coverage.map((item) => (
-              <CoverageListItem
-                key={item.story_id}
-                item={item}
-                onOpen={onOpenStory}
-              />
-            ))}
+            {loadingCoverage && coverage.length <= 1 ? (
+              <p className="px-5 py-6 text-sm text-slate-400">Loading coverage…</p>
+            ) : (
+              coverage.map((item) => (
+                <CoverageListItem
+                  key={item.story_id}
+                  item={item}
+                  onOpen={onOpenStory}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>

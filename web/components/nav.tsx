@@ -81,17 +81,20 @@ export function Nav() {
   }
 
   function linkClass(active: boolean): string {
-    return `px-3 py-1.5 text-sm font-medium transition ${
+    return `px-2.5 py-1 text-sm font-medium transition ${
       active
-        ? "bg-brand-100 text-brand-700 dark:bg-slate-800 dark:text-brand-500"
-        : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        ? "text-zinc-900 underline decoration-2 underline-offset-4 dark:text-zinc-50"
+        : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
     }`;
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-        <Link href="/" className="text-lg font-bold text-brand-600">
+        <Link
+          href="/"
+          className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+        >
           NewsWithFriends
         </Link>
 

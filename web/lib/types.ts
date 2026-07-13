@@ -219,6 +219,7 @@ export interface EventSummary {
   outlet_count: number;
   story_count: number;
   is_scoop: boolean;
+  source_names: string[];
   coverage: EventCoverage[];
   friend_stars: FriendStar[];
   engagement: FriendEngagement;

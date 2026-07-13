@@ -108,6 +108,12 @@ export const api = {
     request<void>(`/me/events/${eventId}/dismiss`, { method: "POST" }),
   undismissEvent: (eventId: UUID): Promise<void> =>
     request<void>(`/me/events/${eventId}/dismiss`, { method: "DELETE" }),
+  getArchivedEvents: (limit = 50): Promise<{ items: EventSummary[]; total: number }> =>
+    request<{ items: EventSummary[]; total: number }>(
+      `/me/archived/events?limit=${limit}`,
+    ),
+  getArchivedAnalysis: (limit = 50): Promise<StoryList> =>
+    request<StoryList>(`/me/archived/analysis?limit=${limit}`),
   addStar: (storyId: UUID): Promise<void> =>
     request<void>("/me/stars", {
       method: "POST",

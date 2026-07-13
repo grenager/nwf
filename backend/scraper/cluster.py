@@ -46,6 +46,33 @@ async def _find_best_event(
     return uuid.UUID(str(row[0])), float(row[1])
 
 
+async def count_distinct_outlets(session: AsyncSession, event_id: uuid.UUID) -> int:
+    result = await session.scalar(
+        select(func.count(func.distinct(Story.source_id)))
+        .select_from(StoryEvent)
+        .join(Story, Story.id == StoryEvent.story_id)
+        .where(StoryEvent.event_id == event_id, Story.source_id.is_not(None))
+    )
+    return int(result or 0)
+
+
+async def _recompute_outlet_count(session: AsyncSession, event_id: uuid.UUID) -> int:
+    """Persist distinct-outlet breadth on the event row."""
+    n: int = await count_distinct_outlets(session, event_id)
+    await session.execute(
+        text(
+            """
+            update public.events
+            set outlet_count = :n,
+                updated_at = now()
+            where id = :event_id
+            """
+        ),
+        {"n": max(n, 1), "event_id": str(event_id)},
+    )
+    return max(n, 1)
+
+
 async def _recompute_centroid(session: AsyncSession, event_id: uuid.UUID) -> None:
     """Set event centroid to the mean of member story embeddings."""
     await session.execute(
@@ -96,6 +123,7 @@ async def assign_story_to_event(
             centroid=embedding,
             origin_story_id=story.id,
             first_seen_at=story.created_at or datetime.now(UTC),
+            outlet_count=1,
         )
         session.add(event)
         await session.flush()
@@ -118,14 +146,5 @@ async def assign_story_to_event(
     session.add(StoryEvent(story_id=story.id, event_id=event_id))
     await session.flush()
     await _recompute_centroid(session, event_id)
+    await _recompute_outlet_count(session, event_id)
     return event_id
-
-
-async def count_distinct_outlets(session: AsyncSession, event_id: uuid.UUID) -> int:
-    result = await session.scalar(
-        select(func.count(func.distinct(Story.source_id)))
-        .select_from(StoryEvent)
-        .join(Story, Story.id == StoryEvent.story_id)
-        .where(StoryEvent.event_id == event_id, Story.source_id.is_not(None))
-    )
-    return int(result or 0)

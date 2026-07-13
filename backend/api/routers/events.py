@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import TypeVar
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import distinct, func, or_, select, union
+from sqlalchemy import func, or_, select, union
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
@@ -18,7 +22,6 @@ from api.friends import (
     friend_activity_by_story,
     friend_profiles_map,
     friend_stars_by_story,
-    global_activity_by_story,
     my_reactions_by_story,
     top_readers,
 )
@@ -35,6 +38,7 @@ from api.schemas import (
     TodayOut,
 )
 from core.config import get_settings
+from core.db import get_sessionmaker
 from core.models import (
     Comment,
     Event,
@@ -48,6 +52,15 @@ from core.models import (
     StoryStatus,
     UserSource,
 )
+
+_T = TypeVar("_T")
+
+
+async def _run_read(fn: Callable[[AsyncSession], Awaitable[_T]]) -> _T:
+    """Run a read-only coroutine on a fresh session (safe to parallelize)."""
+    factory = get_sessionmaker()
+    async with factory() as session:
+        return await fn(session)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -198,6 +211,7 @@ async def _event_to_summary(
     *,
     event_read: bool = False,
     event_dismissed: bool = False,
+    source_names: list[str] | None = None,
 ) -> EventSummaryOut:
     outlet_ids = {c.source_id for c in coverage if c.source_id is not None}
     story_ids = [c.story_id for c in coverage]
@@ -221,9 +235,16 @@ async def _event_to_summary(
         id=event.id,
         title=event.title,
         first_seen_at=event.first_seen_at,
-        outlet_count=len(outlet_ids),
-        story_count=len(coverage),
-        is_scoop=len(outlet_ids) <= 1,
+        outlet_count=event.outlet_count if event.outlet_count else len(outlet_ids),
+        story_count=len(coverage) if coverage else max(len(outlet_ids), 1),
+        is_scoop=(event.outlet_count if event.outlet_count else len(outlet_ids)) <= 1,
+        source_names=source_names
+        if source_names
+        else list(
+            dict.fromkeys(
+                c.source_name for c in coverage if c.source_name
+            )
+        ),
         coverage=coverage,
         friend_stars=friends,
         engagement=FriendEngagementOut(
@@ -237,6 +258,111 @@ async def _event_to_summary(
     )
 
 
+async def _build_source_names_and_leads(
+    session: SessionDep,
+    user_id: uuid.UUID | None,
+    event_ids: list[uuid.UUID],
+) -> tuple[dict[uuid.UUID, list[str]], dict[uuid.UUID, EventCoverageOut | None]]:
+    """Light Today payload: ordered source names + one lead coverage row per event."""
+    if not event_ids:
+        return {}, {}
+
+    stmt = (
+        select(
+            StoryEvent.event_id,
+            Story.id,
+            Story.source_id,
+            Story.full_headline,
+            Story.summary,
+            Story.image_url,
+            Story.article_url,
+            Source.name,
+            Source.image_url,
+            Source.bias_score,
+            Source.prominence,
+        )
+        .join(Story, Story.id == StoryEvent.story_id)
+        .outerjoin(Source, Source.id == Story.source_id)
+        .where(StoryEvent.event_id.in_(event_ids))
+        .order_by(
+            StoryEvent.event_id,
+            Source.prominence.desc().nulls_last(),
+            Source.name,
+        )
+    )
+    if user_id is not None:
+        stmt = stmt.add_columns(StoryStatus.read, StoryStatus.starred).outerjoin(
+            StoryStatus,
+            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
+        )
+
+    names_by_event: dict[uuid.UUID, list[str]] = {eid: [] for eid in event_ids}
+    seen_names: dict[uuid.UUID, set[str]] = {eid: set() for eid in event_ids}
+    lead_by_event: dict[uuid.UUID, EventCoverageOut | None] = {
+        eid: None for eid in event_ids
+    }
+
+    rows = (await session.execute(stmt)).all()
+    for row in rows:
+        if user_id is not None:
+            (
+                event_id,
+                story_id,
+                source_id,
+                headline,
+                summary,
+                story_image,
+                article_url,
+                source_name,
+                source_image,
+                bias_score,
+                prominence,
+                read,
+                starred,
+            ) = row
+        else:
+            (
+                event_id,
+                story_id,
+                source_id,
+                headline,
+                summary,
+                story_image,
+                article_url,
+                source_name,
+                source_image,
+                bias_score,
+                prominence,
+            ) = row
+            read, starred = False, False
+
+        name: str = source_name or "Unknown"
+        if name not in seen_names[event_id]:
+            seen_names[event_id].add(name)
+            names_by_event[event_id].append(name)
+
+        if lead_by_event[event_id] is None:
+            trimmed: str | None = summary
+            if trimmed and len(trimmed) > 160:
+                trimmed = trimmed[:160]
+            lead_by_event[event_id] = EventCoverageOut(
+                story_id=story_id,
+                source_id=source_id,
+                source_name=name,
+                bias_score=float(bias_score) if bias_score is not None else None,
+                prominence=int(prominence) if prominence is not None else 0,
+                image_url=source_image or story_image,
+                story_image_url=story_image,
+                full_headline=headline,
+                summary=trimmed,
+                article_url=article_url,
+                read=bool(read),
+                starred=bool(starred),
+            )
+
+    return names_by_event, lead_by_event
+
+
 async def _load_events_for_user(
     session: SessionDep,
     user_id: uuid.UUID | None,
@@ -246,10 +372,10 @@ async def _load_events_for_user(
     min_outlets: int | None = None,
     source_ids: list[uuid.UUID] | None = None,
 ) -> list[tuple[Event, bool, bool]]:
-    """Recent inbox candidate events.
+    """Recent inbox candidate events using denormalized outlet_count.
 
-    Returns (event, read, dismissed) tuples. Dismissed rows are excluded for
-    authenticated users; guests always get (event, False, False).
+    Guests: world events with breadth (no join). Authenticated users: must also
+    touch a followed source via EXISTS.
     """
     settings = get_settings()
     window_days: int = days if days is not None else settings.inbox_candidate_days
@@ -257,62 +383,52 @@ async def _load_events_for_user(
         min_outlets if min_outlets is not None else settings.event_min_outlets
     )
     since = datetime.now(UTC) - timedelta(days=window_days)
+
+    if user_id is None:
+        stmt = (
+            select(Event)
+            .where(
+                Event.first_seen_at >= since,
+                Event.outlet_count >= outlet_floor,
+            )
+            .order_by(Event.outlet_count.desc(), Event.first_seen_at.desc())
+            .limit(limit)
+        )
+        events = list((await session.scalars(stmt)).all())
+        return [(e, False, False) for e in events]
+
     ids: list[uuid.UUID] = (
         source_ids if source_ids is not None else await _source_ids(session, user_id)
     )
     if not ids:
         return []
 
-    outlet_count = func.count(distinct(Story.source_id))
-    # Prefer EXISTS over COUNT(CASE WHEN source IN subquery) — the latter tanks
-    # over multi-day windows against remote Postgres.
-    touches_sources = (
-        select(StoryEvent.story_id)
+    # Invert the lookup: start from followed news stories (indexed), then
+    # restrict to broad recent events. Avoids a correlated EXISTS over all events.
+    candidate_ids = (
+        select(StoryEvent.event_id)
         .join(Story, Story.id == StoryEvent.story_id)
+        .join(Event, Event.id == StoryEvent.event_id)
         .where(
-            StoryEvent.event_id == Event.id,
             Story.source_id.in_(ids),
             Story.kind == StoryKind.news,
+            Event.first_seen_at >= since,
+            Event.outlet_count >= outlet_floor,
         )
-        .correlate(Event)
-        .exists()
+        .distinct()
+        .subquery()
     )
-
-    if user_id is None:
-        stmt = (
-            select(Event)
-            .join(StoryEvent, StoryEvent.event_id == Event.id)
-            .join(Story, Story.id == StoryEvent.story_id)
-            .where(
-                Event.first_seen_at >= since,
-                Story.kind == StoryKind.news,
-                touches_sources,
-            )
-            .group_by(Event.id)
-            .having(outlet_count >= outlet_floor)
-            .order_by(outlet_count.desc(), Event.first_seen_at.desc())
-            .limit(limit)
-        )
-        events = list((await session.scalars(stmt)).unique().all())
-        return [(e, False, False) for e in events]
-
     stmt = (
         select(Event, EventStatus.read, EventStatus.dismissed)
-        .join(StoryEvent, StoryEvent.event_id == Event.id)
-        .join(Story, Story.id == StoryEvent.story_id)
+        .join(candidate_ids, candidate_ids.c.event_id == Event.id)
         .outerjoin(
             EventStatus,
             (EventStatus.event_id == Event.id) & (EventStatus.user_id == user_id),
         )
         .where(
-            Event.first_seen_at >= since,
-            Story.kind == StoryKind.news,
-            touches_sources,
             or_(EventStatus.dismissed.is_(False), EventStatus.dismissed.is_(None)),
         )
-        .group_by(Event.id, EventStatus.read, EventStatus.dismissed)
-        .having(outlet_count >= outlet_floor)
-        .order_by(outlet_count.desc(), Event.first_seen_at.desc())
+        .order_by(Event.outlet_count.desc(), Event.first_seen_at.desc())
         .limit(limit)
     )
     rows = (await session.execute(stmt)).all()
@@ -325,32 +441,47 @@ async def _events_list_for_user(
     *,
     limit: int = 15,
     source_ids: list[uuid.UUID] | None = None,
+    full_coverage: bool = False,
 ) -> EventList:
+    """Build event list for Today (teaser) or detail-ready (full_coverage)."""
     settings = get_settings()
     min_outlets: int = settings.event_min_outlets
-    ids: list[uuid.UUID] = (
-        source_ids if source_ids is not None else await _source_ids(session, user_id)
-    )
     loaded = await _load_events_for_user(
         session,
         user_id,
         limit=limit,
         min_outlets=min_outlets,
-        source_ids=ids,
+        source_ids=source_ids,
     )
     event_ids: list[uuid.UUID] = [event.id for event, _r, _d in loaded]
-    coverage_by_event = await _build_coverage_by_events(session, user_id, event_ids)
+
+    if full_coverage:
+        coverage_by_event = await _build_coverage_by_events(session, user_id, event_ids)
+        names_by_event: dict[uuid.UUID, list[str]] = {
+            eid: list(
+                dict.fromkeys(c.source_name for c in cov if c.source_name)
+            )
+            for eid, cov in coverage_by_event.items()
+        }
+    else:
+        names_by_event, leads = await _build_source_names_and_leads(
+            session, user_id, event_ids
+        )
+        coverage_by_event = {
+            eid: ([lead] if lead is not None else [])
+            for eid, lead in leads.items()
+        }
+
     all_story_ids: list[uuid.UUID] = [
         c.story_id for coverage in coverage_by_event.values() for c in coverage
     ]
 
-    if user_id is None:
-        # Guests skip global engagement aggregation — it dominates /today latency
-        # against hosted Postgres and isn't meaningful without an account.
-        friend_map: dict[uuid.UUID, list[FriendStarOut]] = {}
-        activity: dict[uuid.UUID, StoryActivity] = {}
-        profiles: dict[uuid.UUID, Profile] = {}
-    else:
+    # Inbox list: skip friend engagement enrichment (extra round-trips). Detail
+    # modal / full_coverage path can still enrich when needed.
+    friend_map: dict[uuid.UUID, list[FriendStarOut]] = {}
+    activity: dict[uuid.UUID, StoryActivity] = {}
+    profiles: dict[uuid.UUID, Profile] = {}
+    if full_coverage and user_id is not None and all_story_ids:
         friend_profiles = await friend_stars_by_story(session, user_id, all_story_ids)
         friend_map = {
             sid: [
@@ -374,7 +505,12 @@ async def _events_list_for_user(
             profiles,
             event_read=event_read,
             event_dismissed=event_dismissed,
+            source_names=names_by_event.get(event.id, []),
         )
+        if not full_coverage:
+            summary.story_count = max(event.outlet_count, len(summary.source_names), 1)
+            summary.outlet_count = event.outlet_count
+            summary.is_scoop = event.outlet_count <= 1
         summaries.append(summary)
 
     summaries.sort(key=lambda e: (e.read, -e.outlet_count, -e.first_seen_at.timestamp()))
@@ -395,31 +531,41 @@ async def events_today(
 async def get_event(
     event_id: uuid.UUID,
     session: SessionDep,
-    user: CurrentUser,
+    user: OptionalUser,
 ) -> EventDetailOut:
     event = await session.get(Event, event_id)
     if event is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "event not found")
 
-    coverage = await _build_coverage_rows(session, user.id, event_id)
+    user_id: uuid.UUID | None = user.id if user is not None else None
+    coverage = await _build_coverage_rows(session, user_id, event_id)
     story_ids = [c.story_id for c in coverage]
-    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
-    friend_map = {
-        sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
-        for sid, profiles in friend_profiles.items()
-    }
-    activity = await friend_activity_by_story(session, user.id, story_ids)
-    profiles = await friend_profiles_map(session, user.id)
 
-    status_row = await session.get(
-        EventStatus, {"user_id": user.id, "event_id": event_id}
-    )
-    event_read = bool(status_row.read) if status_row is not None else False
-    event_dismissed = bool(status_row.dismissed) if status_row is not None else False
+    if user_id is None:
+        friend_map: dict[uuid.UUID, list[FriendStarOut]] = {}
+        activity: dict[uuid.UUID, StoryActivity] = {}
+        profiles: dict[uuid.UUID, Profile] = {}
+        event_read = False
+        event_dismissed = False
+    else:
+        friend_profiles = await friend_stars_by_story(session, user_id, story_ids)
+        friend_map = {
+            sid: [
+                FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles
+            ]
+            for sid, profiles in friend_profiles.items()
+        }
+        activity = await friend_activity_by_story(session, user_id, story_ids)
+        profiles = await friend_profiles_map(session, user_id)
+        status_row = await session.get(
+            EventStatus, {"user_id": user_id, "event_id": event_id}
+        )
+        event_read = bool(status_row.read) if status_row is not None else False
+        event_dismissed = bool(status_row.dismissed) if status_row is not None else False
 
     summary = await _event_to_summary(
         session,
-        user.id,
+        user_id,
         event,
         coverage,
         friend_map,
@@ -431,25 +577,191 @@ async def get_event(
     return EventDetailOut.model_validate(summary)
 
 
+def _analysis_row_to_story(row: tuple[object, ...]) -> StoryWithStatus:
+    (
+        story_id,
+        article_url,
+        source_id,
+        headline,
+        summary,
+        image_url,
+        author_names,
+        kind,
+        archived,
+        created_at,
+        updated_at,
+        last_scraped_at,
+        section,
+        story_type,
+        source,
+        read,
+        starred,
+        dismissed,
+    ) = row  # type: ignore[misc]
+    trimmed_summary: str | None = summary if isinstance(summary, str) else None
+    if trimmed_summary and len(trimmed_summary) > 280:
+        trimmed_summary = trimmed_summary[:280]
+    src = source  # Source | None
+    return StoryWithStatus(
+        id=story_id,  # type: ignore[arg-type]
+        article_url=str(article_url),
+        source_id=source_id,  # type: ignore[arg-type]
+        full_headline=str(headline),
+        summary=trimmed_summary,
+        full_text=None,
+        section=section if isinstance(section, str) else None,
+        type=story_type if isinstance(story_type, str) else None,
+        image_url=image_url if isinstance(image_url, str) else None,
+        author_names=list(author_names or []),  # type: ignore[arg-type]
+        kind=kind,  # type: ignore[arg-type]
+        archived=bool(archived),
+        last_scraped_at=last_scraped_at,  # type: ignore[arg-type]
+        created_at=created_at,  # type: ignore[arg-type]
+        updated_at=updated_at,  # type: ignore[arg-type]
+        source_name=src.name if src is not None else None,
+        source_image_url=src.image_url if src is not None else None,
+        read=bool(read),
+        starred=bool(starred),
+        dismissed=bool(dismissed),
+        engagement=FriendEngagementOut(),
+    )
+
+
+_ANALYSIS_COLS = (
+    Story.id,
+    Story.article_url,
+    Story.source_id,
+    Story.full_headline,
+    Story.summary,
+    Story.image_url,
+    Story.author_names,
+    Story.kind,
+    Story.archived,
+    Story.created_at,
+    Story.updated_at,
+    Story.last_scraped_at,
+    Story.section,
+    Story.type,
+    Source,
+    StoryStatus.read,
+    StoryStatus.starred,
+    StoryStatus.dismissed,
+)
+
+
+async def _touch_last_opened(
+    session: AsyncSession, user_id: uuid.UUID
+) -> datetime | None:
+    profile = await session.get(Profile, user_id)
+    if profile is None:
+        return None
+    previous = profile.last_opened_at
+    profile.last_opened_at = datetime.now(UTC)
+    await session.commit()
+    return previous
+
+
+async def _auth_followed_analysis(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    source_ids: list[uuid.UUID],
+    window_since: datetime,
+) -> list[tuple[object, ...]]:
+    if not source_ids:
+        return []
+    stmt = (
+        select(*_ANALYSIS_COLS)
+        .outerjoin(Source, Source.id == Story.source_id)
+        .outerjoin(
+            StoryStatus,
+            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
+        )
+        .where(
+            Story.source_id.in_(source_ids),
+            Story.kind == StoryKind.analysis,
+            Story.archived.is_(False),
+            Story.created_at >= window_since,
+            or_(StoryStatus.dismissed.is_(False), StoryStatus.dismissed.is_(None)),
+        )
+        .order_by(Story.created_at.desc())
+        .limit(20)
+    )
+    return list((await session.execute(stmt)).all())
+
+
+async def _auth_friend_analysis(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    friends: list[uuid.UUID],
+    window_since: datetime,
+) -> tuple[list[uuid.UUID], list[tuple[object, ...]]]:
+    """Recent analysis friend-picks only (window + kind), plus story rows."""
+    if not friends:
+        return [], []
+
+    # Bound the union to recent analysis — never pull a friend's full reaction history.
+    pick_stmt = union(
+        select(StoryReaction.story_id)
+        .join(Story, Story.id == StoryReaction.story_id)
+        .where(
+            StoryReaction.user_id.in_(friends),
+            Story.kind == StoryKind.analysis,
+            Story.archived.is_(False),
+            Story.created_at >= window_since,
+        ),
+        select(Comment.story_id)
+        .join(Story, Story.id == Comment.story_id)
+        .where(
+            Comment.user_id.in_(friends),
+            Story.kind == StoryKind.analysis,
+            Story.archived.is_(False),
+            Story.created_at >= window_since,
+        ),
+    )
+    friend_pick_ids = list((await session.scalars(pick_stmt)).all())
+    if not friend_pick_ids:
+        return [], []
+
+    rows = list(
+        (
+            await session.execute(
+                select(*_ANALYSIS_COLS)
+                .outerjoin(Source, Source.id == Story.source_id)
+                .outerjoin(
+                    StoryStatus,
+                    (StoryStatus.story_id == Story.id)
+                    & (StoryStatus.user_id == user_id),
+                )
+                .where(
+                    Story.id.in_(friend_pick_ids),
+                    or_(
+                        StoryStatus.dismissed.is_(False),
+                        StoryStatus.dismissed.is_(None),
+                    ),
+                )
+                .order_by(Story.created_at.desc())
+                .limit(20)
+            )
+        ).all()
+    )
+    return friend_pick_ids, rows
+
+
 async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
-    """Build the combined inbox Today screen payload."""
+    """Build the combined inbox Today screen payload.
+
+    Hosted Postgres RTT dominates (~1s+/query), so independent reads run on
+    separate sessions via asyncio.gather.
+    """
     settings = get_settings()
     user_id: uuid.UUID | None = user.id if user is not None else None
     window_since = datetime.now(UTC) - timedelta(days=settings.inbox_candidate_days)
 
-    new_since: datetime | None = None
-    if user_id is not None:
-        profile = await session.get(Profile, user_id)
-        if profile is not None:
-            new_since = profile.last_opened_at
-            profile.last_opened_at = datetime.now(UTC)
-
-    source_ids = await _source_ids(session, user_id)
-    events = await _events_list_for_user(
-        session, user_id, limit=12, source_ids=source_ids
-    )
-
     if user_id is None:
+        events, source_ids = await asyncio.gather(
+            _run_read(lambda s: _events_list_for_user(s, None, limit=12)),
+            _run_read(lambda s: _source_ids(s, None)),
+        )
         if not source_ids:
             return TodayOut(
                 events=events,
@@ -535,12 +847,6 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
             )
             analysis_items.append(model)
 
-        # Drop bulky coverage summaries on the list payload; modal still has headlines.
-        for item in events.items:
-            for cov in item.coverage:
-                if cov.summary and len(cov.summary) > 160:
-                    cov.summary = cov.summary[:160]
-
         return TodayOut(
             events=events,
             analysis=StoryList(
@@ -550,83 +856,69 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
             new_since=None,
         )
 
-    # Analysis inbox = followed sources UNION friend reacted/commented.
-    friends = await accepted_friend_ids(session, user_id)
-    friend_signal = union(
-        select(StoryReaction.story_id).where(StoryReaction.user_id.in_(friends)),
-        select(Comment.story_id).where(Comment.user_id.in_(friends)),
-    ).subquery()
+    # Wave 1: identity lookups (independent).
+    new_since, source_ids, friends = await asyncio.gather(
+        _run_read(lambda s: _touch_last_opened(s, user_id)),
+        _run_read(lambda s: _source_ids(s, user_id)),
+        _run_read(lambda s: accepted_friend_ids(s, user_id)),
+    )
 
-    likes_col = func.count(StoryReaction.story_id)
-    likes_sq = (
-        select(
-            StoryReaction.story_id.label("sid"),
-            likes_col.label("likes"),
-        )
-        .where(StoryReaction.user_id.in_(friends))
-        .group_by(StoryReaction.story_id)
-        .subquery()
+    # Wave 2: feed body in parallel across sessions.
+    events, followed_rows, friend_pack = await asyncio.gather(
+        _run_read(
+            lambda s: _events_list_for_user(
+                s, user_id, limit=12, source_ids=source_ids
+            )
+        ),
+        _run_read(
+            lambda s: _auth_followed_analysis(
+                s, user_id, source_ids, window_since
+            )
+        ),
+        _run_read(
+            lambda s: _auth_friend_analysis(s, user_id, friends, window_since)
+        ),
     )
-    friend_likes = func.coalesce(likes_sq.c.likes, 0)
-    auth_stmt = (
-        select(Story, Source, StoryStatus.read, StoryStatus.starred, StoryStatus.dismissed)
-        .outerjoin(Source, Source.id == Story.source_id)
-        .outerjoin(
-            StoryStatus,
-            (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
-        )
-        .outerjoin(likes_sq, likes_sq.c.sid == Story.id)
-        .where(
-            or_(
-                Story.source_id.in_(source_ids),
-                Story.id.in_(select(friend_signal.c.story_id)),
-            ),
-            Story.kind == StoryKind.analysis,
-            Story.archived.is_(False),
-            Story.created_at >= window_since,
-            or_(StoryStatus.dismissed.is_(False), StoryStatus.dismissed.is_(None)),
-        )
-        .order_by(friend_likes.desc(), Story.created_at.desc())
-        .limit(40)
+    friend_pick_ids, friend_rows = friend_pack
+
+    # Friend picks first, then followed-by-recency; cap at 20.
+    merged_rows: list[tuple[object, ...]] = list(friend_rows) + list(followed_rows)
+    seen_story: set[uuid.UUID] = set()
+    ordered_rows: list[tuple[object, ...]] = []
+    for row in merged_rows:
+        sid = row[0]
+        if not isinstance(sid, uuid.UUID) or sid in seen_story:
+            continue
+        seen_story.add(sid)
+        ordered_rows.append(row)
+        if len(ordered_rows) >= 20:
+            break
+
+    story_ids = [row[0] for row in ordered_rows if isinstance(row[0], uuid.UUID)]
+    friend_profiles, my_reactions = await asyncio.gather(
+        _run_read(
+            lambda s: friend_stars_by_story(
+                s, user_id, story_ids, friend_ids=friends
+            )
+        ),
+        _run_read(lambda s: my_reactions_by_story(s, user_id, story_ids)),
     )
-    auth_rows = (await session.execute(auth_stmt)).all()
-    story_ids = [story.id for story, _, _, _, _ in auth_rows]
-    friend_profiles = await friend_stars_by_story(session, user_id, story_ids)
-    activity = await friend_activity_by_story(session, user_id, story_ids)
-    my_reactions = await my_reactions_by_story(session, user_id, story_ids)
-    profiles = await friend_profiles_map(session, user_id)
+
+    friend_pick_set = set(friend_pick_ids)
     auth_analysis_items: list[StoryWithStatus] = []
     friend_pick_count = 0
-    for story, source, read, starred, dismissed in auth_rows:
+    for row in ordered_rows:
+        model = _analysis_row_to_story(row)
         fs = [
             FriendStarOut(user_id=p.id, display_name=display_name(p))
-            for p in friend_profiles.get(story.id, [])
+            for p in friend_profiles.get(model.id, [])
         ]
-        if fs:
-            friend_pick_count += 1
-        model = StoryWithStatus.model_validate(story)
-        model.source_name = source.name if source else None
-        model.source_image_url = source.image_url if source else None
-        model.read = bool(read)
-        model.starred = bool(starred)
-        model.dismissed = bool(dismissed)
-        model.my_reaction = my_reactions.get(story.id)
         model.friend_stars = fs
-        read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
-        model.engagement = FriendEngagementOut(
-            read=len(read_ids),
-            commented=commented_n,
-            reactions=reactions,
-            readers=[
-                FriendMiniOut(
-                    user_id=p.id, display_name=display_name(p), image_url=p.image_url
-                )
-                for p in top_readers(read_ids, profiles)
-            ],
-        )
+        model.my_reaction = my_reactions.get(model.id)
+        if model.id in friend_pick_set or fs:
+            friend_pick_count += 1
         auth_analysis_items.append(model)
 
-    # Unread first (stable within each group via prior friend_likes/recency order).
     auth_analysis_items.sort(key=lambda s: s.read)
 
     return TodayOut(
@@ -634,7 +926,7 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         analysis=StoryList(
             items=auth_analysis_items,
             total=len(auth_analysis_items),
-            limit=40,
+            limit=20,
             offset=0,
         ),
         friend_pick_count=friend_pick_count,
