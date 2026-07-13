@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import case, distinct, func, or_, select, union
+from sqlalchemy import distinct, func, or_, select, union
 
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
     StoryActivity,
     accepted_friend_ids,
     aggregate_engagement,
-    curated_source_subquery,
+    CURATED_SOURCE_LIMIT,
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
@@ -53,15 +52,21 @@ from core.models import (
 router = APIRouter(prefix="/events", tags=["events"])
 
 
-def _followed_subquery(user_id: uuid.UUID) -> Any:
-    return select(UserSource.source_id).where(UserSource.user_id == user_id).scalar_subquery()
-
-
-def _source_subquery(user_id: uuid.UUID | None) -> Any:
-    """Followed sources for a user, or the curated global list for guests."""
+async def _source_ids(
+    session: SessionDep, user_id: uuid.UUID | None
+) -> list[uuid.UUID]:
+    """Concrete followed/curated source ids (avoids slow scalar subqueries)."""
     if user_id is not None:
-        return _followed_subquery(user_id)
-    return curated_source_subquery()
+        rows = await session.scalars(
+            select(UserSource.source_id).where(UserSource.user_id == user_id)
+        )
+        return list(rows.all())
+    rows = await session.scalars(
+        select(Source.id)
+        .order_by(Source.prominence.desc().nulls_last(), Source.name)
+        .limit(CURATED_SOURCE_LIMIT)
+    )
+    return list(rows.all())
 
 
 async def _build_coverage_rows(
@@ -69,72 +74,117 @@ async def _build_coverage_rows(
     user_id: uuid.UUID | None,
     event_id: uuid.UUID,
 ) -> list[EventCoverageOut]:
+    by_event = await _build_coverage_by_events(session, user_id, [event_id])
+    return by_event.get(event_id, [])
+
+
+async def _build_coverage_by_events(
+    session: SessionDep,
+    user_id: uuid.UUID | None,
+    event_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[EventCoverageOut]]:
+    """Batch-load coverage for many events in a single query."""
+    if not event_ids:
+        return {}
+
+    # Only the fields needed for inbox cards / event modal — never pull full_text.
+    cols = [
+        StoryEvent.event_id,
+        Story.id,
+        Story.source_id,
+        Story.full_headline,
+        Story.summary,
+        Story.image_url,
+        Story.article_url,
+        Source,
+    ]
     base = (
-        select(Story, Source)
-        .join(StoryEvent, StoryEvent.story_id == Story.id)
+        select(*cols)
+        .join(Story, Story.id == StoryEvent.story_id)
         .outerjoin(Source, Source.id == Story.source_id)
-        .where(StoryEvent.event_id == event_id)
+        .where(StoryEvent.event_id.in_(event_ids))
         .order_by(
+            StoryEvent.event_id,
             Source.prominence.desc().nulls_last(),
             Source.name,
         )
     )
+
+    result: dict[uuid.UUID, list[EventCoverageOut]] = {eid: [] for eid in event_ids}
     if user_id is not None:
         stmt = base.add_columns(StoryStatus.read, StoryStatus.starred).outerjoin(
             StoryStatus,
             (StoryStatus.story_id == Story.id) & (StoryStatus.user_id == user_id),
         )
         rows = (await session.execute(stmt)).all()
-        coverage: list[EventCoverageOut] = []
-        for story, source, read, starred in rows:
+        for (
+            event_id,
+            story_id,
+            source_id,
+            headline,
+            summary,
+            story_image,
+            article_url,
+            source,
+            read,
+            starred,
+        ) in rows:
             bias: float | None = (
                 float(source.bias_score)
                 if source and source.bias_score is not None
                 else None
             )
-            coverage.append(
+            result[event_id].append(
                 EventCoverageOut(
-                    story_id=story.id,
-                    source_id=story.source_id,
+                    story_id=story_id,
+                    source_id=source_id,
                     source_name=source.name if source else "Unknown",
                     bias_score=bias,
                     prominence=int(source.prominence) if source else 0,
-                    image_url=source.image_url if source else story.image_url,
-                    story_image_url=story.image_url,
-                    full_headline=story.full_headline,
-                    summary=story.summary,
-                    article_url=story.article_url,
+                    image_url=source.image_url if source else story_image,
+                    story_image_url=story_image,
+                    full_headline=headline,
+                    summary=summary,
+                    article_url=article_url,
                     read=bool(read),
                     starred=bool(starred),
                 )
             )
-        return coverage
+        return result
 
     rows = (await session.execute(base)).all()
-    coverage = []
-    for story, source in rows:
+    for (
+        event_id,
+        story_id,
+        source_id,
+        headline,
+        summary,
+        story_image,
+        article_url,
+        source,
+    ) in rows:
         bias = (
             float(source.bias_score)
             if source and source.bias_score is not None
             else None
         )
-        coverage.append(
+        result[event_id].append(
             EventCoverageOut(
-                story_id=story.id,
-                source_id=story.source_id,
+                story_id=story_id,
+                source_id=source_id,
                 source_name=source.name if source else "Unknown",
                 bias_score=bias,
                 prominence=int(source.prominence) if source else 0,
-                image_url=source.image_url if source else story.image_url,
-                story_image_url=story.image_url,
-                full_headline=story.full_headline,
-                summary=story.summary,
-                article_url=story.article_url,
+                image_url=source.image_url if source else story_image,
+                story_image_url=story_image,
+                full_headline=headline,
+                summary=summary,
+                article_url=article_url,
                 read=False,
                 starred=False,
             )
         )
-    return coverage
+    return result
 
 
 async def _event_to_summary(
@@ -193,6 +243,8 @@ async def _load_events_for_user(
     *,
     days: int | None = None,
     limit: int = 50,
+    min_outlets: int | None = None,
+    source_ids: list[uuid.UUID] | None = None,
 ) -> list[tuple[Event, bool, bool]]:
     """Recent inbox candidate events.
 
@@ -201,11 +253,29 @@ async def _load_events_for_user(
     """
     settings = get_settings()
     window_days: int = days if days is not None else settings.inbox_candidate_days
+    outlet_floor: int = (
+        min_outlets if min_outlets is not None else settings.event_min_outlets
+    )
     since = datetime.now(UTC) - timedelta(days=window_days)
-    sources = _source_subquery(user_id)
+    ids: list[uuid.UUID] = (
+        source_ids if source_ids is not None else await _source_ids(session, user_id)
+    )
+    if not ids:
+        return []
+
     outlet_count = func.count(distinct(Story.source_id))
-    source_hits = func.count(
-        distinct(case((Story.source_id.in_(sources), Story.source_id)))
+    # Prefer EXISTS over COUNT(CASE WHEN source IN subquery) — the latter tanks
+    # over multi-day windows against remote Postgres.
+    touches_sources = (
+        select(StoryEvent.story_id)
+        .join(Story, Story.id == StoryEvent.story_id)
+        .where(
+            StoryEvent.event_id == Event.id,
+            Story.source_id.in_(ids),
+            Story.kind == StoryKind.news,
+        )
+        .correlate(Event)
+        .exists()
     )
 
     if user_id is None:
@@ -216,9 +286,10 @@ async def _load_events_for_user(
             .where(
                 Event.first_seen_at >= since,
                 Story.kind == StoryKind.news,
+                touches_sources,
             )
             .group_by(Event.id)
-            .having(source_hits > 0)
+            .having(outlet_count >= outlet_floor)
             .order_by(outlet_count.desc(), Event.first_seen_at.desc())
             .limit(limit)
         )
@@ -236,10 +307,11 @@ async def _load_events_for_user(
         .where(
             Event.first_seen_at >= since,
             Story.kind == StoryKind.news,
+            touches_sources,
             or_(EventStatus.dismissed.is_(False), EventStatus.dismissed.is_(None)),
         )
         .group_by(Event.id, EventStatus.read, EventStatus.dismissed)
-        .having(source_hits > 0)
+        .having(outlet_count >= outlet_floor)
         .order_by(outlet_count.desc(), Event.first_seen_at.desc())
         .limit(limit)
     )
@@ -252,22 +324,31 @@ async def _events_list_for_user(
     user_id: uuid.UUID | None,
     *,
     limit: int = 15,
+    source_ids: list[uuid.UUID] | None = None,
 ) -> EventList:
     settings = get_settings()
     min_outlets: int = settings.event_min_outlets
-    # Fetch a wider candidate pool, then filter by outlet threshold.
-    loaded = await _load_events_for_user(session, user_id, limit=max(limit * 3, 45))
-    all_story_ids: list[uuid.UUID] = []
-
-    coverage_by_event: dict[uuid.UUID, list[EventCoverageOut]] = {}
-    for event, _read, _dismissed in loaded:
-        coverage = await _build_coverage_rows(session, user_id, event.id)
-        coverage_by_event[event.id] = coverage
-        all_story_ids.extend(c.story_id for c in coverage)
+    ids: list[uuid.UUID] = (
+        source_ids if source_ids is not None else await _source_ids(session, user_id)
+    )
+    loaded = await _load_events_for_user(
+        session,
+        user_id,
+        limit=limit,
+        min_outlets=min_outlets,
+        source_ids=ids,
+    )
+    event_ids: list[uuid.UUID] = [event.id for event, _r, _d in loaded]
+    coverage_by_event = await _build_coverage_by_events(session, user_id, event_ids)
+    all_story_ids: list[uuid.UUID] = [
+        c.story_id for coverage in coverage_by_event.values() for c in coverage
+    ]
 
     if user_id is None:
+        # Guests skip global engagement aggregation — it dominates /today latency
+        # against hosted Postgres and isn't meaningful without an account.
         friend_map: dict[uuid.UUID, list[FriendStarOut]] = {}
-        activity = await global_activity_by_story(session, all_story_ids)
+        activity: dict[uuid.UUID, StoryActivity] = {}
         profiles: dict[uuid.UUID, Profile] = {}
     else:
         friend_profiles = await friend_stars_by_story(session, user_id, all_story_ids)
@@ -282,7 +363,7 @@ async def _events_list_for_user(
 
     summaries: list[EventSummaryOut] = []
     for event, event_read, event_dismissed in loaded:
-        coverage = coverage_by_event[event.id]
+        coverage = coverage_by_event.get(event.id, [])
         summary = await _event_to_summary(
             session,
             user_id,
@@ -294,8 +375,7 @@ async def _events_list_for_user(
             event_read=event_read,
             event_dismissed=event_dismissed,
         )
-        if summary.outlet_count >= min_outlets:
-            summaries.append(summary)
+        summaries.append(summary)
 
     summaries.sort(key=lambda e: (e.read, -e.outlet_count, -e.first_seen_at.timestamp()))
     return EventList(items=summaries[:limit], total=len(summaries))
@@ -364,48 +444,107 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
             new_since = profile.last_opened_at
             profile.last_opened_at = datetime.now(UTC)
 
-    events = await _events_list_for_user(session, user_id, limit=30)
-    sources = _source_subquery(user_id)
+    source_ids = await _source_ids(session, user_id)
+    events = await _events_list_for_user(
+        session, user_id, limit=12, source_ids=source_ids
+    )
 
     if user_id is None:
+        if not source_ids:
+            return TodayOut(
+                events=events,
+                analysis=StoryList(items=[], total=0, limit=20, offset=0),
+                friend_pick_count=0,
+                new_since=None,
+            )
         stmt = (
-            select(Story, Source)
+            select(
+                Story.id,
+                Story.article_url,
+                Story.source_id,
+                Story.full_headline,
+                Story.summary,
+                Story.image_url,
+                Story.author_names,
+                Story.kind,
+                Story.archived,
+                Story.created_at,
+                Story.updated_at,
+                Story.last_scraped_at,
+                Story.section,
+                Story.type,
+                Source,
+            )
             .outerjoin(Source, Source.id == Story.source_id)
             .where(
-                Story.source_id.in_(sources),
+                Story.source_id.in_(source_ids),
                 Story.kind == StoryKind.analysis,
                 Story.archived.is_(False),
                 Story.created_at >= window_since,
             )
             .order_by(Story.created_at.desc())
-            .limit(30)
+            .limit(20)
         )
         guest_rows = (await session.execute(stmt)).all()
-        story_ids = [story.id for story, _ in guest_rows]
-        activity = await global_activity_by_story(session, story_ids)
         analysis_items: list[StoryWithStatus] = []
-        for story, source in guest_rows:
-            model = StoryWithStatus.model_validate(story)
-            model.source_name = source.name if source else None
-            model.source_image_url = source.image_url if source else None
-            model.read = False
-            model.starred = False
-            model.dismissed = False
-            model.my_reaction = None
-            model.friend_stars = []
-            read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
-            model.engagement = FriendEngagementOut(
-                read=len(read_ids),
-                commented=commented_n,
-                reactions=reactions,
-                readers=[],
+        for row in guest_rows:
+            (
+                story_id,
+                article_url,
+                source_id,
+                headline,
+                summary,
+                image_url,
+                author_names,
+                kind,
+                archived,
+                created_at,
+                updated_at,
+                last_scraped_at,
+                section,
+                story_type,
+                source,
+            ) = row
+            trimmed_summary: str | None = summary
+            if trimmed_summary and len(trimmed_summary) > 280:
+                trimmed_summary = trimmed_summary[:280]
+            model = StoryWithStatus(
+                id=story_id,
+                article_url=article_url,
+                source_id=source_id,
+                full_headline=headline,
+                summary=trimmed_summary,
+                full_text=None,
+                section=section,
+                type=story_type,
+                image_url=image_url,
+                author_names=list(author_names or []),
+                kind=kind,
+                archived=bool(archived),
+                last_scraped_at=last_scraped_at,
+                created_at=created_at,
+                updated_at=updated_at,
+                source_name=source.name if source else None,
+                source_image_url=source.image_url if source else None,
+                read=False,
+                starred=False,
+                dismissed=False,
+                my_reaction=None,
+                friend_stars=[],
+                engagement=FriendEngagementOut(),
             )
             analysis_items.append(model)
+
+        # Drop bulky coverage summaries on the list payload; modal still has headlines.
+        for item in events.items:
+            for cov in item.coverage:
+                if cov.summary and len(cov.summary) > 160:
+                    cov.summary = cov.summary[:160]
 
         return TodayOut(
             events=events,
             analysis=StoryList(
-                items=analysis_items, total=len(analysis_items), limit=30, offset=0
+                items=analysis_items, total=len(analysis_items), limit=20, offset=0
             ),
             friend_pick_count=0,
             new_since=None,
@@ -439,7 +578,7 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         .outerjoin(likes_sq, likes_sq.c.sid == Story.id)
         .where(
             or_(
-                Story.source_id.in_(sources),
+                Story.source_id.in_(source_ids),
                 Story.id.in_(select(friend_signal.c.story_id)),
             ),
             Story.kind == StoryKind.analysis,

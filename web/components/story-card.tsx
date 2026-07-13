@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 interface StoryCardProps {
   story: Story;
   dense?: boolean;
+  exiting?: boolean;
   onChange?: (story: Story) => void;
   onOpen?: (storyId: UUID) => void;
   onDismiss?: (storyId: UUID) => void;
@@ -18,6 +19,7 @@ interface StoryCardProps {
 export function StoryCard({
   story,
   dense = false,
+  exiting = false,
   onChange,
   onOpen,
   onDismiss,
@@ -44,16 +46,21 @@ export function StoryCard({
 
   return (
     <article
-      className={`group relative rounded-xl border border-slate-200 bg-white transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${
-        read ? "opacity-45 grayscale" : ""
+      className={`group relative overflow-hidden rounded-xl border border-slate-200 bg-white transition-all duration-300 ease-out dark:border-slate-800 dark:bg-slate-900 ${
+        exiting
+          ? "pointer-events-none -translate-y-1 scale-[0.98] opacity-0"
+          : `opacity-100 hover:shadow-md ${read ? "opacity-45 grayscale" : ""}`
       }`}
     >
       {onDismiss ? (
         <button
           type="button"
-          onClick={() => onDismiss(story.id)}
-          aria-label="Dismiss article"
-          title="Dismiss"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss(story.id);
+          }}
+          aria-label="Archive article"
+          title="Archive"
           className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         >
           ✕

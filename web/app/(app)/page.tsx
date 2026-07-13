@@ -1,7 +1,9 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { useAuthGate } from "@/components/auth-gate";
 import { EventCard } from "@/components/event-card";
+import { EventModal } from "@/components/event-modal";
 import { FriendsSidebar } from "@/components/friends-sidebar";
 import { StoryCard } from "@/components/story-card";
 import { StoryModal } from "@/components/story-modal";
@@ -19,14 +21,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Tab = "news" | "analysis" | "friends";
 
 const TAB_ORDER: Tab[] = ["news", "analysis", "friends"];
-
-// Reload the briefing when the user returns after being away at least this long,
-// so already-read items get re-sorted to the bottom (see sortReadToBottom).
 const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
+const EXIT_MS: number = 300;
 
-// Stable partition that keeps unread items on top and moves read items to the
-// bottom while preserving the server-provided order within each group. Applied
-// only at load time so items never jump around while the user is reading.
 function sortReadToBottom<T extends { read: boolean }>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => Number(a.read) - Number(b.read));
 }
@@ -76,12 +73,18 @@ function InboxLaneSection({
 export default function TodayPage() {
   const { notify } = useToast();
   const { session } = useAuth();
+  const { requireAuth } = useAuthGate();
   const isSignedIn: boolean = session !== null;
   const [data, setData] = useState<TodayPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [openStoryId, setOpenStoryId] = useState<UUID | null>(null);
+  const [openEventId, setOpenEventId] = useState<UUID | null>(null);
+  const [exitingIds, setExitingIds] = useState<ReadonlySet<UUID>>(
+    () => new Set<UUID>(),
+  );
   const [tab, setTab] = useState<Tab>("news");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const exitTimers = useRef<Map<UUID, number>>(new Map());
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -109,8 +112,6 @@ export default function TodayPage() {
     void load();
   }, [load]);
 
-  // Auto-reload when the user returns to the tab after being away for a while.
-  // Reloading re-sorts read items to the bottom without disorienting mid-session.
   useEffect(() => {
     let hiddenAt: number | null = null;
     function onVisibilityChange(): void {
@@ -127,6 +128,34 @@ export default function TodayPage() {
     return () =>
       document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [load]);
+
+  useEffect(() => {
+    const timers = exitTimers.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
+
+  function beginExit(id: UUID, after: () => void): void {
+    const existing: number | undefined = exitTimers.current.get(id);
+    if (existing !== undefined) window.clearTimeout(existing);
+    setExitingIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    const timer: number = window.setTimeout(() => {
+      after();
+      exitTimers.current.delete(id);
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, EXIT_MS);
+    exitTimers.current.set(id, timer);
+  }
 
   function onStoryChange(updated: Story): void {
     setData((prev) =>
@@ -174,130 +203,154 @@ export default function TodayPage() {
     [],
   );
 
-  function dismissEvent(eventId: UUID): void {
-    if (!data) return;
-    const removed: EventSummary | undefined = data.events.items.find(
-      (e) => e.id === eventId,
-    );
-    if (!removed) return;
+  function restoreEvent(removed: EventSummary): void {
     setData((prev) =>
       prev
         ? {
             ...prev,
             events: {
               ...prev.events,
-              items: prev.events.items.filter((e) => e.id !== eventId),
-              total: Math.max(0, prev.events.total - 1),
+              items: sortReadToBottom([...prev.events.items, removed]),
+              total: prev.events.total + 1,
             },
           }
         : prev,
     );
-    void api.dismissEvent(eventId).catch(() => {
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              events: {
-                ...prev.events,
-                items: sortReadToBottom([...prev.events.items, removed]),
-                total: prev.events.total + 1,
-              },
-            }
-          : prev,
-      );
-      notify("Could not dismiss event", "error");
-    });
-    notify("Event dismissed", "info", {
-      label: "Undo",
-      onClick: () => {
-        void api.undismissEvent(eventId).then(() => {
-          setData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  events: {
-                    ...prev.events,
-                    items: sortReadToBottom([...prev.events.items, removed]),
-                    total: prev.events.total + 1,
-                  },
-                }
-              : prev,
-          );
-        });
-      },
-    });
   }
 
-  function dismissStory(storyId: UUID): void {
-    if (!data) return;
-    const removed: Story | undefined = data.analysis.items.find(
-      (s) => s.id === storyId,
-    );
-    if (!removed) return;
+  function restoreStory(removed: Story): void {
     setData((prev) =>
       prev
         ? {
             ...prev,
             analysis: {
               ...prev.analysis,
-              items: prev.analysis.items.filter((s) => s.id !== storyId),
-              total: Math.max(0, prev.analysis.total - 1),
+              items: sortReadToBottom([...prev.analysis.items, removed]),
+              total: prev.analysis.total + 1,
             },
           }
         : prev,
     );
-    void api.dismissStory(storyId).catch(() => {
+  }
+
+  function dismissEvent(eventId: UUID): void {
+    if (!requireAuth("archive items")) return;
+    if (!data) return;
+    const removed: EventSummary | undefined = data.events.items.find(
+      (e) => e.id === eventId,
+    );
+    if (!removed) return;
+
+    beginExit(eventId, () => {
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              events: {
+                ...prev.events,
+                items: prev.events.items.filter((e) => e.id !== eventId),
+                total: Math.max(0, prev.events.total - 1),
+              },
+            }
+          : prev,
+      );
+    });
+
+    void api.dismissEvent(eventId).catch(() => {
+      restoreEvent(removed);
+      notify("Could not archive event", "error");
+    });
+    notify("Archived", "info", {
+      label: "Undo",
+      onClick: () => {
+        void api.undismissEvent(eventId).then(() => restoreEvent(removed));
+      },
+    });
+  }
+
+  function dismissStory(storyId: UUID): void {
+    if (!requireAuth("archive items")) return;
+    if (!data) return;
+    const removed: Story | undefined = data.analysis.items.find(
+      (s) => s.id === storyId,
+    );
+    if (!removed) return;
+
+    beginExit(storyId, () => {
       setData((prev) =>
         prev
           ? {
               ...prev,
               analysis: {
                 ...prev.analysis,
-                items: sortReadToBottom([...prev.analysis.items, removed]),
-                total: prev.analysis.total + 1,
+                items: prev.analysis.items.filter((s) => s.id !== storyId),
+                total: Math.max(0, prev.analysis.total - 1),
               },
             }
           : prev,
       );
-      notify("Could not dismiss article", "error");
     });
-    notify("Article dismissed", "info", {
+
+    void api.dismissStory(storyId).catch(() => {
+      restoreStory(removed);
+      notify("Could not archive article", "error");
+    });
+    notify("Archived", "info", {
       label: "Undo",
       onClick: () => {
-        void api.undismissStory(storyId).then(() => {
-          setData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  analysis: {
-                    ...prev.analysis,
-                    items: sortReadToBottom([...prev.analysis.items, removed]),
-                    total: prev.analysis.total + 1,
-                  },
-                }
-              : prev,
-          );
-        });
+        void api.undismissStory(storyId).then(() => restoreStory(removed));
       },
     });
   }
 
-  function openStory(storyId: UUID, eventId?: UUID): void {
-    setOpenStoryId(storyId);
-    if (!isSignedIn || !eventId) return;
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        events: {
-          ...prev.events,
-          items: prev.events.items.map((ev) =>
-            ev.id === eventId ? { ...ev, read: true } : ev,
-          ),
-        },
-      };
+  function handleOpenEvent(eventId: UUID): void {
+    setOpenEventId(eventId);
+    const event: EventSummary | undefined = data?.events.items.find(
+      (e) => e.id === eventId,
+    );
+    if (!event || event.read) return;
+
+    beginExit(eventId, () => {
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          events: {
+            ...prev.events,
+            items: prev.events.items.map((ev) =>
+              ev.id === eventId ? { ...ev, read: true } : ev,
+            ),
+          },
+        };
+      });
     });
-    void api.markEventRead(eventId).catch(() => undefined);
+
+    if (isSignedIn) {
+      void api.markEventRead(eventId).catch(() => undefined);
+    }
+  }
+
+  function handleOpenStory(storyId: UUID): void {
+    setOpenStoryId(storyId);
+    const story: Story | undefined = data?.analysis.items.find(
+      (s) => s.id === storyId,
+    );
+    if (story && !story.read) {
+      beginExit(storyId, () => {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            analysis: {
+              ...prev.analysis,
+              items: prev.analysis.items.map((s) =>
+                s.id === storyId ? { ...s, read: true } : s,
+              ),
+            },
+          };
+        });
+      });
+    }
   }
 
   function selectTab(next: Tab): void {
@@ -340,6 +393,9 @@ export default function TodayPage() {
   const unreadTotal: number =
     newsParts.unread.length + analysisParts.unread.length;
   const totalItems: number = events.length + analysis.length;
+  const openEventData: EventSummary | undefined = openEventId
+    ? events.find((e) => e.id === openEventId)
+    : undefined;
 
   if (totalItems === 0) {
     return (
@@ -357,8 +413,9 @@ export default function TodayPage() {
           <EventCard
             key={event.id}
             event={event}
-            onOpen={(storyId) => openStory(storyId, event.id)}
-            onDismiss={isSignedIn ? dismissEvent : undefined}
+            exiting={exitingIds.has(event.id)}
+            onOpen={handleOpenEvent}
+            onDismiss={dismissEvent}
           />
         ))}
       </div>
@@ -372,9 +429,10 @@ export default function TodayPage() {
           <StoryCard
             key={story.id}
             story={story}
+            exiting={exitingIds.has(story.id)}
             onChange={onStoryChange}
-            onOpen={(storyId) => openStory(storyId)}
-            onDismiss={isSignedIn ? dismissStory : undefined}
+            onOpen={handleOpenStory}
+            onDismiss={dismissStory}
           />
         ))}
       </div>
@@ -434,7 +492,6 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-8">
-      {/* Desktop: two columns side by side */}
       <div className="hidden gap-8 lg:grid lg:grid-cols-2">
         <section>
           <h2 className="mb-3 border-b border-slate-200 pb-2 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800">
@@ -450,7 +507,6 @@ export default function TodayPage() {
         </section>
       </div>
 
-      {/* Mobile: swipeable tabs */}
       <div className="lg:hidden">
         <div className="sticky top-14 z-10 mb-3 flex border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
           <button onClick={() => selectTab("news")} className={tabClass(tab === "news")}>
@@ -495,6 +551,16 @@ export default function TodayPage() {
             : ""}
         </p>
       </div>
+
+      {openEventData ? (
+        <EventModal
+          event={openEventData}
+          onClose={() => setOpenEventId(null)}
+          onOpenStory={(storyId) => {
+            setOpenStoryId(storyId);
+          }}
+        />
+      ) : null}
 
       {openStoryId ? (
         <StoryModal
