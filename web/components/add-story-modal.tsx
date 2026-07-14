@@ -19,6 +19,8 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   const [take, setTake] = useState<string>("");
   const [kind, setKind] = useState<StoryKind>("news");
   const [visibility, setVisibility] = useState<PostVisibility>("private");
+  const [rating, setRating] = useState<number | null>(null);
+  const [ratingHover, setRatingHover] = useState<number>(0);
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -46,6 +48,12 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
         kind,
         visibility,
       });
+      if (rating !== null) {
+        await api
+          .setRating(post.story_id, rating)
+          .catch(() => undefined);
+        post.my_rating = rating;
+      }
       notify("Posted", "success");
       onAdded?.(post);
       onClose();
@@ -109,6 +117,47 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
               className="resize-none border border-slate-300 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
             />
           </label>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Your rating (optional)
+            </span>
+            <div
+              className="flex items-center gap-2"
+              onMouseLeave={() => setRatingHover(0)}
+            >
+              <div className="flex items-center">
+                {([1, 2, 3, 4, 5] as const).map((n) => {
+                  const active: number = ratingHover || rating || 0;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-label={`Rate ${n} star${n > 1 ? "s" : ""}`}
+                      onMouseEnter={() => setRatingHover(n)}
+                      onClick={() => setRating(rating === n ? null : n)}
+                      className={`px-0.5 text-xl leading-none transition ${
+                        n <= active
+                          ? "text-amber-500"
+                          : "text-zinc-300 hover:text-amber-300 dark:text-zinc-600"
+                      }`}
+                    >
+                      {n <= active ? "\u2605" : "\u2606"}
+                    </button>
+                  );
+                })}
+              </div>
+              {rating !== null ? (
+                <button
+                  type="button"
+                  onClick={() => setRating(null)}
+                  className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  clear
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
