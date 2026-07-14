@@ -17,8 +17,6 @@ from api.friends import (
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
-    friend_ratings_by_story,
-    my_ratings_by_story,
     post_participant_ids,
     top_readers,
     visible_post_ids_for_viewer,
@@ -157,10 +155,8 @@ async def get_feed(
             ).all()
         }
 
-    # Viewer log state + ratings
+    # Viewer log state (ratings come from each serialized post below).
     status_by_story: dict[uuid.UUID, StoryStatus] = {}
-    my_ratings: dict[uuid.UUID, int] = {}
-    friend_ratings: dict[uuid.UUID, tuple[float, int]] = {}
     activity: dict[uuid.UUID, StoryActivity] = {}
     profiles: dict[uuid.UUID, Profile] = {}
     if viewer_id is not None and story_ids:
@@ -173,10 +169,6 @@ async def get_feed(
             )
         ).all()
         status_by_story = {r.story_id: r for r in status_rows}
-        my_ratings = await my_ratings_by_story(session, viewer_id, story_ids)
-        friend_ratings = await friend_ratings_by_story(
-            session, viewer_id, story_ids, friend_ids=friends
-        )
         activity = await friend_activity_by_story(
             session, viewer_id, story_ids, friend_ids=friends
         )
@@ -277,7 +269,6 @@ async def get_feed(
                 ],
             )
 
-        rating = friend_ratings.get(sid)
         source_name, source_image_url = resolve_attribution(
             article_url=story.article_url,
             source_name=source.name if source else None,
@@ -298,9 +289,9 @@ async def get_feed(
                 kind=story.kind,
                 read=read,
                 starred=starred,
-                my_rating=my_ratings.get(sid),
-                friend_rating_avg=rating[0] if rating else None,
-                friend_rating_count=rating[1] if rating else 0,
+                my_rating=out.my_rating,
+                rating_avg=out.rating_avg,
+                rating_count=out.rating_count,
                 my_take=my_take,
                 engagement=engagement,
                 posts=[out],

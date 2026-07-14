@@ -190,6 +190,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
           author_name: createdPost.author_name,
           author_image_url: createdPost.author_image_url,
           text,
+          author_rating: createdPost.author_rating,
           created_at: createdPost.created_at,
           updated_at: createdPost.updated_at,
         },

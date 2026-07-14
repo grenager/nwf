@@ -19,9 +19,8 @@ from api.friends import (
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
-    friend_ratings_by_story,
-    my_ratings_by_story,
     post_participant_ids,
+    ratings_for_users_by_story,
     top_readers,
 )
 from api.schemas import (
@@ -285,12 +284,14 @@ async def serialize_post(
     read = False
     starred = False
     my_take: str | None = None
-    my_rating: int | None = None
-    friend_rating_avg: float | None = None
-    friend_rating_count = 0
+    my_rating: float | None = None
+    author_rating: float | None = None
+    rating_avg: float | None = None
+    rating_count = 0
     engagement = FriendEngagementOut()
     readers: list[FriendMiniOut] = []
     unread_replies = False
+    friends: list[uuid.UUID] = []
 
     if viewer_id is not None:
         status_row = await session.get(
@@ -305,16 +306,6 @@ async def serialize_post(
             if friend_ids is not None
             else await accepted_friend_ids(session, viewer_id)
         )
-        my_rating = (
-            await my_ratings_by_story(session, viewer_id, [story.id])
-        ).get(story.id)
-        rating = (
-            await friend_ratings_by_story(
-                session, viewer_id, [story.id], friend_ids=friends
-            )
-        ).get(story.id)
-        if rating is not None:
-            friend_rating_avg, friend_rating_count = rating
         activity = await friend_activity_by_story(
             session, viewer_id, [story.id], friend_ids=friends
         )
@@ -339,6 +330,24 @@ async def serialize_post(
         if viewer_id in participants or post.author_id == viewer_id:
             unread_replies = any(r.user_id != viewer_id for r in replies)
 
+    # Per-person ratings (author + each commenter) plus a visible aggregate.
+    rater_ids: set[uuid.UUID] = (
+        {post.author_id} | {r.user_id for r in replies} | set(friends)
+    )
+    if viewer_id is not None:
+        rater_ids.add(viewer_id)
+    ratings_map = (
+        await ratings_for_users_by_story(session, [story.id], rater_ids)
+    ).get(story.id, {})
+    author_rating = ratings_map.get(post.author_id)
+    if viewer_id is not None:
+        my_rating = ratings_map.get(viewer_id)
+    for reply in replies:
+        reply.author_rating = ratings_map.get(reply.user_id)
+    if ratings_map:
+        rating_avg = sum(ratings_map.values()) / len(ratings_map)
+        rating_count = len(ratings_map)
+
     return PostOut(
         id=post.id,
         story_id=post.story_id,
@@ -362,11 +371,12 @@ async def serialize_post(
         audience_label=audience_label(post.visibility, participant_count),
         replies=replies,
         attachments=attachment_outs,
+        author_rating=author_rating,
         read=read,
         starred=starred,
         my_rating=my_rating,
-        friend_rating_avg=friend_rating_avg,
-        friend_rating_count=friend_rating_count,
+        rating_avg=rating_avg,
+        rating_count=rating_count,
         my_take=my_take,
         engagement=engagement,
         readers=readers,
