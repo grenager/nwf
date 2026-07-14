@@ -63,12 +63,12 @@ export default function FeedPage() {
     setData((prev) => {
       if (!prev) return prev;
       const index: number = prev.items.findIndex(
-        (c) => c.story_id === updated.story_id,
+        (c) => c.card_id === updated.card_id,
       );
       // A card with no posts left (last post deleted) is dropped entirely.
       const removed: boolean = updated.posts.length === 0;
       const items: FeedCard[] = prev.items
-        .map((c) => (c.story_id === updated.story_id ? updated : c))
+        .map((c) => (c.card_id === updated.card_id ? updated : c))
         .filter((c) => c.posts.length > 0);
       const caughtUp: number =
         removed && index !== -1 && index < prev.caught_up_after
@@ -130,7 +130,7 @@ export default function FeedPage() {
       <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {inbox.map((card) => (
           <PostCard
-            key={card.story_id}
+            key={card.card_id}
             card={card}
             me={me}
             onCardChange={onCardChange}
@@ -152,7 +152,7 @@ export default function FeedPage() {
         <div className="divide-y divide-zinc-200 opacity-80 dark:divide-zinc-800">
           {archive.map((card) => (
             <PostCard
-              key={card.story_id}
+              key={card.card_id}
               card={card}
               me={me}
               onCardChange={onCardChange}

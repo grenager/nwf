@@ -234,38 +234,27 @@ async def get_feed(
 
     scored.sort(key=lambda t: t[0], reverse=True)
 
-    # Group by story_id preserving score order of first post in group.
-    groups: dict[uuid.UUID, list[tuple[float, Post, bool]]] = {}
-    group_order: list[uuid.UUID] = []
-    for item in scored:
-        sid = item[1].story_id
-        if sid not in groups:
-            groups[sid] = []
-            group_order.append(sid)
-        groups[sid].append(item)
-
+    # One card per post. We intentionally do NOT merge multiple posts about the
+    # same article: if two people share the same link, they show as two posts.
     cards: list[FeedCardOut] = []
     unread_count = 0
-    for sid in group_order[:limit]:
-        story = stories[sid]
+    for score, post, is_unread in scored[:limit]:
+        story = stories.get(post.story_id)
+        if story is None:
+            continue
+        sid = post.story_id
         source = sources.get(story.source_id) if story.source_id else None
-        group = groups[sid]
-        group_score = max(s for s, _p, _u in group)
-        has_unread = any(u for _s, _p, u in group)
-        if has_unread:
+        if is_unread:
             unread_count += 1
 
-        post_outs = []
-        for _score, post, is_unread in group:
-            out = await serialize_post(
-                session,
-                post,
-                viewer_id=viewer_id,
-                include_replies=True,
-                friend_ids=friends if viewer_id is not None else None,
-            )
-            out.unread_replies_for_viewer = is_unread
-            post_outs.append(out)
+        out = await serialize_post(
+            session,
+            post,
+            viewer_id=viewer_id,
+            include_replies=True,
+            friend_ids=friends if viewer_id is not None else None,
+        )
+        out.unread_replies_for_viewer = is_unread
 
         status_row = status_by_story.get(sid)
         read = bool(status_row.read) if status_row else False
@@ -298,6 +287,7 @@ async def get_feed(
         )
         cards.append(
             FeedCardOut(
+                card_id=post.id,
                 story_id=sid,
                 full_headline=story.full_headline,
                 article_url=story.article_url,
@@ -313,8 +303,8 @@ async def get_feed(
                 friend_rating_count=rating[1] if rating else 0,
                 my_take=my_take,
                 engagement=engagement,
-                posts=post_outs,
-                score=group_score,
+                posts=[out],
+                score=score,
             )
         )
 
@@ -328,14 +318,15 @@ async def get_feed(
             return False
         return any(post.last_activity_at > new_since for post in card.posts)
 
-    unread_cards = [
-        c
-        for c in cards
-        if any(p.unread_replies_for_viewer for p in c.posts)
-        or not c.read
-        or _is_fresh(c)
-    ]
-    read_cards = [c for c in cards if c not in unread_cards]
+    unread_cards: list[FeedCardOut] = []
+    read_cards: list[FeedCardOut] = []
+    for c in cards:
+        fresh = (
+            any(p.unread_replies_for_viewer for p in c.posts)
+            or not c.read
+            or _is_fresh(c)
+        )
+        (unread_cards if fresh else read_cards).append(c)
     ordered = unread_cards + read_cards
     caught_up_after = len(unread_cards)
 

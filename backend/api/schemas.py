@@ -279,8 +279,9 @@ class PostOut(ORMModel):
 
 
 class FeedCardOut(BaseModel):
-    """One card per story, with one or more posts about that story."""
+    """One card per post. Two posts about the same article are two cards."""
 
+    card_id: uuid.UUID
     story_id: uuid.UUID
     full_headline: str
     article_url: str

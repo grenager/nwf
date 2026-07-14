@@ -168,6 +168,7 @@ export interface Post {
 }
 
 export interface FeedCard {
+  card_id: UUID;
   story_id: UUID;
   full_headline: string;
   article_url: string;

@@ -160,7 +160,7 @@ function PostThread({
   const showComposerActions: boolean = composerActive || draft.trim().length > 0;
 
   return (
-    <div>
+    <div className="space-y-3">
       <div className="flex items-start gap-2">
         <Avatar name={post.author_name} imageUrl={post.author_image_url} />
         <div className="min-w-0 flex-1">
@@ -285,55 +285,55 @@ function PostThread({
               ))}
             </ul>
           ) : null}
+        </div>
+      </div>
 
-          <div className="mt-2 space-y-2">
-            {post.replies.map((r) => (
-              <div key={r.id} className="flex gap-2">
-                <Avatar name={r.author_name} imageUrl={r.author_image_url} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                      {r.author_name}
-                    </span>
-                    <span className="text-zinc-400">
-                      {relativeTime(r.created_at)}
-                    </span>
-                    {user && r.user_id === user.id ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void api.deleteComment(r.id).then(() => {
-                            onPostChange({
-                              ...post,
-                              replies: post.replies.filter((x) => x.id !== r.id),
-                              reply_count: Math.max(0, post.reply_count - 1),
-                            });
-                          });
-                        }}
-                        className="text-zinc-400 hover:text-red-600"
-                      >
-                        Delete
-                      </button>
-                    ) : null}
-                  </div>
-                  <p className="whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
-                    {r.text}
-                  </p>
-                </div>
-              </div>
-            ))}
+      {post.replies.map((r) => (
+        <div key={r.id} className="flex items-start gap-2">
+          <Avatar name={r.author_name} imageUrl={r.author_image_url} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                {r.author_name}
+              </span>
+              <span className="text-zinc-400">
+                {relativeTime(r.created_at)}
+              </span>
+              {user && r.user_id === user.id ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void api.deleteComment(r.id).then(() => {
+                      onPostChange({
+                        ...post,
+                        replies: post.replies.filter((x) => x.id !== r.id),
+                        reply_count: Math.max(0, post.reply_count - 1),
+                      });
+                    });
+                  }}
+                  className="text-zinc-400 hover:text-red-600"
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
+            <p className="whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
+              {r.text}
+            </p>
           </div>
+        </div>
+      ))}
 
-          <div
-            className="mt-3 flex items-start gap-2"
-            onBlur={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                setComposerActive(false);
-              }
-            }}
-          >
-            <Avatar name={profileName(me)} imageUrl={me?.image_url ?? null} />
-            <div className="min-w-0 flex-1 space-y-2">
+      <div
+        className="flex items-start gap-2"
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setComposerActive(false);
+          }
+        }}
+      >
+        <Avatar name={profileName(me)} imageUrl={me?.image_url ?? null} />
+        <div className="min-w-0 flex-1 space-y-2">
               <div className="flex gap-2">
                 <input
                   value={draft}
@@ -389,8 +389,6 @@ function PostThread({
               ) : null}
             </div>
           </div>
-        </div>
-      </div>
     </div>
   );
 }
