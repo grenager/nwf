@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
+import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
@@ -217,7 +218,7 @@ export function FriendsSidebar() {
       ) : null}
 
       {loading ? (
-        <p className="py-4 text-sm text-zinc-400">Loading…</p>
+        <UserListSkeleton />
       ) : friends.length === 0 ? (
         <p className="py-4 text-sm text-zinc-400">
           No friends yet. Invite someone by email to compare coverage.

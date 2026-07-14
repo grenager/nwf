@@ -9,7 +9,7 @@ import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { FeedCard, Post, Profile, PostVisibility } from "@/lib/types";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 interface PostCardProps {
   card: FeedCard;
@@ -53,11 +53,13 @@ function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
 function PostThread({
   post,
   me,
+  preview,
   onPostChange,
   onDelete,
 }: {
   post: Post;
   me: Profile | null;
+  preview?: ReactNode;
   onPostChange: (post: Post) => void;
   onDelete: () => void;
 }) {
@@ -290,6 +292,8 @@ function PostThread({
         </div>
       </div>
 
+      {preview}
+
       {post.replies.map((r) => (
         <div key={r.id} className="flex items-start gap-2">
           <Avatar name={r.author_name} imageUrl={r.author_image_url} />
@@ -401,6 +405,7 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
   const engagement = card.engagement;
   const hasEngagement: boolean =
     engagement.read > 0 || engagement.commented > 0;
+  const post: Post | undefined = card.posts[0];
 
   function markReadOnOpen(): void {
     if (!user || card.read) return;
@@ -415,39 +420,54 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
     });
   }
 
-  return (
-    <article className="py-7">
-      {/* Link preview: image, journal, headline, summary — click to read. */}
+  if (!post) return null;
+
+  // Substack-style link preview: full-width image, then a bordered footer with
+  // the source (logo + name) and the headline. Followed by the engagement row.
+  const preview: ReactNode = (
+    <>
       <a
         href={card.article_url}
         target="_blank"
         rel="noopener noreferrer"
         onClick={markReadOnOpen}
-        className="group block"
+        className="group block border border-zinc-200 dark:border-zinc-800"
       >
         {card.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={card.image_url}
             alt=""
-            className="mb-3 h-52 w-full rounded-lg object-cover"
+            className="h-56 w-full object-cover"
           />
         ) : null}
-        <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-          {card.source_name ?? hostFromUrl(card.article_url)}
-        </span>
-        <h3 className="mt-0.5 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 group-hover:underline dark:text-zinc-50">
-          {card.full_headline}
-        </h3>
-        {card.summary ? (
-          <p className="mt-1 line-clamp-3 text-sm text-zinc-600 dark:text-zinc-400">
-            {stripHtml(card.summary)}
-          </p>
-        ) : null}
+        <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+          <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+            {card.source_image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={card.source_image_url}
+                alt=""
+                className="h-4 w-4 shrink-0 object-cover"
+              />
+            ) : null}
+            <span className="truncate">
+              {card.source_name ?? hostFromUrl(card.article_url)}
+            </span>
+          </div>
+          <h3 className="mt-1 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 group-hover:underline dark:text-zinc-50">
+            {card.full_headline}
+          </h3>
+          {card.summary ? (
+            <p className="mt-1 line-clamp-2 text-sm text-zinc-500 dark:text-zinc-400">
+              {stripHtml(card.summary)}
+            </p>
+          ) : null}
+        </div>
       </a>
 
       {/* Rating + friend engagement. */}
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <StarRating
           storyId={card.story_id}
           value={card.my_rating}
@@ -459,24 +479,18 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
           <EngagementSummary engagement={engagement} variant="inline" />
         ) : null}
       </div>
+    </>
+  );
 
-      {/* Conversation: takes, comments, and the reply/attach composer. */}
-      <div className="mt-4 space-y-4">
-        {card.posts.map((post) => (
-          <PostThread
-            key={post.id}
-            post={post}
-            me={me}
-            onPostChange={onPostChange}
-            onDelete={() =>
-              onCardChange({
-                ...card,
-                posts: card.posts.filter((p) => p.id !== post.id),
-              })
-            }
-          />
-        ))}
-      </div>
+  return (
+    <article className="py-7">
+      <PostThread
+        post={post}
+        me={me}
+        preview={preview}
+        onPostChange={onPostChange}
+        onDelete={() => onCardChange({ ...card, posts: [] })}
+      />
     </article>
   );
 }

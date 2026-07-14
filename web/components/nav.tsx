@@ -125,7 +125,7 @@ export function Nav() {
                 className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
               >
                 <span className="text-base leading-none">+</span>
-                Add
+                Post
               </button>
               <Link
                 href="/search"
@@ -166,14 +166,32 @@ export function Nav() {
           )}
         </div>
 
-        <button
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="Toggle menu"
-          aria-expanded={menuOpen}
-          className="flex h-9 w-9 items-center justify-center text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 sm:hidden"
-        >
-          <span className="text-xl">{menuOpen ? "✕" : "☰"}</span>
-        </button>
+        <div className="flex items-center gap-2 sm:hidden">
+          {isGuest ? (
+            <Link
+              href="/signin"
+              className="bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              Sign up
+            </Link>
+          ) : (
+            <button
+              onClick={openAddStory}
+              className="flex items-center gap-1 bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+            >
+              <span className="text-base leading-none">+</span>
+              Post
+            </button>
+          )}
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Toggle menu"
+            aria-expanded={menuOpen}
+            className="flex h-9 w-9 items-center justify-center text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <span className="text-xl">{menuOpen ? "✕" : "☰"}</span>
+          </button>
+        </div>
       </div>
 
       {menuOpen ? (
@@ -202,15 +220,6 @@ export function Nav() {
               >
                 Search
               </Link>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  openAddStory();
-                }}
-                className="px-3 py-1.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Add story
-              </button>
               <button
                 onClick={() => {
                   setMenuOpen(false);

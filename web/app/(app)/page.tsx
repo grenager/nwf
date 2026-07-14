@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { PostCard } from "@/components/post-card";
+import { FeedSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Profile } from "@/lib/types";
@@ -79,7 +80,11 @@ export default function FeedPage() {
   }
 
   if (loading) {
-    return <p className="text-zinc-400">Loading feed…</p>;
+    return (
+      <div className="mx-auto max-w-2xl">
+        <FeedSkeleton />
+      </div>
+    );
   }
 
   if (!data) {

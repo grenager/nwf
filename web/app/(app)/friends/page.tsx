@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { Connection } from "@/lib/types";
@@ -97,7 +98,7 @@ export default function FriendsPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-400">Loading…</p>
+        <UserListSkeleton count={4} />
       ) : (
         <>
           <ConnectionSection
