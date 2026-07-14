@@ -6,18 +6,18 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import TypeVar
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, or_, select, union
+from sqlalchemy import Row, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
+    CURATED_SOURCE_LIMIT,
     StoryActivity,
     accepted_friend_ids,
     aggregate_engagement,
-    CURATED_SOURCE_LIMIT,
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
@@ -53,10 +53,8 @@ from core.models import (
     UserSource,
 )
 
-_T = TypeVar("_T")
 
-
-async def _run_read(fn: Callable[[AsyncSession], Awaitable[_T]]) -> _T:
+async def _run_read[T](fn: Callable[[AsyncSession], Awaitable[T]]) -> T:
     """Run a read-only coroutine on a fresh session (safe to parallelize)."""
     factory = get_sessionmaker()
     async with factory() as session:
@@ -101,7 +99,7 @@ async def _build_coverage_by_events(
         return {}
 
     # Only the fields needed for inbox cards / event modal — never pull full_text.
-    cols = [
+    cols: list[Any] = [
         StoryEvent.event_id,
         Story.id,
         Story.source_id,
@@ -385,7 +383,7 @@ async def _load_events_for_user(
     since = datetime.now(UTC) - timedelta(days=window_days)
 
     if user_id is None:
-        stmt = (
+        guest_stmt = (
             select(Event)
             .where(
                 Event.first_seen_at >= since,
@@ -394,7 +392,7 @@ async def _load_events_for_user(
             .order_by(Event.outlet_count.desc(), Event.first_seen_at.desc())
             .limit(limit)
         )
-        events = list((await session.scalars(stmt)).all())
+        events = list((await session.scalars(guest_stmt)).all())
         return [(e, False, False) for e in events]
 
     ids: list[uuid.UUID] = (
@@ -638,7 +636,7 @@ async def get_event(
     return EventDetailOut.model_validate(summary.model_dump())
 
 
-def _analysis_row_to_story(row: tuple[object, ...]) -> StoryWithStatus:
+def _analysis_row_to_story(row: Row[Any]) -> StoryWithStatus:
     (
         story_id,
         article_url,
@@ -658,27 +656,27 @@ def _analysis_row_to_story(row: tuple[object, ...]) -> StoryWithStatus:
         read,
         starred,
         dismissed,
-    ) = row  # type: ignore[misc]
+    ) = row
     trimmed_summary: str | None = summary if isinstance(summary, str) else None
     if trimmed_summary and len(trimmed_summary) > 280:
         trimmed_summary = trimmed_summary[:280]
     src = source  # Source | None
     return StoryWithStatus(
-        id=story_id,  # type: ignore[arg-type]
+        id=story_id,
         article_url=str(article_url),
-        source_id=source_id,  # type: ignore[arg-type]
+        source_id=source_id,
         full_headline=str(headline),
         summary=trimmed_summary,
         full_text=None,
         section=section if isinstance(section, str) else None,
         type=story_type if isinstance(story_type, str) else None,
         image_url=image_url if isinstance(image_url, str) else None,
-        author_names=list(author_names or []),  # type: ignore[arg-type]
-        kind=kind,  # type: ignore[arg-type]
+        author_names=list(author_names or []),
+        kind=kind,
         archived=bool(archived),
-        last_scraped_at=last_scraped_at,  # type: ignore[arg-type]
-        created_at=created_at,  # type: ignore[arg-type]
-        updated_at=updated_at,  # type: ignore[arg-type]
+        last_scraped_at=last_scraped_at,
+        created_at=created_at,
+        updated_at=updated_at,
         source_name=src.name if src is not None else None,
         source_image_url=src.image_url if src is not None else None,
         read=bool(read),
@@ -727,7 +725,7 @@ async def _auth_followed_analysis(
     user_id: uuid.UUID,
     source_ids: list[uuid.UUID],
     window_since: datetime,
-) -> list[tuple[object, ...]]:
+) -> list[Row[Any]]:
     if not source_ids:
         return []
     stmt = (
@@ -756,7 +754,7 @@ async def _auth_friend_analysis(
     user_id: uuid.UUID,
     friends: list[uuid.UUID],
     window_since: datetime,
-) -> tuple[list[uuid.UUID], list[tuple[object, ...]]]:
+) -> tuple[list[uuid.UUID], list[Row[Any]]]:
     """Recent analysis friend-picks only (window + kind), plus story rows."""
     if not friends:
         return [], []
@@ -945,9 +943,9 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
     friend_pick_ids, friend_rows = friend_pack
 
     # Friend picks first, then followed-by-recency; cap at 20.
-    merged_rows: list[tuple[object, ...]] = list(friend_rows) + list(followed_rows)
+    merged_rows: list[Row[Any]] = list(friend_rows) + list(followed_rows)
     seen_story: set[uuid.UUID] = set()
-    ordered_rows: list[tuple[object, ...]] = []
+    ordered_rows: list[Row[Any]] = []
     for row in merged_rows:
         sid = row[0]
         if not isinstance(sid, uuid.UUID) or sid in seen_story:
