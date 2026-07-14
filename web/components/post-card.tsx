@@ -1,19 +1,14 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
-import { ReactionPicker } from "@/components/reaction-picker";
 import { SourceLogo } from "@/components/source-logo";
+import { StarRating } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
-import type {
-  FeedCard,
-  Post,
-  PostVisibility,
-  ReactionKind,
-} from "@/lib/types";
+import type { FeedCard, Post, PostVisibility } from "@/lib/types";
 import { useState } from "react";
 
 interface PostCardProps {
@@ -374,9 +369,6 @@ function PostThread({
 
 export function PostCard({ card, onCardChange }: PostCardProps) {
   const { user } = useAuth();
-  const [reaction, setReaction] = useState<ReactionKind | null>(
-    card.my_reaction,
-  );
 
   const engagement = card.engagement;
   const hasEngagement: boolean =
@@ -449,14 +441,16 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
             fallbackClassName="font-medium"
           />
         ) : null}
-        <ReactionPicker
+      </div>
+
+      {/* Single engagement: 1-5 star rating with friend average. */}
+      <div className="mt-2">
+        <StarRating
           storyId={card.story_id}
-          value={reaction}
-          onChange={(next) => {
-            setReaction(next);
-            onCardChange({ ...card, my_reaction: next });
-          }}
-          variant="pill"
+          value={card.my_rating}
+          friendAvg={card.friend_rating_avg}
+          friendCount={card.friend_rating_count}
+          onChange={(next) => onCardChange({ ...card, my_rating: next })}
         />
       </div>
 

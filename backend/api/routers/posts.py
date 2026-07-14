@@ -19,6 +19,8 @@ from api.friends import (
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
+    friend_ratings_by_story,
+    my_ratings_by_story,
     my_reactions_by_story,
     post_participant_ids,
     top_readers,
@@ -260,6 +262,9 @@ async def serialize_post(
     starred = False
     my_take: str | None = None
     my_reaction: str | None = None
+    my_rating: int | None = None
+    friend_rating_avg: float | None = None
+    friend_rating_count = 0
     engagement = FriendEngagementOut()
     readers: list[FriendMiniOut] = []
     unread_replies = False
@@ -279,6 +284,16 @@ async def serialize_post(
             if friend_ids is not None
             else await accepted_friend_ids(session, viewer_id)
         )
+        my_rating = (
+            await my_ratings_by_story(session, viewer_id, [story.id])
+        ).get(story.id)
+        rating = (
+            await friend_ratings_by_story(
+                session, viewer_id, [story.id], friend_ids=friends
+            )
+        ).get(story.id)
+        if rating is not None:
+            friend_rating_avg, friend_rating_count = rating
         activity = await friend_activity_by_story(
             session, viewer_id, [story.id], friend_ids=friends
         )
@@ -332,6 +347,9 @@ async def serialize_post(
         read=read,
         starred=starred,
         my_reaction=my_reaction,
+        my_rating=my_rating,
+        friend_rating_avg=friend_rating_avg,
+        friend_rating_count=friend_rating_count,
         my_take=my_take,
         engagement=engagement,
         readers=readers,

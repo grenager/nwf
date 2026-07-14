@@ -180,6 +180,11 @@ class ReactionSet(BaseModel):
     reaction: str
 
 
+class RatingSet(BaseModel):
+    story_id: uuid.UUID
+    rating: int = Field(ge=1, le=5)
+
+
 class UserSourcesUpdate(BaseModel):
     """Ordered list of source ids the user follows."""
 
@@ -272,6 +277,9 @@ class PostOut(ORMModel):
     read: bool = False
     starred: bool = False
     my_reaction: str | None = None
+    my_rating: int | None = None
+    friend_rating_avg: float | None = None
+    friend_rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     readers: list[FriendMiniOut] = Field(default_factory=list)
@@ -292,6 +300,9 @@ class FeedCardOut(BaseModel):
     read: bool = False
     starred: bool = False
     my_reaction: str | None = None
+    my_rating: int | None = None
+    friend_rating_avg: float | None = None
+    friend_rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     posts: list[PostOut] = Field(default_factory=list)

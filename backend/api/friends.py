@@ -19,6 +19,7 @@ from core.models import (
     PostVisibility,
     Profile,
     Source,
+    StoryRating,
     StoryReaction,
     StoryStatus,
 )
@@ -165,6 +166,59 @@ async def my_reactions_by_story(
         )
     ).all()
     return {story_id: reaction for story_id, reaction in rows}
+
+
+async def my_ratings_by_story(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    story_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, int]:
+    """Map story_id -> the current user's own 1-5 rating (if any)."""
+    if not story_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(StoryRating.story_id, StoryRating.rating).where(
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id == user_id,
+            )
+        )
+    ).all()
+    return {story_id: int(rating) for story_id, rating in rows}
+
+
+async def friend_ratings_by_story(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    story_ids: list[uuid.UUID],
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+) -> dict[uuid.UUID, tuple[float, int]]:
+    """Map story_id -> (average rating, count) among the viewer's friends."""
+    if not story_ids:
+        return {}
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, user_id)
+    )
+    if not friends:
+        return {}
+    rows = (
+        await session.execute(
+            select(StoryRating.story_id, StoryRating.rating).where(
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id.in_(friends),
+            )
+        )
+    ).all()
+    buckets: dict[uuid.UUID, list[int]] = {}
+    for story_id, rating in rows:
+        buckets.setdefault(story_id, []).append(int(rating))
+    return {
+        story_id: (sum(values) / len(values), len(values))
+        for story_id, values in buckets.items()
+    }
 
 
 async def friend_activity_by_story(

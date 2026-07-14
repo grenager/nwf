@@ -119,6 +119,13 @@ export const api = {
     }),
   clearReaction: (storyId: UUID): Promise<void> =>
     request<void>(`/me/reactions/${storyId}`, { method: "DELETE" }),
+  setRating: (storyId: UUID, rating: number): Promise<void> =>
+    request<void>("/me/ratings", {
+      method: "PUT",
+      body: JSON.stringify({ story_id: storyId, rating }),
+    }),
+  clearRating: (storyId: UUID): Promise<void> =>
+    request<void>(`/me/ratings/${storyId}`, { method: "DELETE" }),
 
   // --- sources ---
   listSources: (): Promise<Source[]> => request<Source[]>("/sources"),

@@ -13,6 +13,7 @@ from api.schemas import (
     DismissMark,
     PreferencesUpdate,
     ProfileOut,
+    RatingSet,
     ReactionSet,
     ReadMark,
     SourceOut,
@@ -26,6 +27,7 @@ from core.models import (
     Profile,
     Source,
     Story,
+    StoryRating,
     StoryReaction,
     StoryStatus,
     UserSource,
@@ -223,6 +225,38 @@ async def clear_reaction(
         delete(StoryReaction).where(
             StoryReaction.user_id == user.id,
             StoryReaction.story_id == story_id,
+        )
+    )
+
+
+@router.put("/ratings", status_code=status.HTTP_204_NO_CONTENT)
+async def set_rating(
+    payload: RatingSet, session: SessionDep, user: CurrentUser
+) -> None:
+    """Set (or change) the current user's 1-5 star rating on a story."""
+    stmt = (
+        pg_insert(StoryRating)
+        .values(
+            user_id=user.id,
+            story_id=payload.story_id,
+            rating=payload.rating,
+        )
+        .on_conflict_do_update(
+            index_elements=[StoryRating.user_id, StoryRating.story_id],
+            set_={"rating": payload.rating, "updated_at": func.now()},
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/ratings/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_rating(
+    story_id: str, session: SessionDep, user: CurrentUser
+) -> None:
+    await session.execute(
+        delete(StoryRating).where(
+            StoryRating.user_id == user.id,
+            StoryRating.story_id == story_id,
         )
     )
 

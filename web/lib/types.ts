@@ -169,6 +169,9 @@ export interface Post {
   read: boolean;
   starred: boolean;
   my_reaction: ReactionKind | null;
+  my_rating: number | null;
+  friend_rating_avg: number | null;
+  friend_rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
   readers: FriendMini[];
@@ -187,6 +190,9 @@ export interface FeedCard {
   read: boolean;
   starred: boolean;
   my_reaction: ReactionKind | null;
+  my_rating: number | null;
+  friend_rating_avg: number | null;
+  friend_rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
   posts: Post[];
