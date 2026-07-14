@@ -47,16 +47,10 @@ function CoverageListItem({
         />
       ) : null}
       <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="mb-1">
           <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
             {item.source_name}
           </span>
-          {item.bias_score !== null ? (
-            <span className="shrink-0 text-[11px] text-slate-400">
-              bias {item.bias_score > 0 ? "+" : ""}
-              {item.bias_score}
-            </span>
-          ) : null}
         </div>
         <p
           className={`text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100 ${

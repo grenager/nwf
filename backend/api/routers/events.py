@@ -427,6 +427,7 @@ async def _load_events_for_user(
         )
         .where(
             or_(EventStatus.dismissed.is_(False), EventStatus.dismissed.is_(None)),
+            or_(EventStatus.read.is_(False), EventStatus.read.is_(None)),
         )
         .order_by(Event.outlet_count.desc(), Event.first_seen_at.desc())
         .limit(limit)
@@ -574,7 +575,7 @@ async def get_event(
         event_read=event_read,
         event_dismissed=event_dismissed,
     )
-    return EventDetailOut.model_validate(summary)
+    return EventDetailOut.model_validate(summary.model_dump())
 
 
 def _analysis_row_to_story(row: tuple[object, ...]) -> StoryWithStatus:
@@ -682,6 +683,7 @@ async def _auth_followed_analysis(
             Story.archived.is_(False),
             Story.created_at >= window_since,
             or_(StoryStatus.dismissed.is_(False), StoryStatus.dismissed.is_(None)),
+            or_(StoryStatus.read.is_(False), StoryStatus.read.is_(None)),
         )
         .order_by(Story.created_at.desc())
         .limit(20)
@@ -738,6 +740,7 @@ async def _auth_friend_analysis(
                         StoryStatus.dismissed.is_(False),
                         StoryStatus.dismissed.is_(None),
                     ),
+                    or_(StoryStatus.read.is_(False), StoryStatus.read.is_(None)),
                 )
                 .order_by(Story.created_at.desc())
                 .limit(20)

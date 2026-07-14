@@ -48,7 +48,7 @@ export default function EventCoveragePage() {
   }
 
   const coverage = [...event.coverage].sort(
-    (a, b) => (a.bias_score ?? 0) - (b.bias_score ?? 0),
+    (a, b) => (b.prominence ?? 0) - (a.prominence ?? 0),
   );
 
   return (
@@ -79,16 +79,10 @@ export default function EventCoveragePage() {
             key={row.story_id}
             className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="mb-2">
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 {row.source_name}
               </span>
-              {row.bias_score !== null ? (
-                <span className="text-xs text-slate-400">
-                  bias {row.bias_score > 0 ? "+" : ""}
-                  {row.bias_score}
-                </span>
-              ) : null}
             </div>
             <a
               href={row.article_url}

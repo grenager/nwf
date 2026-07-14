@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default=["http://localhost:3000"])
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
+    api_reload: bool = Field(
+        default=True,
+        description="Auto-reload uvicorn on source changes. Set false in prod.",
+    )
 
     # Shared secret guarding internal/admin scrape endpoints.
     admin_api_secret: str | None = Field(default=None)

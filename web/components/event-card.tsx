@@ -2,6 +2,7 @@
 
 import { EngagementSummary } from "@/components/engagement-summary";
 import { InboxCardActions } from "@/components/inbox-card-actions";
+import { ReadBadge } from "@/components/read-badge";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { EventSummary, UUID } from "@/lib/types";
@@ -100,30 +101,33 @@ export function EventCard({
               {firstLine(lead.summary)}
             </p>
           ) : null}
-          <div className="mt-1.5 text-[11px] uppercase tracking-[0.06em] text-zinc-400">
+          <div className="mt-1.5 text-[12px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
             <span>{formatSourceLine(event)}</span>
-            <span className="mx-1.5 normal-case tracking-normal" aria-hidden>
+            <span className="mx-1.5 font-normal text-zinc-400" aria-hidden>
               ·
             </span>
-            <span className="normal-case tracking-normal">
+            <span className="font-normal text-zinc-500">
               {relativeTime(event.first_seen_at)}
             </span>
           </div>
         </div>
       </button>
 
-      <div className="mt-2.5 flex items-end justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <EngagementSummary engagement={event.engagement} />
+      <div className="mt-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <EngagementSummary engagement={event.engagement} variant="inline" />
         </div>
-        <InboxCardActions
-          read={event.read}
-          onRead={
-            archivedView || !onRead ? undefined : () => onRead(event.id)
-          }
-          onArchive={onDismiss ? () => onDismiss(event.id) : undefined}
-          archiveLabel={archivedView ? "Restore" : "Archive"}
-        />
+        <div className="flex shrink-0 items-center gap-2.5">
+          {archivedView ? <ReadBadge read={event.read} /> : null}
+          <InboxCardActions
+            read={event.read}
+            onRead={
+              archivedView || !onRead ? undefined : () => onRead(event.id)
+            }
+            onArchive={onDismiss ? () => onDismiss(event.id) : undefined}
+            archiveLabel={archivedView ? "Restore" : "Archive"}
+          />
+        </div>
       </div>
     </article>
   );

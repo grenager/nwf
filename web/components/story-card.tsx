@@ -3,6 +3,7 @@
 import { api } from "@/lib/api";
 import { EngagementSummary } from "@/components/engagement-summary";
 import { InboxCardActions } from "@/components/inbox-card-actions";
+import { ReadBadge } from "@/components/read-badge";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Story, UUID } from "@/lib/types";
@@ -100,36 +101,39 @@ export function StoryCard({
                 {stripHtml(story.summary).slice(0, 280)}
               </p>
             ) : null}
-            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-zinc-400">
+            <div className="mt-1.5 flex items-center gap-2 text-[12px]">
               {story.author_names.length > 0 ? (
-                <span className="min-w-0 truncate">
+                <span className="min-w-0 truncate font-semibold text-zinc-900 dark:text-zinc-100">
                   {story.author_names.join(", ")}
                 </span>
               ) : null}
-              <span className="ml-auto shrink-0 whitespace-nowrap">
+              <span className="ml-auto shrink-0 whitespace-nowrap text-zinc-500">
                 {relativeTime(story.created_at)}
               </span>
             </div>
           </div>
         </div>
         {!dense ? (
-          <div className="mt-2.5 flex items-end justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <EngagementSummary engagement={story.engagement} />
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <EngagementSummary engagement={story.engagement} variant="inline" />
             </div>
-            <InboxCardActions
-              read={read}
-              onRead={
-                archivedView || !onRead
-                  ? undefined
-                  : () => {
-                      setRead(true);
-                      onRead(story.id);
-                    }
-              }
-              onArchive={onDismiss ? () => onDismiss(story.id) : undefined}
-              archiveLabel={archivedView ? "Restore" : "Archive"}
-            />
+            <div className="flex shrink-0 items-center gap-2.5">
+              {archivedView ? <ReadBadge read={read} /> : null}
+              <InboxCardActions
+                read={read}
+                onRead={
+                  archivedView || !onRead
+                    ? undefined
+                    : () => {
+                        setRead(true);
+                        onRead(story.id);
+                      }
+                }
+                onArchive={onDismiss ? () => onDismiss(story.id) : undefined}
+                archiveLabel={archivedView ? "Restore" : "Archive"}
+              />
+            </div>
           </div>
         ) : onRead || onDismiss ? (
           <div className="mt-2 flex justify-end">

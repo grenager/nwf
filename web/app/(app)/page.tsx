@@ -29,48 +29,6 @@ function sortReadToBottom<T extends { read: boolean }>(items: readonly T[]): T[]
   return [...items].sort((a, b) => Number(a.read) - Number(b.read));
 }
 
-function partitionByRead<T extends { read: boolean }>(
-  items: readonly T[],
-): { unread: T[]; read: T[] } {
-  const unread: T[] = [];
-  const read: T[] = [];
-  for (const item of items) {
-    if (item.read) read.push(item);
-    else unread.push(item);
-  }
-  return { unread, read };
-}
-
-function InboxLaneSection({
-  title,
-  count,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  count: number;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState<boolean>(defaultOpen);
-  if (count === 0) return null;
-  return (
-    <div className="mt-5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="mb-1 flex w-full items-center justify-between text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400"
-      >
-        <span>
-          {title} ({count})
-        </span>
-        <span aria-hidden>{open ? "▾" : "▸"}</span>
-      </button>
-      {open ? children : null}
-    </div>
-  );
-}
-
 export default function TodayPage() {
   const { notify } = useToast();
   const { session } = useAuth();
@@ -278,19 +236,26 @@ export default function TodayPage() {
     );
     if (!event || event.read) return;
 
+    // Reading removes it from the inbox and files it under Archived (as read).
     beginExit(eventId, () => {
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          events: {
-            ...prev.events,
-            items: prev.events.items.map((ev) =>
-              ev.id === eventId ? { ...ev, read: true } : ev,
-            ),
-          },
-        };
-      });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              events: {
+                ...prev.events,
+                items: prev.events.items.filter((e) => e.id !== eventId),
+                total: Math.max(0, prev.events.total - 1),
+              },
+            }
+          : prev,
+      );
+      if (archivedLoaded) {
+        setArchivedEvents((prev) => [
+          { ...event, read: true },
+          ...prev.filter((e) => e.id !== eventId),
+        ]);
+      }
     });
 
     void api.markEventRead(eventId).catch(() => undefined);
@@ -304,18 +269,24 @@ export default function TodayPage() {
     if (!story || story.read) return;
 
     beginExit(storyId, () => {
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          analysis: {
-            ...prev.analysis,
-            items: prev.analysis.items.map((s) =>
-              s.id === storyId ? { ...s, read: true } : s,
-            ),
-          },
-        };
-      });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              analysis: {
+                ...prev.analysis,
+                items: prev.analysis.items.filter((s) => s.id !== storyId),
+                total: Math.max(0, prev.analysis.total - 1),
+              },
+            }
+          : prev,
+      );
+      if (archivedLoaded) {
+        setArchivedAnalysis((prev) => [
+          { ...story, read: true },
+          ...prev.filter((s) => s.id !== storyId),
+        ]);
+      }
     });
 
     void api.markRead(storyId, true).catch(() => undefined);
@@ -330,11 +301,17 @@ export default function TodayPage() {
       if (!removed) return;
       beginExit(eventId, () => {
         setArchivedEvents((prev) => prev.filter((e) => e.id !== eventId));
-        restoreEvent({ ...removed, dismissed: false });
+        restoreEvent({ ...removed, dismissed: false, read: false });
       });
-      void api.undismissEvent(eventId).catch(() => {
-        setArchivedEvents((prev) => [removed, ...prev]);
-        notify("Could not restore event", "error");
+      // Restoring returns it to the unread inbox: clear both read and dismissed.
+      void Promise.allSettled([
+        removed.dismissed ? api.undismissEvent(eventId) : Promise.resolve(),
+        removed.read ? api.unmarkEventRead(eventId) : Promise.resolve(),
+      ]).then((results) => {
+        if (results.some((r) => r.status === "rejected")) {
+          setArchivedEvents((prev) => [removed, ...prev]);
+          notify("Could not restore event", "error");
+        }
       });
       return;
     }
@@ -390,11 +367,17 @@ export default function TodayPage() {
       if (!removed) return;
       beginExit(storyId, () => {
         setArchivedAnalysis((prev) => prev.filter((s) => s.id !== storyId));
-        restoreStory({ ...removed, dismissed: false });
+        restoreStory({ ...removed, dismissed: false, read: false });
       });
-      void api.undismissStory(storyId).catch(() => {
-        setArchivedAnalysis((prev) => [removed, ...prev]);
-        notify("Could not restore article", "error");
+      // Restoring returns it to the unread inbox: clear both read and dismissed.
+      void Promise.allSettled([
+        removed.dismissed ? api.undismissStory(storyId) : Promise.resolve(),
+        removed.read ? api.markRead(storyId, false) : Promise.resolve(),
+      ]).then((results) => {
+        if (results.some((r) => r.status === "rejected")) {
+          setArchivedAnalysis((prev) => [removed, ...prev]);
+          notify("Could not restore article", "error");
+        }
       });
       return;
     }
@@ -448,24 +431,26 @@ export default function TodayPage() {
     );
     if (!event || event.read) return;
 
-    beginExit(eventId, () => {
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          events: {
-            ...prev.events,
-            items: prev.events.items.map((ev) =>
-              ev.id === eventId ? { ...ev, read: true } : ev,
-            ),
-          },
-        };
-      });
-    });
-
-    if (isSignedIn) {
-      void api.markEventRead(eventId).catch(() => undefined);
+    // Guests can't persist state, so just flag read in place; signed-in users
+    // have the item filed under Archived.
+    if (!isSignedIn) {
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              events: {
+                ...prev.events,
+                items: prev.events.items.map((ev) =>
+                  ev.id === eventId ? { ...ev, read: true } : ev,
+                ),
+              },
+            }
+          : prev,
+      );
+      return;
     }
+
+    markEventAsRead(eventId);
   }
 
   function handleOpenStory(storyId: UUID): void {
@@ -473,22 +458,26 @@ export default function TodayPage() {
     const story: Story | undefined = data?.analysis.items.find(
       (s) => s.id === storyId,
     );
-    if (story && !story.read) {
-      beginExit(storyId, () => {
-        setData((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            analysis: {
-              ...prev.analysis,
-              items: prev.analysis.items.map((s) =>
-                s.id === storyId ? { ...s, read: true } : s,
-              ),
-            },
-          };
-        });
-      });
+    if (!story || story.read) return;
+
+    if (!isSignedIn) {
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              analysis: {
+                ...prev.analysis,
+                items: prev.analysis.items.map((s) =>
+                  s.id === storyId ? { ...s, read: true } : s,
+                ),
+              },
+            }
+          : prev,
+      );
+      return;
     }
+
+    markStoryAsRead(storyId);
   }
 
   function selectTab(next: Tab): void {
@@ -528,10 +517,6 @@ export default function TodayPage() {
     laneMode === "archived" ? archivedEvents : data.events.items;
   const analysis: Story[] =
     laneMode === "archived" ? archivedAnalysis : data.analysis.items;
-  const newsParts = partitionByRead(data.events.items);
-  const analysisParts = partitionByRead(data.analysis.items);
-  const unreadTotal: number =
-    newsParts.unread.length + analysisParts.unread.length;
   const inboxTotal: number =
     data.events.items.length + data.analysis.items.length;
   const openEventData: EventSummary | undefined = openEventId
@@ -623,60 +608,35 @@ export default function TodayPage() {
   const newsContent =
     laneMode === "archived" ? (
       archivedLoading && !archivedLoaded ? (
-        <p className="text-sm text-slate-400">Loading archived…</p>
+        <p className="text-sm text-zinc-400">Loading archived…</p>
       ) : events.length === 0 ? (
-        <p className="text-sm text-slate-400">No archived news events.</p>
+        <p className="text-sm text-zinc-400">No archived news events.</p>
       ) : (
         renderNewsList(events, true)
       )
     ) : events.length === 0 ? (
-      <p className="text-sm text-slate-400">
-        No news events in your inbox — follow more outlets or wait for broader
-        coverage.
+      <p className="text-sm text-zinc-400">
+        You&apos;re caught up on the news. Handled items live in Archived.
       </p>
     ) : (
-      <div>
-        {newsParts.unread.length > 0 ? (
-          renderNewsList(newsParts.unread)
-        ) : (
-          <p className="text-sm text-slate-400">You&apos;re caught up on the news.</p>
-        )}
-        <InboxLaneSection title="Already read" count={newsParts.read.length}>
-          {renderNewsList(newsParts.read)}
-        </InboxLaneSection>
-      </div>
+      renderNewsList(events)
     );
 
   const analysisContent =
     laneMode === "archived" ? (
       archivedLoading && !archivedLoaded ? (
-        <p className="text-sm text-slate-400">Loading archived…</p>
+        <p className="text-sm text-zinc-400">Loading archived…</p>
       ) : analysis.length === 0 ? (
-        <p className="text-sm text-slate-400">No archived analysis.</p>
+        <p className="text-sm text-zinc-400">No archived analysis.</p>
       ) : (
         renderAnalysisList(analysis, true)
       )
     ) : analysis.length === 0 ? (
-      <p className="text-sm text-slate-400">
-        No analysis in your inbox — follow outlets/authors or wait for friends to
-        engage.
+      <p className="text-sm text-zinc-400">
+        You&apos;re caught up on analysis. Handled items live in Archived.
       </p>
     ) : (
-      <div>
-        {analysisParts.unread.length > 0 ? (
-          renderAnalysisList(analysisParts.unread)
-        ) : (
-          <p className="text-sm text-slate-400">
-            You&apos;re caught up on analysis.
-          </p>
-        )}
-        <InboxLaneSection
-          title="Already read"
-          count={analysisParts.read.length}
-        >
-          {renderAnalysisList(analysisParts.read)}
-        </InboxLaneSection>
-      </div>
+      renderAnalysisList(analysis)
     );
 
   function tabClass(active: boolean): string {
@@ -687,30 +647,8 @@ export default function TodayPage() {
     }`;
   }
 
-  const statusFooter = (
-    <div className="shrink-0 border-y border-zinc-900 py-4 text-center dark:border-zinc-100">
-      <p className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        {laneMode === "archived"
-          ? "Archived"
-          : unreadTotal === 0
-            ? "You're caught up"
-            : "Inbox"}
-      </p>
-      <p className="mt-1 text-[12px] uppercase tracking-[0.08em] text-zinc-400">
-        {laneMode === "archived"
-          ? `${archivedEvents.length} events · ${archivedAnalysis.length} analysis pieces`
-          : unreadTotal === 0
-            ? `${data.events.items.length} events · ${data.analysis.items.length} analysis pieces`
-            : `${newsParts.unread.length} unread events · ${analysisParts.unread.length} unread analysis`}
-        {laneMode === "inbox" && data.friend_pick_count > 0
-          ? ` · ${data.friend_pick_count} with friend reactions`
-          : ""}
-      </p>
-    </div>
-  );
-
   return (
-    <div className="space-y-6 lg:flex lg:h-[calc(100vh-7.5rem)] lg:flex-col lg:space-y-0 lg:overflow-hidden">
+    <div className="space-y-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:space-y-0 lg:overflow-hidden">
       <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-2 lg:gap-0">
         <section className="flex min-h-0 flex-col pr-8">
           <div className="shrink-0 bg-white dark:bg-zinc-950">
@@ -720,7 +658,7 @@ export default function TodayPage() {
             {newsContent}
           </div>
         </section>
-        <section className="flex min-h-0 flex-col border-l border-zinc-200 pl-8 pr-6 dark:border-zinc-800">
+        <section className="flex min-h-0 flex-col border-l border-zinc-200 pl-8 pr-8 dark:border-zinc-800">
           <div className="shrink-0 bg-white dark:bg-zinc-950">
             <LaneHeader title="Analysis" />
           </div>
@@ -771,8 +709,6 @@ export default function TodayPage() {
           </div>
         </div>
       </div>
-
-      <div className="mt-6 lg:mt-4">{statusFooter}</div>
 
       {openEventData ? (
         <EventModal

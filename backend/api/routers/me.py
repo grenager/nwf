@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
@@ -246,7 +246,8 @@ async def list_archived_events(
     user: CurrentUser,
     limit: int = Query(default=50, le=100, ge=1),
 ) -> EventList:
-    """Dismissed news events, most recently archived first."""
+    """Handled news events (read or dismissed), most recent action first."""
+    last_action = func.greatest(EventStatus.dismissed_at, EventStatus.read_at)
     rows = (
         await session.execute(
             select(Event, EventStatus.read, EventStatus.dismissed)
@@ -255,8 +256,13 @@ async def list_archived_events(
                 (EventStatus.event_id == Event.id)
                 & (EventStatus.user_id == user.id),
             )
-            .where(EventStatus.dismissed.is_(True))
-            .order_by(EventStatus.dismissed_at.desc().nulls_last())
+            .where(
+                or_(
+                    EventStatus.dismissed.is_(True),
+                    EventStatus.read.is_(True),
+                )
+            )
+            .order_by(last_action.desc().nulls_last())
             .limit(limit)
         )
     ).all()
@@ -293,7 +299,8 @@ async def list_archived_analysis(
     user: CurrentUser,
     limit: int = Query(default=50, le=100, ge=1),
 ) -> StoryList:
-    """Dismissed analysis stories, most recently archived first."""
+    """Handled analysis (read or dismissed), most recent action first."""
+    last_action = func.greatest(StoryStatus.dismissed_at, StoryStatus.read_at)
     rows = (
         await session.execute(
             select(
@@ -310,10 +317,13 @@ async def list_archived_analysis(
             )
             .outerjoin(Source, Source.id == Story.source_id)
             .where(
-                StoryStatus.dismissed.is_(True),
+                or_(
+                    StoryStatus.dismissed.is_(True),
+                    StoryStatus.read.is_(True),
+                ),
                 Story.kind == StoryKind.analysis,
             )
-            .order_by(StoryStatus.dismissed_at.desc().nulls_last())
+            .order_by(last_action.desc().nulls_last())
             .limit(limit)
         )
     ).all()
