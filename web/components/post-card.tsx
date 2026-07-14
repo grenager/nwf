@@ -1,6 +1,7 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
+import { InviteToConversationModal } from "@/components/invite-to-conversation-modal";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
@@ -76,6 +77,7 @@ function PostThread({
   onRate,
   onPostChange,
   onDelete,
+  onInvite,
 }: {
   post: Post;
   me: Profile | null;
@@ -85,6 +87,7 @@ function PostThread({
   onRate: (value: number | null) => void;
   onPostChange: (post: Post) => void;
   onDelete: () => void;
+  onInvite: () => void;
 }) {
   const { user } = useAuth();
   const { requireAuth } = useAuthGate();
@@ -204,64 +207,94 @@ function PostThread({
               <span className="text-xs text-zinc-400">
                 {relativeTime(post.created_at)}
               </span>
-              <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                {post.audience_label}
-              </span>
+              {post.visibility === "public" ? (
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                  Public
+                </span>
+              ) : null}
               {post.unread_replies_for_viewer ? (
                 <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
                   new replies
                 </span>
               ) : null}
             </div>
-            {isAuthor ? (
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  aria-label="Post options"
-                  onClick={() => setMenuOpen((v) => !v)}
-                  className="-mr-1 rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                aria-label="Invite a friend to this conversation"
+                title="Share"
+                onClick={() => {
+                  if (!requireAuth("invite friends")) return;
+                  onInvite();
+                }}
+                className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                  aria-hidden="true"
                 >
-                  ⋯
-                </button>
-                {menuOpen ? (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setMenuOpen(false)}
-                    />
-                    <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditDraft(post.take ?? "");
-                          setEditing(true);
-                          setMenuOpen(false);
-                        }}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void toggleVisibility()}
-                        className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      >
-                        {post.visibility === "public"
-                          ? "Make private"
-                          : "Make public"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void remove()}
-                        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                      >
-                        Delete post
-                      </button>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
+                  <path d="M12 3v11" />
+                  <path d="M8.5 6.5 12 3l3.5 3.5" />
+                  <path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+                </svg>
+              </button>
+              {isAuthor ? (
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-label="Post options"
+                    onClick={() => setMenuOpen((v) => !v)}
+                    className="rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+                  >
+                    ⋯
+                  </button>
+                  {menuOpen ? (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditDraft(post.take ?? "");
+                            setEditing(true);
+                            setMenuOpen(false);
+                          }}
+                          className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleVisibility()}
+                          className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                          {post.visibility === "public"
+                            ? "Make private"
+                            : "Make public"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void remove()}
+                          className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                        >
+                          Delete post
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
           {editing ? (
             <div className="mt-1 space-y-2">
@@ -444,6 +477,7 @@ function PostThread({
 
 export function PostCard({ card, me, onCardChange }: PostCardProps) {
   const { user } = useAuth();
+  const [inviteOpen, setInviteOpen] = useState<boolean>(false);
 
   const engagement = card.engagement;
   const hasEngagement: boolean =
@@ -580,7 +614,19 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
         onRate={handleRate}
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
+        onInvite={() => setInviteOpen(true)}
       />
+      {inviteOpen ? (
+        <InviteToConversationModal
+          postId={post.id}
+          headline={card.full_headline}
+          articleUrl={card.article_url}
+          imageUrl={card.image_url}
+          sourceName={card.source_name}
+          take={post.take}
+          onClose={() => setInviteOpen(false)}
+        />
+      ) : null}
     </article>
   );
 }

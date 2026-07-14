@@ -3,13 +3,23 @@
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
-export default function SignInPage() {
+function SignInForm() {
   const { notify } = useToast();
+  const searchParams = useSearchParams();
+  const nextPath: string = (() => {
+    const next = searchParams.get("next");
+    if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+    return "/";
+  })();
+  const presetEmail: string = searchParams.get("email")?.trim() ?? "";
+  const isInvite: boolean = nextPath.startsWith("/invite/");
+
   const [first, setFirst] = useState<string>("");
   const [last, setLast] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
+  const [email, setEmail] = useState<string>(presetEmail);
   const [sent, setSent] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
 
@@ -23,7 +33,7 @@ export default function SignInPage() {
       const supabase = getSupabaseBrowserClient();
       const redirectTo: string =
         typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback?next=/`
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
           : "";
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -48,10 +58,13 @@ export default function SignInPage() {
         NewsWithFriends
       </Link>
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h1 className="text-xl font-bold">Create your free account</h1>
+        <h1 className="text-xl font-bold">
+          {isInvite ? "Join your friend's conversation" : "Create your free account"}
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
-          We&apos;ll email you a magic link to verify your address — no password
-          needed.
+          {isInvite
+            ? "We'll email you a magic link so you can sign in and accept the invitation — no password needed."
+            : "We'll email you a magic link to verify your address — no password needed."}
         </p>
 
         {sent ? (
@@ -104,5 +117,19 @@ export default function SignInPage() {
         Already have an account? Use the same form — we&apos;ll send you a link.
       </p>
     </main>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
+          <p className="text-center text-sm text-slate-500">Loading…</p>
+        </main>
+      }
+    >
+      <SignInForm />
+    </Suspense>
   );
 }

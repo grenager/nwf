@@ -181,7 +181,7 @@ export interface FriendSummary {
   image_url: string | null;
   online: boolean;
   last_active_at: string | null;
-  last_source_name: string | null;
+  last_activity: string | null;
 }
 
 export interface FriendsOverview {
@@ -228,5 +228,59 @@ export interface ProfileEdit {
 export interface InviteResult {
   status: string;
   user_id: UUID | null;
+  message: string;
+}
+
+export interface FriendRequest {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  mutual_count: number;
+  created_at: string;
+}
+
+export interface FriendRequests {
+  incoming: FriendRequest[];
+  outgoing: FriendRequest[];
+}
+
+export interface RecommendedFriend {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  mutual_count: number;
+}
+
+export interface InvitationCreateResult {
+  status: string;
+  user_id: UUID | null;
+  invitation_id: UUID | null;
+  invite_url: string | null;
+  share_message: string;
+  message: string;
+  email_sent: boolean;
+}
+
+export interface InvitePreview {
+  token: string;
+  status: string;
+  invitee_email: string;
+  inviter_id: UUID;
+  inviter_name: string;
+  inviter_image_url: string | null;
+  message: string | null;
+  post_id: UUID | null;
+  story_id: UUID | null;
+  headline: string | null;
+  article_url: string | null;
+  image_url: string | null;
+  publisher: string | null;
+  take: string | null;
+}
+
+export interface InvitationAcceptResult {
+  status: string;
+  inviter_id: UUID;
+  post_id: UUID | null;
   message: string;
 }

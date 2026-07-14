@@ -9,6 +9,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
+from api.routers.invitations import redeem_pending_invitations_for_email
 from api.schemas import (
     DismissMark,
     PreferencesUpdate,
@@ -41,6 +42,8 @@ async def _ensure_profile(session: SessionDep, user: CurrentUser) -> Profile:
         session.add(profile)
         await session.flush()
         await session.refresh(profile)
+    # Safety net: redeem any pending email invitations for this account.
+    await redeem_pending_invitations_for_email(session, user.id, user.email)
     return profile
 
 

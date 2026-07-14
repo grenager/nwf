@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     # HS256 secret (legacy) OR leave blank to use JWKS (asymmetric) verification.
     supabase_jwt_secret: str | None = Field(default=None)
     supabase_jwt_audience: str = Field(default="authenticated")
+    # Service-role key for admin Auth APIs (generateLink). Optional in local
+    # dev — invite emails degrade to copy-link when unset.
+    supabase_service_role_key: str | None = Field(default=None)
+
+    # --- App / email ------------------------------------------------------
+    # Public origin of the Next.js app (invite landing + auth callback).
+    app_base_url: str = Field(default="http://localhost:3000")
+    # Resend API key for transactional invite emails. Optional in local
+    # dev — emails are skipped (use copy-link / Inbucket instead).
+    resend_api_key: str | None = Field(default=None)
+    email_from: str = Field(
+        default="NewsWithFriends <noreply@newswithfriends.org>"
+    )
 
     # --- API --------------------------------------------------------------
     cors_origins: list[str] = Field(default=["http://localhost:3000"])

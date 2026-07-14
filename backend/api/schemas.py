@@ -356,7 +356,9 @@ class FriendSummaryOut(BaseModel):
     image_url: str | None = None
     online: bool = False
     last_active_at: datetime | None = None
-    last_source_name: str | None = None
+    # Human label for the friend's most recent social action, e.g.
+    # "rated a story", "added a comment", "posted a story".
+    last_activity: str | None = None
 
 
 class FriendsOverviewOut(BaseModel):
@@ -406,4 +408,66 @@ class InviteCreate(BaseModel):
 class InviteResult(BaseModel):
     status: str  # "connected" | "requested"
     user_id: uuid.UUID | None = None
+    message: str
+
+
+# --- Friend requests / recommendations -----------------------------------
+class FriendRequestOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    mutual_count: int = 0
+    created_at: datetime
+
+
+class FriendRequestsOut(BaseModel):
+    incoming: list[FriendRequestOut]
+    outgoing: list[FriendRequestOut]
+
+
+class RecommendedFriendOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    mutual_count: int = 0
+
+
+# --- Email invitations (non-users) ----------------------------------------
+class InvitationCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    post_id: uuid.UUID | None = None
+    message: str | None = Field(default=None, max_length=2_000)
+
+
+class InvitationCreateResult(BaseModel):
+    status: str  # "connected" | "requested" | "invited"
+    user_id: uuid.UUID | None = None
+    invitation_id: uuid.UUID | None = None
+    invite_url: str | None = None
+    share_message: str
+    message: str
+    email_sent: bool = False
+
+
+class InvitePreviewOut(BaseModel):
+    token: str
+    status: str
+    invitee_email: str
+    inviter_id: uuid.UUID
+    inviter_name: str
+    inviter_image_url: str | None = None
+    message: str | None = None
+    post_id: uuid.UUID | None = None
+    story_id: uuid.UUID | None = None
+    headline: str | None = None
+    article_url: str | None = None
+    image_url: str | None = None
+    publisher: str | None = None
+    take: str | None = None
+
+
+class InvitationAcceptResult(BaseModel):
+    status: str  # "accepted" | "already_friends" | "already_accepted"
+    inviter_id: uuid.UUID
+    post_id: uuid.UUID | None = None
     message: str
