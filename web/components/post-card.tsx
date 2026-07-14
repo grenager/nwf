@@ -262,11 +262,13 @@ function PostThread({
               </div>
             </div>
           ) : post.take ? (
-            <p className="mt-1 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
+            <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
               {post.take}
             </p>
           ) : (
-            <p className="mt-1 text-sm italic text-zinc-400">shared this</p>
+            <p className="-mt-0.5 text-sm italic leading-snug text-zinc-400">
+              shared this
+            </p>
           )}
 
           {post.attachments.length > 0 ? (
@@ -317,7 +319,7 @@ function PostThread({
                 </button>
               ) : null}
             </div>
-            <p className="whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
+            <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
               {r.text}
             </p>
           </div>
