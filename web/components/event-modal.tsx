@@ -2,6 +2,7 @@
 
 import { EngagementSummary } from "@/components/engagement-summary";
 import { FriendStars } from "@/components/friend-stars";
+import { SourceLogo } from "@/components/source-logo";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
@@ -38,14 +39,13 @@ function CoverageListItem({
           alt=""
           className="h-16 w-16 shrink-0 rounded-md object-cover"
         />
-      ) : item.image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+      ) : (
+        <SourceLogo
           src={item.image_url}
-          alt=""
-          className="h-10 w-10 shrink-0 rounded object-contain"
+          name={item.source_name}
+          imgClassName="h-10 w-10 shrink-0 rounded object-contain"
         />
-      ) : null}
+      )}
       <div className="min-w-0 flex-1">
         <div className="mb-1">
           <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">

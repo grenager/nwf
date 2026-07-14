@@ -4,6 +4,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { EngagementSummary } from "@/components/engagement-summary";
 import { ReactionPicker } from "@/components/reaction-picker";
+import { SourceLogo } from "@/components/source-logo";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
@@ -257,18 +258,12 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
 
             <div className="p-6">
               <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                {story.source_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={story.source_image_url}
-                    alt={story.source_name ?? ""}
-                    className="h-6 w-auto max-w-[180px] shrink-0 object-contain"
-                  />
-                ) : story.source_name ? (
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    {story.source_name}
-                  </span>
-                ) : null}
+                <SourceLogo
+                  src={story.source_image_url}
+                  name={story.source_name}
+                  imgClassName="h-6 w-auto max-w-[180px] shrink-0 object-contain"
+                  fallbackClassName="font-semibold text-slate-700 dark:text-slate-200"
+                />
                 <span aria-hidden>·</span>
                 <span>{relativeTime(story.created_at)}</span>
               </div>

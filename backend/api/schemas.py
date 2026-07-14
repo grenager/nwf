@@ -63,6 +63,7 @@ class SourceStatus(BaseModel):
     name: str
     rss_url: str | None = None
     has_rss: bool
+    image_url: str | None = None
     last_scraped_at: datetime | None = None
     story_count: int
     newest_story_at: datetime | None = None
