@@ -15,9 +15,6 @@ import type {
   PreferencesUpdate,
   Profile,
   ProfileEdit,
-  Source,
-  SourceInput,
-  SourceStatus,
   Story,
   StoryKind,
   StoryList,
@@ -80,12 +77,6 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  getMySources: (): Promise<Source[]> => request<Source[]>("/me/sources"),
-  setMySources: (sourceIds: UUID[]): Promise<Source[]> =>
-    request<Source[]>("/me/sources", {
-      method: "PUT",
-      body: JSON.stringify({ source_ids: sourceIds }),
-    }),
   markRead: (storyId: UUID, read = true): Promise<void> =>
     request<void>("/me/read", {
       method: "POST",
@@ -119,35 +110,9 @@ export const api = {
   clearRating: (storyId: UUID): Promise<void> =>
     request<void>(`/me/ratings/${storyId}`, { method: "DELETE" }),
 
-  // --- sources ---
-  listSources: (): Promise<Source[]> => request<Source[]>("/sources"),
-  searchSources: (q: string): Promise<Source[]> =>
-    request<Source[]>(`/sources/search?q=${encodeURIComponent(q)}`),
-
-  // --- admin ---
-  getSourcesStatus: (): Promise<SourceStatus[]> =>
-    request<SourceStatus[]>("/sources/status"),
-  scrapeSource: (id: UUID): Promise<{ status: string; ingested: string }> =>
-    request<{ status: string; ingested: string }>(`/sources/${id}/scrape`, {
-      method: "POST",
-    }),
-  getSource: (id: UUID): Promise<Source> => request<Source>(`/sources/${id}`),
-  createSource: (payload: SourceInput): Promise<Source> =>
-    request<Source>("/sources", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  updateSource: (id: UUID, payload: SourceInput): Promise<Source> =>
-    request<Source>(`/sources/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    }),
-
   // --- stories ---
   getRecommended: (): Promise<StoryList> =>
     request<StoryList>("/stories/recommended"),
-  getStoriesBySource: (perSource = 6): Promise<StoryList> =>
-    request<StoryList>(`/stories/by-source?per_source=${perSource}`),
   searchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
   titleSearchStories: (q: string): Promise<StoryList> =>

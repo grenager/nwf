@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 
 const LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Feed" },
-  { href: "/sources", label: "Sources" },
 ];
 
 export function Nav() {
@@ -52,12 +51,7 @@ export function Nav() {
     setMenuOpen(false);
   }, [pathname]);
 
-  const isAdmin: boolean = profile?.is_admin ?? false;
-  const links = isGuest
-    ? [{ href: "/", label: "Feed" }]
-    : isAdmin
-      ? [...LINKS, { href: "/admin", label: "Admin" }]
-      : LINKS;
+  const links = LINKS;
   const displayName: string =
     [profile?.first, profile?.last].filter(Boolean).join(" ") ||
     user?.email ||

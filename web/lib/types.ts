@@ -24,22 +24,6 @@ export interface PreferencesUpdate {
   dark_mode?: boolean | null;
 }
 
-export interface Source {
-  id: UUID;
-  name: string;
-  homepage_url: string;
-  rss_url: string | null;
-  include_selector: string | null;
-  exclude_selector: string | null;
-  bias_score: number | null;
-  last_scraped_at: string | null;
-  tags: string[];
-  image_url: string | null;
-  has_paywall: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
 export type StoryKind = "news" | "analysis";
 export type PostVisibility = "private" | "public";
 
@@ -90,25 +74,6 @@ export interface StoryList {
   total: number;
   limit: number;
   offset: number;
-}
-
-export interface SourceInput {
-  name: string | null;
-  homepage_url: string | null;
-  rss_url: string | null;
-  image_url: string | null;
-  has_paywall: boolean;
-}
-
-export interface SourceStatus {
-  id: UUID;
-  name: string;
-  rss_url: string | null;
-  has_rss: boolean;
-  image_url: string | null;
-  last_scraped_at: string | null;
-  story_count: number;
-  newest_story_at: string | null;
 }
 
 export interface Comment {
