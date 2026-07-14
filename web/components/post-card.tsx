@@ -1,7 +1,6 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
-import { SourceLogo } from "@/components/source-logo";
 import { StarRating } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
@@ -419,27 +418,6 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
           ) : null}
         </div>
       </a>
-
-      {/* Kind label + source logo, moved beneath the preview. */}
-      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-        <span
-          className={`rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide ${
-            card.kind === "news"
-              ? "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
-              : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-          }`}
-        >
-          {card.kind}
-        </span>
-        {card.source_image_url ? (
-          <SourceLogo
-            src={card.source_image_url}
-            name={card.source_name}
-            imgClassName="h-4 w-auto max-w-[120px] object-contain"
-            fallbackClassName="font-medium"
-          />
-        ) : null}
-      </div>
 
       {/* Single engagement: 1-5 star rating with friend average. */}
       <div className="mt-2">
