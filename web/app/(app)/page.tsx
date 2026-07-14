@@ -118,7 +118,7 @@ export default function FeedPage() {
         </div>
       ) : null}
 
-      <div className="divide-y-0">
+      <div className="space-y-4">
         {inbox.map((card) => (
           <PostCard
             key={card.story_id}
@@ -139,7 +139,7 @@ export default function FeedPage() {
       ) : null}
 
       {archive.length > 0 ? (
-        <div className="opacity-80">
+        <div className="space-y-4 opacity-80">
           {archive.map((card) => (
             <PostCard
               key={card.story_id}

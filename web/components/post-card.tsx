@@ -147,7 +147,7 @@ function PostThread({
   }
 
   return (
-    <div className="mt-3 border-l-2 border-zinc-200 pl-3 dark:border-zinc-700">
+    <div className="border-l-2 border-zinc-200 pl-3 dark:border-zinc-700">
       <div className="flex items-start gap-2">
         <Avatar name={post.author_name} imageUrl={post.author_image_url} />
         <div className="min-w-0 flex-1">
@@ -387,14 +387,14 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
   }
 
   return (
-    <article className="border-b border-zinc-200 py-4 dark:border-zinc-800">
+    <article className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       {/* Link preview: image, journal, headline, summary — click to read. */}
       <a
         href={card.article_url}
         target="_blank"
         rel="noopener noreferrer"
         onClick={markReadOnOpen}
-        className="block w-full overflow-hidden rounded-lg border border-zinc-200 transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+        className="group block transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
       >
         {card.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -404,11 +404,11 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
             className="h-52 w-full border-b border-zinc-200 object-cover dark:border-zinc-800"
           />
         ) : null}
-        <div className="p-3">
+        <div className="px-4 pt-4">
           <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
             {card.source_name ?? hostFromUrl(card.article_url)}
           </span>
-          <h3 className="mt-0.5 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h3 className="mt-0.5 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 group-hover:underline dark:text-zinc-50">
             {card.full_headline}
           </h3>
           {card.summary ? (
@@ -419,8 +419,8 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
         </div>
       </a>
 
-      {/* Single engagement: 1-5 star rating with friend average. */}
-      <div className="mt-2">
+      {/* Rating + friend engagement, still part of the preview block. */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
         <StarRating
           storyId={card.story_id}
           value={card.my_rating}
@@ -428,27 +428,27 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
           friendCount={card.friend_rating_count}
           onChange={(next) => onCardChange({ ...card, my_rating: next })}
         />
+        {hasEngagement ? (
+          <EngagementSummary engagement={engagement} variant="inline" />
+        ) : null}
       </div>
 
-      {hasEngagement ? (
-        <div className="mt-2">
-          <EngagementSummary engagement={engagement} variant="inline" />
-        </div>
-      ) : null}
-
-      {card.posts.map((post) => (
-        <PostThread
-          key={post.id}
-          post={post}
-          onPostChange={onPostChange}
-          onDelete={() =>
-            onCardChange({
-              ...card,
-              posts: card.posts.filter((p) => p.id !== post.id),
-            })
-          }
-        />
-      ))}
+      {/* Conversation: takes, comments, and the reply/attach composer. */}
+      <div className="space-y-4 border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/30">
+        {card.posts.map((post) => (
+          <PostThread
+            key={post.id}
+            post={post}
+            onPostChange={onPostChange}
+            onDelete={() =>
+              onCardChange({
+                ...card,
+                posts: card.posts.filter((p) => p.id !== post.id),
+              })
+            }
+          />
+        ))}
+      </div>
     </article>
   );
 }
