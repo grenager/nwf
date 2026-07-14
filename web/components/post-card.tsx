@@ -6,13 +6,21 @@ import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { FeedCard, Post, PostVisibility } from "@/lib/types";
+import type { FeedCard, Post, Profile, PostVisibility } from "@/lib/types";
 import { useState } from "react";
 
 interface PostCardProps {
   card: FeedCard;
+  me: Profile | null;
   onCardChange: (card: FeedCard) => void;
+}
+
+function profileName(me: Profile | null): string {
+  if (!me) return "You";
+  const full = [me.first, me.last].filter(Boolean).join(" ").trim();
+  return full || "You";
 }
 
 function hostFromUrl(url: string): string {
@@ -44,10 +52,12 @@ function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
 
 function PostThread({
   post,
+  me,
   onPostChange,
   onDelete,
 }: {
   post: Post;
+  me: Profile | null;
   onPostChange: (post: Post) => void;
   onDelete: () => void;
 }) {
@@ -58,6 +68,7 @@ function PostThread({
   const [posting, setPosting] = useState<boolean>(false);
   const [attachUrl, setAttachUrl] = useState<string>("");
   const [showAttach, setShowAttach] = useState<boolean>(false);
+  const [composerActive, setComposerActive] = useState<boolean>(false);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [editing, setEditing] = useState<boolean>(false);
   const [editDraft, setEditDraft] = useState<string>(post.take ?? "");
@@ -146,8 +157,10 @@ function PostThread({
     }
   }
 
+  const showComposerActions: boolean = composerActive || draft.trim().length > 0;
+
   return (
-    <div className="border-l-2 border-zinc-200 pl-3 dark:border-zinc-700">
+    <div>
       <div className="flex items-start gap-2">
         <Avatar name={post.author_name} imageUrl={post.author_image_url} />
         <div className="min-w-0 flex-1">
@@ -311,54 +324,70 @@ function PostThread({
             ))}
           </div>
 
-          <div className="mt-2 flex flex-col gap-2">
-            <div className="flex gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Reply…"
-                className="min-w-0 flex-1 border border-zinc-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void reply();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => void reply()}
-                disabled={posting || !draft.trim()}
-                className="bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-              >
-                Reply
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAttach((v) => !v)}
-                className="border border-zinc-300 px-2 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-                title="Attach a related link"
-              >
-                Attach
-              </button>
-            </div>
-            {showAttach ? (
+          <div
+            className="mt-3 flex items-start gap-2"
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                setComposerActive(false);
+              }
+            }}
+          >
+            <Avatar name={profileName(me)} imageUrl={me?.image_url ?? null} />
+            <div className="min-w-0 flex-1 space-y-2">
               <div className="flex gap-2">
                 <input
-                  value={attachUrl}
-                  onChange={(e) => setAttachUrl(e.target.value)}
-                  placeholder="https://… related article"
-                  className="min-w-0 flex-1 border border-zinc-300 bg-white px-2 py-1.5 text-sm outline-none dark:border-zinc-700 dark:bg-zinc-950"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onFocus={() => setComposerActive(true)}
+                  placeholder="Reply…"
+                  className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void reply();
+                    }
+                  }}
                 />
-                <button
-                  type="button"
-                  onClick={() => void attach()}
-                  className="bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  Add
-                </button>
+                {showComposerActions ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void reply()}
+                      disabled={posting || !draft.trim()}
+                      className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                    >
+                      Reply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAttach((v) => !v)}
+                      className="shrink-0 rounded-full border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                      title="Attach a related link"
+                    >
+                      Attach
+                    </button>
+                  </>
+                ) : null}
               </div>
-            ) : null}
+              {showAttach && showComposerActions ? (
+                <div className="flex gap-2">
+                  <input
+                    value={attachUrl}
+                    onChange={(e) => setAttachUrl(e.target.value)}
+                    onFocus={() => setComposerActive(true)}
+                    placeholder="https://… related article"
+                    className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void attach()}
+                    className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -366,7 +395,7 @@ function PostThread({
   );
 }
 
-export function PostCard({ card, onCardChange }: PostCardProps) {
+export function PostCard({ card, me, onCardChange }: PostCardProps) {
   const { user } = useAuth();
 
   const engagement = card.engagement;
@@ -413,7 +442,7 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
           </h3>
           {card.summary ? (
             <p className="mt-1 line-clamp-3 text-sm text-zinc-600 dark:text-zinc-400">
-              {card.summary}
+              {stripHtml(card.summary)}
             </p>
           ) : null}
         </div>
@@ -439,6 +468,7 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
           <PostThread
             key={post.id}
             post={post}
+            me={me}
             onPostChange={onPostChange}
             onDelete={() =>
               onCardChange({

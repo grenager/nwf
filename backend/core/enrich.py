@@ -234,10 +234,19 @@ async def fetch_url_metadata(url: str) -> UrlMetadata:
             timeout=settings.scrape_http_timeout_seconds,
             follow_redirects=True,
             headers={
+                # Identify as the canonical link-preview crawler. Publishers
+                # (e.g. NYT) whitelist this UA to serve OpenGraph tags for
+                # social embeds, whereas generic/bot UAs get a 403 that would
+                # drop us to a bare-slug title with no image.
                 "User-Agent": (
-                    "NewsWithFriends/0.1 (+https://newswithfriends.app)"
+                    "facebookexternalhit/1.1 "
+                    "(+http://www.facebook.com/externalhit_uatext.php)"
                 ),
-                "Accept": "text/html,application/xhtml+xml",
+                "Accept": (
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                    "*/*;q=0.8"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
             },
         ) as client:
             resp = await client.get(url)

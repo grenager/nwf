@@ -84,6 +84,11 @@ def _is_hostlike(headline: str, url: str) -> bool:
     return host is not None and text in {host, f"www.{host}"}
 
 
+def _has_html(text: str | None) -> bool:
+    """True when a stored string still carries HTML markup (aggregator junk)."""
+    return text is not None and "<" in text and ">" in text
+
+
 def _looks_unenriched(story: Story) -> bool:
     """A story we likely created from a bare URL without page metadata."""
     missing_meta = (
@@ -91,7 +96,11 @@ def _looks_unenriched(story: Story) -> bool:
         and story.image_url is None
         and story.summary is None
     )
-    return missing_meta or _is_hostlike(story.full_headline, story.article_url)
+    return (
+        missing_meta
+        or _is_hostlike(story.full_headline, story.article_url)
+        or _has_html(story.summary)
+    )
 
 
 async def _story_by_url(session: SessionDep, url: str) -> Story | None:
@@ -157,7 +166,11 @@ async def _ensure_story(
     if target is not None:
         if provided_title or _is_hostlike(target.full_headline, target.article_url):
             target.full_headline = headline
-        if not target.summary and metadata.description:
+        # Replace an empty summary, or one still carrying aggregator HTML (e.g.
+        # a Hacker News "<a ...>Comments</a>" blurb), with the real description.
+        if metadata.description and (
+            not target.summary or _has_html(target.summary)
+        ):
             target.summary = metadata.description
         if not target.image_url and metadata.image_url:
             target.image_url = metadata.image_url

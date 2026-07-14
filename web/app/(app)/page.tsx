@@ -4,7 +4,7 @@ import { useAuth } from "@/components/auth-provider";
 import { PostCard } from "@/components/post-card";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { FeedCard, FeedPayload } from "@/lib/types";
+import type { FeedCard, FeedPayload, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -15,7 +15,16 @@ export default function FeedPage() {
   const { session } = useAuth();
   const isSignedIn: boolean = session !== null;
   const [data, setData] = useState<FeedPayload | null>(null);
+  const [me, setMe] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      setMe(null);
+      return;
+    }
+    void api.getMe().then(setMe).catch(() => undefined);
+  }, [isSignedIn]);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -123,6 +132,7 @@ export default function FeedPage() {
           <PostCard
             key={card.story_id}
             card={card}
+            me={me}
             onCardChange={onCardChange}
           />
         ))}
@@ -144,6 +154,7 @@ export default function FeedPage() {
             <PostCard
               key={card.story_id}
               card={card}
+              me={me}
               onCardChange={onCardChange}
             />
           ))}
