@@ -3,7 +3,8 @@
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { REACTIONS, reactionEmoji, reactionLabel } from "@/lib/reactions";
+import { ReactionIcon, ReactTriggerIcon } from "@/components/reaction-icon";
+import { REACTIONS, reactionLabel } from "@/lib/reactions";
 import type { ReactionKind, UUID } from "@/lib/types";
 import { useState } from "react";
 
@@ -80,14 +81,17 @@ export function ReactionPicker({
       >
         {value ? (
           <>
-            <span className={md || bar ? "text-base" : "text-sm"}>
-              {reactionEmoji(value)}
-            </span>
+            <ReactionIcon
+              kind={value}
+              className={md || bar ? "h-4 w-4" : "h-3.5 w-3.5"}
+            />
             <span>{reactionLabel(value)}</span>
           </>
         ) : (
           <>
-            <span className={md || bar ? "text-base" : "text-sm"}>🙂</span>
+            <ReactTriggerIcon
+              className={md || bar ? "h-4 w-4" : "h-3.5 w-3.5"}
+            />
             <span>React</span>
           </>
         )}
@@ -119,11 +123,11 @@ export function ReactionPicker({
                   e.preventDefault();
                   void pick(r.kind);
                 }}
-                className={`flex h-8 w-8 items-center justify-center text-lg transition hover:scale-125 ${
+                className={`flex h-8 w-8 items-center justify-center text-slate-600 transition hover:scale-125 dark:text-slate-300 ${
                   value === r.kind ? "bg-slate-100 dark:bg-slate-800" : ""
                 }`}
               >
-                {r.emoji}
+                <ReactionIcon kind={r.kind} className="h-5 w-5" />
               </button>
             ))}
           </div>

@@ -1,13 +1,23 @@
-"""Current-user endpoints: profile, preferences, sources, read/star state."""
+"""Current-user endpoints: profile, preferences, sources, read/star/dismiss state."""
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
+from api.routers.events import (
+    _build_source_names_and_leads,
+    _event_to_summary,
+)
 from api.schemas import (
+    DismissMark,
+    EventList,
+    EventSummaryOut,
+    FriendEngagementOut,
     PreferencesUpdate,
     ProfileOut,
     ReactionSet,
@@ -18,7 +28,17 @@ from api.schemas import (
     StoryWithStatus,
     UserSourcesUpdate,
 )
-from core.models import Profile, Source, Story, StoryReaction, StoryStatus, UserSource
+from core.models import (
+    Event,
+    EventStatus,
+    Profile,
+    Source,
+    Story,
+    StoryKind,
+    StoryReaction,
+    StoryStatus,
+    UserSource,
+)
 from core.reactions import REACTION_SET
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -81,19 +101,243 @@ async def set_my_sources(
 async def mark_read(
     payload: ReadMark, session: SessionDep, user: CurrentUser
 ) -> None:
+    read_at = func.now() if payload.read else None
     stmt = (
         pg_insert(StoryStatus)
         .values(
             user_id=user.id,
             story_id=payload.story_id,
             read=payload.read,
+            read_at=read_at,
         )
         .on_conflict_do_update(
             index_elements=[StoryStatus.user_id, StoryStatus.story_id],
-            set_={"read": payload.read, "updated_at": func.now()},
+            set_={
+                "read": payload.read,
+                "read_at": read_at,
+                "updated_at": func.now(),
+            },
         )
     )
     await session.execute(stmt)
+
+
+@router.post("/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_story(
+    payload: DismissMark, session: SessionDep, user: CurrentUser
+) -> None:
+    """Dismiss a story from the inbox (analysis lane)."""
+    stmt = (
+        pg_insert(StoryStatus)
+        .values(
+            user_id=user.id,
+            story_id=payload.story_id,
+            dismissed=True,
+            dismissed_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[StoryStatus.user_id, StoryStatus.story_id],
+            set_={
+                "dismissed": True,
+                "dismissed_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/dismiss/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def undismiss_story(
+    story_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    status_row = await session.get(
+        StoryStatus, {"user_id": user.id, "story_id": story_id}
+    )
+    if status_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not dismissed")
+    status_row.dismissed = False
+    status_row.dismissed_at = None
+
+
+@router.post("/events/{event_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_event_read(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    event = await session.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event not found")
+    stmt = (
+        pg_insert(EventStatus)
+        .values(
+            user_id=user.id,
+            event_id=event_id,
+            read=True,
+            read_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[EventStatus.user_id, EventStatus.event_id],
+            set_={
+                "read": True,
+                "read_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/events/{event_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def unmark_event_read(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    status_row = await session.get(
+        EventStatus, {"user_id": user.id, "event_id": event_id}
+    )
+    if status_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event status not found")
+    status_row.read = False
+    status_row.read_at = None
+
+
+@router.post("/events/{event_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_event(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    event = await session.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event not found")
+    stmt = (
+        pg_insert(EventStatus)
+        .values(
+            user_id=user.id,
+            event_id=event_id,
+            dismissed=True,
+            dismissed_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[EventStatus.user_id, EventStatus.event_id],
+            set_={
+                "dismissed": True,
+                "dismissed_at": func.now(),
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.delete("/events/{event_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def undismiss_event(
+    event_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> None:
+    status_row = await session.get(
+        EventStatus, {"user_id": user.id, "event_id": event_id}
+    )
+    if status_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event status not found")
+    status_row.dismissed = False
+    status_row.dismissed_at = None
+
+
+@router.get("/archived/events", response_model=EventList)
+async def list_archived_events(
+    session: SessionDep,
+    user: CurrentUser,
+    limit: int = Query(default=50, le=100, ge=1),
+) -> EventList:
+    """Handled news events (read or dismissed), most recent action first."""
+    last_action = func.greatest(EventStatus.dismissed_at, EventStatus.read_at)
+    rows = (
+        await session.execute(
+            select(Event, EventStatus.read, EventStatus.dismissed)
+            .join(
+                EventStatus,
+                (EventStatus.event_id == Event.id)
+                & (EventStatus.user_id == user.id),
+            )
+            .where(
+                or_(
+                    EventStatus.dismissed.is_(True),
+                    EventStatus.read.is_(True),
+                )
+            )
+            .order_by(last_action.desc().nulls_last())
+            .limit(limit)
+        )
+    ).all()
+    event_ids = [event.id for event, _read, _dismissed in rows]
+    names_by_event, leads = await _build_source_names_and_leads(
+        session, user.id, event_ids
+    )
+    items: list[EventSummaryOut] = []
+    for event, event_read, event_dismissed in rows:
+        lead = leads.get(event.id)
+        coverage = [lead] if lead is not None else []
+        summary = await _event_to_summary(
+            session,
+            user.id,
+            event,
+            coverage,
+            {},
+            None,
+            None,
+            event_read=bool(event_read),
+            event_dismissed=bool(event_dismissed),
+            source_names=names_by_event.get(event.id, []),
+        )
+        summary.story_count = max(event.outlet_count, len(summary.source_names), 1)
+        summary.outlet_count = event.outlet_count
+        summary.is_scoop = event.outlet_count <= 1
+        items.append(summary)
+    return EventList(items=items, total=len(items))
+
+
+@router.get("/archived/analysis", response_model=StoryList)
+async def list_archived_analysis(
+    session: SessionDep,
+    user: CurrentUser,
+    limit: int = Query(default=50, le=100, ge=1),
+) -> StoryList:
+    """Handled analysis (read or dismissed), most recent action first."""
+    last_action = func.greatest(StoryStatus.dismissed_at, StoryStatus.read_at)
+    rows = (
+        await session.execute(
+            select(
+                Story,
+                StoryStatus.read,
+                StoryStatus.starred,
+                StoryStatus.dismissed,
+                Source,
+            )
+            .join(
+                StoryStatus,
+                (StoryStatus.story_id == Story.id)
+                & (StoryStatus.user_id == user.id),
+            )
+            .outerjoin(Source, Source.id == Story.source_id)
+            .where(
+                or_(
+                    StoryStatus.dismissed.is_(True),
+                    StoryStatus.read.is_(True),
+                ),
+                Story.kind == StoryKind.analysis,
+            )
+            .order_by(last_action.desc().nulls_last())
+            .limit(limit)
+        )
+    ).all()
+    items: list[StoryWithStatus] = []
+    for story, read, starred, dismissed, source in rows:
+        model = StoryWithStatus.model_validate(story)
+        model.read = bool(read)
+        model.starred = bool(starred)
+        model.dismissed = bool(dismissed)
+        model.source_name = source.name if source else None
+        model.source_image_url = source.image_url if source else None
+        model.engagement = FriendEngagementOut()
+        items.append(model)
+    return StoryList(items=items, total=len(items), limit=limit, offset=0)
 
 
 @router.post("/stars", status_code=status.HTTP_204_NO_CONTENT)
@@ -163,7 +407,7 @@ async def list_starred(
     offset: int = Query(default=0, ge=0),
 ) -> StoryList:
     base = (
-        select(Story, StoryStatus.read, StoryStatus.starred)
+        select(Story, StoryStatus.read, StoryStatus.starred, StoryStatus.dismissed)
         .join(StoryStatus, StoryStatus.story_id == Story.id)
         .where(StoryStatus.user_id == user.id, StoryStatus.starred.is_(True))
     )
@@ -176,9 +420,10 @@ async def list_starred(
         await session.execute(base.order_by(Story.created_at.desc()).limit(limit).offset(offset))
     ).all()
     items: list[StoryWithStatus] = []
-    for story, read, starred in rows:
+    for story, read, starred, dismissed in rows:
         model = StoryWithStatus.model_validate(story)
         model.read = bool(read)
         model.starred = bool(starred)
+        model.dismissed = bool(dismissed)
         items.append(model)
     return StoryList(items=items, total=int(total or 0), limit=limit, offset=offset)

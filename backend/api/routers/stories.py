@@ -157,6 +157,52 @@ async def recommended_feed(
     )
 
 
+@router.get("/by-source", response_model=StoryList)
+async def stories_by_source(
+    session: SessionDep,
+    user: CurrentUser,
+    per_source: int = Query(default=6, le=20, ge=1),
+) -> StoryList:
+    """Latest stories grouped per followed source.
+
+    Unlike ``/recommended`` (a single global top-N feed), this returns the most
+    recent ``per_source`` stories for *each* followed source, so the Sources
+    page reflects real per-source freshness instead of only whichever sources
+    happen to dominate the global recency window.
+    """
+    followed = (
+        select(UserSource.source_id).where(UserSource.user_id == user.id).scalar_subquery()
+    )
+    ranked = (
+        select(
+            Story.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=Story.source_id,
+                order_by=Story.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(Story.source_id.in_(followed), Story.archived.is_(False))
+        .subquery()
+    )
+    base = (
+        select(Story)
+        .join(ranked, ranked.c.id == Story.id)
+        .where(ranked.c.rn <= per_source)
+    )
+    stmt = _with_status_columns(base, user.id).order_by(
+        Story.source_id, Story.created_at.desc()
+    )
+    rows = (await session.execute(stmt)).all()
+    return StoryList(
+        items=_rows_to_stories(rows),
+        total=len(rows),
+        limit=per_source,
+        offset=0,
+    )
+
+
 @router.get("/updates", response_model=StoryList)
 async def story_updates(
     session: SessionDep,

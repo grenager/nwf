@@ -1,3 +1,4 @@
+import { ReactionIcon } from "@/components/reaction-icon";
 import { REACTIONS } from "@/lib/reactions";
 import type { FriendEngagement, FriendMini } from "@/lib/types";
 
@@ -5,6 +6,12 @@ interface EngagementSummaryProps {
   engagement: FriendEngagement;
   className?: string;
   scope?: "friends" | "global";
+  /**
+   * "spread" = full-width 3-column grid (detail views).
+   * "inline" = compact left-aligned row that only takes needed width, so it can
+   * share a line with action buttons without colliding.
+   */
+  variant?: "spread" | "inline";
 }
 
 function ReaderAvatars({
@@ -53,6 +60,7 @@ export function EngagementSummary({
   engagement,
   className = "",
   scope = "friends",
+  variant = "spread",
 }: EngagementSummaryProps) {
   const { read, commented, reactions, readers } = engagement;
   const reactionEntries = REACTIONS.map((meta) => ({
@@ -67,6 +75,42 @@ export function EngagementSummary({
   const total: number = read + commented + reactionTotal;
   const emptyLabel: string =
     scope === "global" ? "No activity yet" : "No friend activity yet";
+
+  if (variant === "inline") {
+    if (total === 0) {
+      return (
+        <p
+          className={`truncate text-[11px] text-zinc-400 dark:text-zinc-500 ${className}`}
+        >
+          {emptyLabel}
+        </p>
+      );
+    }
+    return (
+      <div
+        className={`flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400 ${className}`}
+      >
+        {read > 0 ? (
+          scope === "global" ? (
+            <span>{read} read</span>
+          ) : (
+            <ReaderAvatars readers={readers} read={read} />
+          )
+        ) : null}
+        {reactionEntries.map((r) => (
+          <span key={r.kind} className="flex items-center gap-0.5" title={r.label}>
+            <ReactionIcon kind={r.kind} className="h-3.5 w-3.5" />
+            <span>{r.count}</span>
+          </span>
+        ))}
+        {commented > 0 ? (
+          <span>
+            {commented} {commented === 1 ? "comment" : "comments"}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   if (total === 0) {
     return (
@@ -99,7 +143,7 @@ export function EngagementSummary({
         ) : (
           reactionEntries.map((r) => (
             <span key={r.kind} className="flex items-center gap-0.5" title={r.label}>
-              <span className="text-sm leading-none">{r.emoji}</span>
+              <ReactionIcon kind={r.kind} className="h-3.5 w-3.5" />
               <span>{r.count}</span>
             </span>
           ))

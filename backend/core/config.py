@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:54322/postgres"
     )
-    db_pool_size: int = Field(default=5)
-    db_max_overflow: int = Field(default=10)
+    db_pool_size: int = Field(default=10)
+    db_max_overflow: int = Field(default=20)
     db_echo: bool = Field(default=False)
 
     # --- Supabase auth (JWT verification) --------------------------------
@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default=["http://localhost:3000"])
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
+    api_reload: bool = Field(
+        default=True,
+        description="Auto-reload uvicorn on source changes. Set false in prod.",
+    )
 
     # Shared secret guarding internal/admin scrape endpoints.
     admin_api_secret: str | None = Field(default=None)
@@ -58,6 +62,16 @@ class Settings(BaseSettings):
     event_active_hours: int = Field(
         default=48,
         description="Only match stories against events seen within this window",
+    )
+
+    # --- Inbox ------------------------------------------------------------
+    inbox_candidate_days: int = Field(
+        default=7,
+        description="How far back to look for inbox candidates (events + analysis)",
+    )
+    event_min_outlets: int = Field(
+        default=3,
+        description="Minimum distinct outlets for an event to enter the news inbox",
     )
 
     # --- Logging ----------------------------------------------------------

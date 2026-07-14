@@ -2,7 +2,8 @@
 
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { reactionEmoji, reactionLabel } from "@/lib/reactions";
+import { ReactionIcon } from "@/components/reaction-icon";
+import { reactionLabel } from "@/lib/reactions";
 import { relativeTime } from "@/lib/time";
 import type {
   FriendActivityItem,
@@ -25,10 +26,28 @@ interface EditForm {
   image_url: string;
 }
 
-function kindLabel(kind: FriendActivityItem["kind"]): string {
-  if (kind === "read") return "Read";
-  if (kind === "commented") return "Commented on";
-  return `${reactionEmoji(kind as ReactionKind)} ${reactionLabel(kind as ReactionKind)}`;
+const REACTION_KINDS: ReadonlySet<string> = new Set<ReactionKind>([
+  "thumbsup",
+  "heart",
+  "laugh",
+  "wow",
+  "sad",
+  "angry",
+]);
+
+function KindLabel({ kind }: { kind: FriendActivityItem["kind"] }) {
+  if (kind === "read") return <>Read</>;
+  if (kind === "commented") return <>Commented on</>;
+  if (REACTION_KINDS.has(kind)) {
+    const reactionKind = kind as ReactionKind;
+    return (
+      <span className="inline-flex items-center gap-1">
+        <ReactionIcon kind={reactionKind} className="h-3.5 w-3.5" />
+        {reactionLabel(reactionKind)}
+      </span>
+    );
+  }
+  return <>{kind}</>;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -251,7 +270,7 @@ export function FriendProfileModal({
                     <li key={`${item.story_id}-${item.kind}-${idx}`} className="py-3">
                       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-400">
                         <span className="font-semibold">
-                          {kindLabel(item.kind)}
+                          <KindLabel kind={item.kind} />
                         </span>
                         {item.source_name ? <span>· {item.source_name}</span> : null}
                         <span className="ml-auto normal-case tracking-normal">
@@ -262,7 +281,7 @@ export function FriendProfileModal({
                         href={item.article_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 block text-sm font-semibold leading-snug text-slate-900 hover:text-brand-600 dark:text-slate-100"
+                        className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:text-brand-600 dark:text-slate-100"
                       >
                         {item.headline}
                       </a>

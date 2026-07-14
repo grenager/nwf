@@ -74,6 +74,9 @@ class Profile(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dense_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dark_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -191,6 +194,7 @@ class Event(Base):
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    outlet_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     saga_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -236,8 +240,46 @@ class StoryStatus(Base):
         primary_key=True,
     )
     read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     starred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class EventStatus(Base):
+    """Per-user read/dismiss state for a news event cluster."""
+
+    __tablename__ = "event_statuses"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

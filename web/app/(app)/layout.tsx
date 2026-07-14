@@ -6,14 +6,12 @@ import type { ReactNode } from "react";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen">
+    <div className="flex h-screen flex-col overflow-hidden bg-white dark:bg-zinc-950">
       <Nav />
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-        <main className="min-w-0 flex-1">{children}</main>
-        <aside className="hidden w-72 shrink-0 lg:block">
-          <div className="sticky top-20">
-            <FriendsSidebar />
-          </div>
+      <div className="mx-auto flex w-full min-h-0 max-w-7xl flex-1 gap-0 px-4 py-6 lg:px-8">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
+        <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-zinc-200 pl-8 lg:block dark:border-zinc-800">
+          <FriendsSidebar />
         </aside>
       </div>
     </div>

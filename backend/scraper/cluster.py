@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select, text
@@ -46,6 +47,33 @@ async def _find_best_event(
     return uuid.UUID(str(row[0])), float(row[1])
 
 
+async def count_distinct_outlets(session: AsyncSession, event_id: uuid.UUID) -> int:
+    result = await session.scalar(
+        select(func.count(func.distinct(Story.source_id)))
+        .select_from(StoryEvent)
+        .join(Story, Story.id == StoryEvent.story_id)
+        .where(StoryEvent.event_id == event_id, Story.source_id.is_not(None))
+    )
+    return int(result or 0)
+
+
+async def _recompute_outlet_count(session: AsyncSession, event_id: uuid.UUID) -> int:
+    """Persist distinct-outlet breadth on the event row."""
+    n: int = await count_distinct_outlets(session, event_id)
+    await session.execute(
+        text(
+            """
+            update public.events
+            set outlet_count = :n,
+                updated_at = now()
+            where id = :event_id
+            """
+        ),
+        {"n": max(n, 1), "event_id": str(event_id)},
+    )
+    return max(n, 1)
+
+
 async def _recompute_centroid(session: AsyncSession, event_id: uuid.UUID) -> None:
     """Set event centroid to the mean of member story embeddings."""
     await session.execute(
@@ -69,12 +97,75 @@ async def _recompute_centroid(session: AsyncSession, event_id: uuid.UUID) -> Non
     )
 
 
+async def recompute_events(
+    session: AsyncSession, event_ids: Iterable[uuid.UUID]
+) -> None:
+    """Recompute centroids and outlet counts for many events in two queries.
+
+    Batched alternative to calling ``_recompute_centroid`` /
+    ``_recompute_outlet_count`` per story: each event is updated once no matter
+    how many stories joined it during a batch, which avoids repeatedly rewriting
+    its HNSW vector-index entry.
+    """
+    ids: list[uuid.UUID] = list(dict.fromkeys(event_ids))
+    if not ids:
+        return
+    await session.execute(
+        text(
+            """
+            update public.events e
+            set centroid = sub.avg_vec,
+                updated_at = now()
+            from (
+                select se.event_id,
+                       avg(s.embedding)::extensions.vector(1536) as avg_vec
+                from public.story_events se
+                join public.stories s on s.id = se.story_id
+                where se.event_id = any(:ids)
+                  and s.embedding is not null
+                group by se.event_id
+            ) sub
+            where e.id = sub.event_id
+              and sub.avg_vec is not null
+            """
+        ),
+        {"ids": ids},
+    )
+    await session.execute(
+        text(
+            """
+            update public.events e
+            set outlet_count = sub.n,
+                updated_at = now()
+            from (
+                select se.event_id,
+                       greatest(count(distinct s.source_id), 1)::int as n
+                from public.story_events se
+                join public.stories s on s.id = se.story_id
+                where se.event_id = any(:ids)
+                  and s.source_id is not null
+                group by se.event_id
+            ) sub
+            where e.id = sub.event_id
+            """
+        ),
+        {"ids": ids},
+    )
+
+
 async def assign_story_to_event(
     session: AsyncSession,
     story: Story,
     embedding: list[float],
+    *,
+    recompute: bool = True,
 ) -> uuid.UUID | None:
-    """Cluster a news story into an event. Returns event id or None if skipped."""
+    """Cluster a news story into an event. Returns event id or None if skipped.
+
+    When ``recompute`` is False the caller is responsible for refreshing the
+    event's centroid/outlet_count later (e.g. via :func:`recompute_events`),
+    which lets batch ingestion update each event once instead of per story.
+    """
     if story.kind != StoryKind.news:
         return None
 
@@ -96,6 +187,7 @@ async def assign_story_to_event(
             centroid=embedding,
             origin_story_id=story.id,
             first_seen_at=story.created_at or datetime.now(UTC),
+            outlet_count=1,
         )
         session.add(event)
         await session.flush()
@@ -117,15 +209,7 @@ async def assign_story_to_event(
 
     session.add(StoryEvent(story_id=story.id, event_id=event_id))
     await session.flush()
-    await _recompute_centroid(session, event_id)
+    if recompute:
+        await _recompute_centroid(session, event_id)
+        await _recompute_outlet_count(session, event_id)
     return event_id
-
-
-async def count_distinct_outlets(session: AsyncSession, event_id: uuid.UUID) -> int:
-    result = await session.scalar(
-        select(func.count(func.distinct(Story.source_id)))
-        .select_from(StoryEvent)
-        .join(Story, Story.id == StoryEvent.story_id)
-        .where(StoryEvent.event_id == event_id, Story.source_id.is_not(None))
-    )
-    return int(result or 0)

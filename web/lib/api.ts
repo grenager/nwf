@@ -93,6 +93,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ story_id: storyId, read }),
     }),
+  dismissStory: (storyId: UUID): Promise<void> =>
+    request<void>("/me/dismiss", {
+      method: "POST",
+      body: JSON.stringify({ story_id: storyId }),
+    }),
+  undismissStory: (storyId: UUID): Promise<void> =>
+    request<void>(`/me/dismiss/${storyId}`, { method: "DELETE" }),
+  markEventRead: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/read`, { method: "POST" }),
+  unmarkEventRead: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/read`, { method: "DELETE" }),
+  dismissEvent: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/dismiss`, { method: "POST" }),
+  undismissEvent: (eventId: UUID): Promise<void> =>
+    request<void>(`/me/events/${eventId}/dismiss`, { method: "DELETE" }),
+  getArchivedEvents: (limit = 50): Promise<{ items: EventSummary[]; total: number }> =>
+    request<{ items: EventSummary[]; total: number }>(
+      `/me/archived/events?limit=${limit}`,
+    ),
+  getArchivedAnalysis: (limit = 50): Promise<StoryList> =>
+    request<StoryList>(`/me/archived/analysis?limit=${limit}`),
   addStar: (storyId: UUID): Promise<void> =>
     request<void>("/me/stars", {
       method: "POST",
@@ -136,6 +157,8 @@ export const api = {
   // --- stories ---
   getRecommended: (): Promise<StoryList> =>
     request<StoryList>("/stories/recommended"),
+  getStoriesBySource: (perSource = 6): Promise<StoryList> =>
+    request<StoryList>(`/stories/by-source?per_source=${perSource}`),
   searchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
   titleSearchStories: (q: string): Promise<StoryList> =>

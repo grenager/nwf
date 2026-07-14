@@ -52,7 +52,7 @@ function FriendRow({
     <button
       type="button"
       onClick={() => onOpen(friend.user_id)}
-      className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800"
+      className="flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-900"
     >
       <FriendAvatar friend={friend} />
       <div className="min-w-0 flex-1">
@@ -80,21 +80,22 @@ function FriendRow({
 
 function GuestFriendsCta() {
   return (
-    <div className="border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+    <div className="py-1">
+      <h2 className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
         Friends
       </h2>
-      <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+      <div className="mt-2 border-b-2 border-zinc-900 dark:border-zinc-100" />
+      <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
         See what your friends are reading and compare coverage across outlets.
       </p>
-      <p className="mt-2 text-xs text-slate-400">
+      <p className="mt-2 text-xs text-zinc-400">
         Your friends list is empty until you sign up.
       </p>
       <Link
         href="/signin"
-        className="mt-4 block w-full bg-brand-600 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-brand-700"
+        className="mt-4 inline-block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
       >
-        Create free account to add friends
+        Create free account
       </Link>
     </div>
   );
@@ -173,20 +174,20 @@ export function FriendsSidebar() {
   }
 
   return (
-    <div className="border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 dark:border-slate-800">
+    <div>
+      <div className="flex items-end justify-between gap-3 border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+          <h2 className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             Friends
           </h2>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
             {online > 0 ? `${online} online · ` : ""}
             {total} total
           </p>
         </div>
         <button
           onClick={startInvite}
-          className="bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+          className="pb-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
         >
           {inviting ? "Cancel" : "Invite"}
         </button>
@@ -195,7 +196,7 @@ export function FriendsSidebar() {
       {inviting ? (
         <form
           onSubmit={sendInvite}
-          className="border-b border-slate-200 p-3 dark:border-slate-800"
+          className="border-b border-zinc-200 py-3 dark:border-zinc-800"
         >
           <input
             type="email"
@@ -203,12 +204,12 @@ export function FriendsSidebar() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="friend@email.com"
             autoFocus
-            className="w-full border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="w-full border-b border-zinc-300 bg-transparent px-0 py-1.5 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-100"
           />
           <button
             type="submit"
             disabled={sending || email.trim().length === 0}
-            className="mt-2 w-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+            className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 disabled:opacity-40 dark:text-zinc-100"
           >
             {sending ? "Sending…" : "Send invite"}
           </button>
@@ -216,13 +217,13 @@ export function FriendsSidebar() {
       ) : null}
 
       {loading ? (
-        <p className="px-3 py-4 text-sm text-slate-400">Loading…</p>
+        <p className="py-4 text-sm text-zinc-400">Loading…</p>
       ) : friends.length === 0 ? (
-        <p className="px-3 py-4 text-sm text-slate-400">
+        <p className="py-4 text-sm text-zinc-400">
           No friends yet. Invite someone by email to compare coverage.
         </p>
       ) : (
-        <div className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+        <div className="max-h-[70vh] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
           {friends.map((friend) => (
             <FriendRow key={friend.user_id} friend={friend} onOpen={setOpenId} />
           ))}
