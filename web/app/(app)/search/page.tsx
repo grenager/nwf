@@ -4,7 +4,7 @@ import { StoryCard } from "@/components/story-card";
 import { StoryModal } from "@/components/story-modal";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { ReactionKind, Story, UUID } from "@/lib/types";
+import type { Story, UUID } from "@/lib/types";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -74,10 +74,7 @@ function SearchInner() {
   }
 
   const patchStatus = useCallback(
-    (
-      storyId: UUID,
-      patch: { read?: boolean; my_reaction?: ReactionKind | null },
-    ): void => {
+    (storyId: UUID, patch: { read?: boolean }): void => {
       setResults((prev) =>
         prev.map((s) => (s.id === storyId ? { ...s, ...patch } : s)),
       );

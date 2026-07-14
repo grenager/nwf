@@ -21,7 +21,6 @@ from api.friends import (
     friend_profiles_map,
     friend_ratings_by_story,
     my_ratings_by_story,
-    my_reactions_by_story,
     post_participant_ids,
     top_readers,
 )
@@ -261,7 +260,6 @@ async def serialize_post(
     read = False
     starred = False
     my_take: str | None = None
-    my_reaction: str | None = None
     my_rating: int | None = None
     friend_rating_avg: float | None = None
     friend_rating_count = 0
@@ -277,8 +275,6 @@ async def serialize_post(
             read = bool(status_row.read)
             starred = bool(status_row.starred)
             my_take = status_row.take
-        reactions = await my_reactions_by_story(session, viewer_id, [story.id])
-        my_reaction = reactions.get(story.id)
         friends = (
             friend_ids
             if friend_ids is not None
@@ -297,9 +293,7 @@ async def serialize_post(
         activity = await friend_activity_by_story(
             session, viewer_id, [story.id], friend_ids=friends
         )
-        read_ids, commented_n, reaction_counts = aggregate_engagement(
-            activity, [story.id]
-        )
+        read_ids, commented_n = aggregate_engagement(activity, [story.id])
         profiles = await friend_profiles_map(
             session, viewer_id, friend_ids=friends
         )
@@ -312,7 +306,6 @@ async def serialize_post(
         engagement = FriendEngagementOut(
             read=len(read_ids),
             commented=commented_n,
-            reactions=reaction_counts,
             readers=readers,
         )
         # Unread replies: any reply after the viewer's last_opened on this post
@@ -346,7 +339,6 @@ async def serialize_post(
         attachments=attachment_outs,
         read=read,
         starred=starred,
-        my_reaction=my_reaction,
         my_rating=my_rating,
         friend_rating_avg=friend_rating_avg,
         friend_rating_count=friend_rating_count,

@@ -15,7 +15,6 @@ import type {
   PreferencesUpdate,
   Profile,
   ProfileEdit,
-  ReactionKind,
   Source,
   SourceInput,
   SourceStatus,
@@ -112,13 +111,6 @@ export const api = {
   removeStar: (storyId: UUID): Promise<void> =>
     request<void>(`/me/stars/${storyId}`, { method: "DELETE" }),
   getStarred: (): Promise<StoryList> => request<StoryList>("/me/starred"),
-  setReaction: (storyId: UUID, reaction: ReactionKind): Promise<void> =>
-    request<void>("/me/reactions", {
-      method: "PUT",
-      body: JSON.stringify({ story_id: storyId, reaction }),
-    }),
-  clearReaction: (storyId: UUID): Promise<void> =>
-    request<void>(`/me/reactions/${storyId}`, { method: "DELETE" }),
   setRating: (storyId: UUID, rating: number): Promise<void> =>
     request<void>("/me/ratings", {
       method: "PUT",

@@ -1,6 +1,5 @@
 -- Per-user 1-5 star rating on a story; the single feed engagement signal.
--- Shown on the card as a friend-average. Replaces star/emoji reactions in the
--- unified feed (the reactions table remains for other surfaces).
+-- Shown on the card as a friend-average. Replaces star/emoji reactions.
 
 create table public.story_ratings (
     user_id uuid not null references public.profiles (id) on delete cascade,

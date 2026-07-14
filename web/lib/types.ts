@@ -48,14 +48,6 @@ export interface FriendStar {
   display_name: string;
 }
 
-export type ReactionKind =
-  | "thumbsup"
-  | "heart"
-  | "laugh"
-  | "wow"
-  | "sad"
-  | "angry";
-
 export interface FriendMini {
   user_id: UUID;
   display_name: string;
@@ -65,7 +57,6 @@ export interface FriendMini {
 export interface FriendEngagement {
   read: number;
   commented: number;
-  reactions: Partial<Record<ReactionKind, number>>;
   readers: FriendMini[];
 }
 
@@ -90,7 +81,6 @@ export interface Story {
   read: boolean;
   starred: boolean;
   dismissed: boolean;
-  my_reaction: ReactionKind | null;
   friend_stars?: FriendStar[];
   engagement: FriendEngagement;
 }
@@ -168,7 +158,6 @@ export interface Post {
   attachments: Attachment[];
   read: boolean;
   starred: boolean;
-  my_reaction: ReactionKind | null;
   my_rating: number | null;
   friend_rating_avg: number | null;
   friend_rating_count: number;
@@ -189,7 +178,6 @@ export interface FeedCard {
   kind: StoryKind;
   read: boolean;
   starred: boolean;
-  my_reaction: ReactionKind | null;
   my_rating: number | null;
   friend_rating_avg: number | null;
   friend_rating_count: number;
@@ -234,7 +222,7 @@ export interface FriendsOverview {
   online: number;
 }
 
-export type FriendActivityKind = "read" | "commented" | ReactionKind;
+export type FriendActivityKind = "read" | "commented";
 
 export interface FriendActivityItem {
   kind: FriendActivityKind;
@@ -255,7 +243,6 @@ export interface FriendProfile {
   online: boolean;
   last_active_at: string | null;
   reads: number;
-  hearts: number;
   comments: number;
   can_edit: boolean;
   recent: FriendActivityItem[];

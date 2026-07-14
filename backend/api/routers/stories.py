@@ -20,7 +20,6 @@ from api.friends import (
     friend_profiles_map,
     friend_stars_by_story,
     global_activity_by_story,
-    my_reactions_by_story,
     top_readers,
 )
 from api.schemas import (
@@ -65,7 +64,6 @@ def _with_status_columns(
 def _rows_to_stories(
     rows: list[Any],
     friend_map: dict[uuid.UUID, list[FriendStarOut]] | None = None,
-    my_reactions: dict[uuid.UUID, str] | None = None,
 ) -> list[StoryWithStatus]:
     items: list[StoryWithStatus] = []
     for story, read, starred in rows:
@@ -74,8 +72,6 @@ def _rows_to_stories(
         model.starred = bool(starred)
         if friend_map is not None:
             model.friend_stars = friend_map.get(story.id, [])
-        if my_reactions is not None:
-            model.my_reaction = my_reactions.get(story.id)
         items.append(model)
     return items
 
@@ -110,9 +106,8 @@ async def search_stories(
         sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
         for sid, profiles in friend_profiles.items()
     }
-    my_reactions = await my_reactions_by_story(session, user.id, story_ids)
     return StoryList(
-        items=_rows_to_stories(rows, friend_map, my_reactions),
+        items=_rows_to_stories(rows, friend_map),
         total=int(total or 0),
         limit=limit,
         offset=offset,
@@ -148,9 +143,8 @@ async def recommended_feed(
         sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
         for sid, profiles in friend_profiles.items()
     }
-    my_reactions = await my_reactions_by_story(session, user.id, story_ids)
     return StoryList(
-        items=_rows_to_stories(rows, friend_map, my_reactions),
+        items=_rows_to_stories(rows, friend_map),
         total=int(total or 0),
         limit=limit,
         offset=offset,
@@ -276,8 +270,7 @@ async def title_search(
         sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
         for sid, profiles in friend_profiles.items()
     }
-    my_reactions = await my_reactions_by_story(session, user.id, story_ids)
-    items = _rows_to_stories(ranked_rows, friend_map, my_reactions)
+    items = _rows_to_stories(ranked_rows, friend_map)
 
     source_ids = {story.source_id for story, _, _ in ranked_rows if story.source_id}
     if source_ids:
@@ -357,17 +350,15 @@ async def get_story(
         model = StoryWithStatus.model_validate(story)
         model.read = False
         model.starred = False
-        model.my_reaction = None
         model.friend_stars = []
         model.source_name = source.name if source else None
         model.source_image_url = source.image_url if source else None
 
         activity = await global_activity_by_story(session, [story.id])
-        read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
+        read_ids, commented_n = aggregate_engagement(activity, [story.id])
         model.engagement = FriendEngagementOut(
             read=len(read_ids),
             commented=commented_n,
-            reactions=reactions,
             readers=[],
         )
         return model
@@ -388,20 +379,17 @@ async def get_story(
     model.source_name = source.name if source else None
     model.source_image_url = source.image_url if source else None
 
-    my_reactions = await my_reactions_by_story(session, user.id, [story.id])
-    model.my_reaction = my_reactions.get(story.id)
     friend_profiles = await friend_stars_by_story(session, user.id, [story.id])
     model.friend_stars = [
         FriendStarOut(user_id=p.id, display_name=display_name(p))
         for p in friend_profiles.get(story.id, [])
     ]
     activity = await friend_activity_by_story(session, user.id, [story.id])
-    read_ids, commented_n, reactions = aggregate_engagement(activity, [story.id])
+    read_ids, commented_n = aggregate_engagement(activity, [story.id])
     profiles = await friend_profiles_map(session, user.id)
     model.engagement = FriendEngagementOut(
         read=len(read_ids),
         commented=commented_n,
-        reactions=reactions,
         readers=[
             FriendMiniOut(
                 user_id=p.id, display_name=display_name(p), image_url=p.image_url

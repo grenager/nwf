@@ -20,7 +20,6 @@ from core.models import (
     Profile,
     Source,
     StoryRating,
-    StoryReaction,
     StoryStatus,
 )
 
@@ -29,12 +28,10 @@ CURATED_SOURCE_LIMIT: int = 40
 
 @dataclass
 class StoryActivity:
-    """Sets of friend user-ids who read/reacted/commented on a single story."""
+    """Sets of friend user-ids who read/commented on a single story."""
 
     read: set[uuid.UUID] = field(default_factory=set)
     commented: set[uuid.UUID] = field(default_factory=set)
-    # reaction type -> set of friend ids who used that reaction
-    reactions: dict[str, set[uuid.UUID]] = field(default_factory=dict)
 
 
 def curated_source_subquery(limit: int = CURATED_SOURCE_LIMIT) -> Any:
@@ -51,7 +48,7 @@ async def global_activity_by_story(
     session: AsyncSession,
     story_ids: list[uuid.UUID],
 ) -> dict[uuid.UUID, StoryActivity]:
-    """Map story_id -> global read/reaction/comment activity (all users)."""
+    """Map story_id -> global read/comment activity (all users)."""
     if not story_ids:
         return {}
 
@@ -69,19 +66,6 @@ async def global_activity_by_story(
         entry = activity.setdefault(story_id, StoryActivity())
         if read:
             entry.read.add(user_id)
-
-    reaction_rows = (
-        await session.execute(
-            select(
-                StoryReaction.story_id,
-                StoryReaction.user_id,
-                StoryReaction.reaction,
-            ).where(StoryReaction.story_id.in_(story_ids))
-        )
-    ).all()
-    for story_id, user_id, reaction in reaction_rows:
-        entry = activity.setdefault(story_id, StoryActivity())
-        entry.reactions.setdefault(reaction, set()).add(user_id)
 
     comment_rows = (
         await session.execute(
@@ -120,7 +104,7 @@ async def friend_stars_by_story(
     *,
     friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, list[Profile]]:
-    """Map story_id -> profiles of friends who reacted to it (any reaction)."""
+    """Map story_id -> profiles of friends who rated it."""
     if not story_ids:
         return {}
 
@@ -134,11 +118,11 @@ async def friend_stars_by_story(
 
     rows = (
         await session.execute(
-            select(StoryReaction.story_id, Profile)
-            .join(Profile, Profile.id == StoryReaction.user_id)
+            select(StoryRating.story_id, Profile)
+            .join(Profile, Profile.id == StoryRating.user_id)
             .where(
-                StoryReaction.story_id.in_(story_ids),
-                StoryReaction.user_id.in_(friends),
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id.in_(friends),
             )
         )
     ).all()
@@ -147,25 +131,6 @@ async def friend_stars_by_story(
     for story_id, profile in rows:
         result.setdefault(story_id, []).append(profile)
     return result
-
-
-async def my_reactions_by_story(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    story_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, str]:
-    """Map story_id -> the current user's own reaction (if any)."""
-    if not story_ids:
-        return {}
-    rows = (
-        await session.execute(
-            select(StoryReaction.story_id, StoryReaction.reaction).where(
-                StoryReaction.story_id.in_(story_ids),
-                StoryReaction.user_id == user_id,
-            )
-        )
-    ).all()
-    return {story_id: reaction for story_id, reaction in rows}
 
 
 async def my_ratings_by_story(
@@ -228,7 +193,7 @@ async def friend_activity_by_story(
     *,
     friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, StoryActivity]:
-    """Map story_id -> which friends read/hearted/commented on it.
+    """Map story_id -> which friends read/commented on it.
 
     Only accepted connections (friends) are counted; the current user is
     excluded so counts reflect *friends'* engagement.
@@ -261,22 +226,6 @@ async def friend_activity_by_story(
         if read:
             entry.read.add(friend_id)
 
-    reaction_rows = (
-        await session.execute(
-            select(
-                StoryReaction.story_id,
-                StoryReaction.user_id,
-                StoryReaction.reaction,
-            ).where(
-                StoryReaction.story_id.in_(story_ids),
-                StoryReaction.user_id.in_(friends),
-            )
-        )
-    ).all()
-    for story_id, friend_id, reaction in reaction_rows:
-        entry = activity.setdefault(story_id, StoryActivity())
-        entry.reactions.setdefault(reaction, set()).add(friend_id)
-
     comment_rows = (
         await session.execute(
             select(Comment.story_id, Comment.user_id).where(
@@ -294,23 +243,17 @@ async def friend_activity_by_story(
 def aggregate_engagement(
     activity: dict[uuid.UUID, StoryActivity],
     story_ids: Iterable[uuid.UUID],
-) -> tuple[set[uuid.UUID], int, dict[str, int]]:
-    """Distinct friend readers, comment count, and per-reaction counts."""
+) -> tuple[set[uuid.UUID], int]:
+    """Distinct friend readers and comment count across the given stories."""
     read: set[uuid.UUID] = set()
     commented: set[uuid.UUID] = set()
-    reactions: dict[str, set[uuid.UUID]] = {}
     for sid in story_ids:
         entry = activity.get(sid)
         if entry is None:
             continue
         read |= entry.read
         commented |= entry.commented
-        for kind, friend_ids in entry.reactions.items():
-            reactions.setdefault(kind, set()).update(friend_ids)
-    reaction_counts: dict[str, int] = {
-        kind: len(ids) for kind, ids in reactions.items() if ids
-    }
-    return read, len(commented), reaction_counts
+    return read, len(commented)
 
 
 async def friend_profiles_map(

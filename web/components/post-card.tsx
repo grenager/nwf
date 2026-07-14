@@ -372,9 +372,7 @@ export function PostCard({ card, onCardChange }: PostCardProps) {
 
   const engagement = card.engagement;
   const hasEngagement: boolean =
-    engagement.read > 0 ||
-    engagement.commented > 0 ||
-    Object.values(engagement.reactions).some((n) => n > 0);
+    engagement.read > 0 || engagement.commented > 0;
 
   function markReadOnOpen(): void {
     if (!user || card.read) return;

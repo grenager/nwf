@@ -2,7 +2,7 @@
 
 Creates auth.users rows (the on_auth_user_created trigger backfills profiles),
 sets profile names/phones, connects the current account to a handful of
-friends, and gives those friends realistic reads / hearts / comments so the
+friends, and gives those friends realistic reads / comments so the
 Today engagement summaries and Friends sidebar can be tested end-to-end.
 
 Idempotent: re-running clears the seeded friends' activity first and upserts
@@ -62,8 +62,6 @@ FRIENDS_RECENCY: dict[str, int] = {
     "jhneely@mac.com": 1200,                     # John Neely — ~20h ago
     "jaspergrenager@gmail.com": 4320,            # Jasper — ~3d ago
 }
-
-REACTION_KINDS: list[str] = ["thumbsup", "heart", "laugh", "wow", "sad", "angry"]
 
 COMMENT_TEXTS: list[str] = [
     "This is a big deal — curious how it plays out.",
@@ -167,13 +165,9 @@ async def main() -> None:
             text("delete from public.story_statuses where user_id = any(:ids)"),
             {"ids": friend_ids},
         )
-        await conn.execute(
-            text("delete from public.story_reactions where user_id = any(:ids)"),
-            {"ids": friend_ids},
-        )
 
         # Connect me to each friend (accepted).
-        for fid in friend_ids:
+        for connect_id in friend_ids:
             await conn.execute(
                 text(
                     """
@@ -182,7 +176,7 @@ async def main() -> None:
                     on conflict (first_id, second_id) do update set status = 'accepted'
                     """
                 ),
-                {"me": ME_ID, "fid": fid},
+                {"me": ME_ID, "fid": connect_id},
             )
         print(f"connected {len(friend_ids)} friends")
 
@@ -220,7 +214,7 @@ async def main() -> None:
             raise SystemExit("no news stories to seed activity against")
 
         now = datetime.now(UTC)
-        total_reads = total_reactions = total_comments = 0
+        total_reads = total_comments = 0
 
         for email, minutes in FRIENDS_RECENCY.items():
             fid = email_to_id.get(email)
@@ -259,26 +253,6 @@ async def main() -> None:
                 )
             total_reads += len(statuses)
 
-            # React to a spread of them with varied reaction types.
-            reacted = rng.sample(list(statuses), k=min(6, len(statuses)))
-            for sid in reacted:
-                kind = rng.choice(REACTION_KINDS)
-                rts = statuses[sid]
-                await conn.execute(
-                    text(
-                        """
-                        insert into public.story_reactions
-                            (user_id, story_id, reaction, created_at, updated_at)
-                        values (:uid, :sid, :reaction, :ts, :ts)
-                        on conflict (user_id, story_id) do update
-                            set reaction = excluded.reaction,
-                                updated_at = excluded.updated_at
-                        """
-                    ),
-                    {"uid": fid, "sid": sid, "reaction": kind, "ts": rts},
-                )
-            total_reactions += len(reacted)
-
             # A couple of comments, slightly before their latest activity.
             for _ in range(rng.randint(2, 4)):
                 sid = rng.choice(news_ids)
@@ -301,7 +275,7 @@ async def main() -> None:
                 total_comments += 1
 
         print(
-            f"seeded activity: {total_reads} reads, {total_reactions} reactions, "
+            f"seeded activity: {total_reads} reads, "
             f"{total_comments} comments across {len(friend_ids)} friends"
         )
 

@@ -14,7 +14,6 @@ from api.schemas import (
     PreferencesUpdate,
     ProfileOut,
     RatingSet,
-    ReactionSet,
     ReadMark,
     SourceOut,
     StarMark,
@@ -28,11 +27,9 @@ from core.models import (
     Source,
     Story,
     StoryRating,
-    StoryReaction,
     StoryStatus,
     UserSource,
 )
-from core.reactions import REACTION_SET
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -193,40 +190,6 @@ async def add_star(
         )
     )
     await session.execute(stmt)
-
-
-@router.put("/reactions", status_code=status.HTTP_204_NO_CONTENT)
-async def set_reaction(
-    payload: ReactionSet, session: SessionDep, user: CurrentUser
-) -> None:
-    """Set (or change) the current user's single reaction on a story."""
-    if payload.reaction not in REACTION_SET:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid reaction")
-    stmt = (
-        pg_insert(StoryReaction)
-        .values(
-            user_id=user.id,
-            story_id=payload.story_id,
-            reaction=payload.reaction,
-        )
-        .on_conflict_do_update(
-            index_elements=[StoryReaction.user_id, StoryReaction.story_id],
-            set_={"reaction": payload.reaction, "updated_at": func.now()},
-        )
-    )
-    await session.execute(stmt)
-
-
-@router.delete("/reactions/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_reaction(
-    story_id: str, session: SessionDep, user: CurrentUser
-) -> None:
-    await session.execute(
-        delete(StoryReaction).where(
-            StoryReaction.user_id == user.id,
-            StoryReaction.story_id == story_id,
-        )
-    )
 
 
 @router.put("/ratings", status_code=status.HTTP_204_NO_CONTENT)

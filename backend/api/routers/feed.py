@@ -19,7 +19,6 @@ from api.friends import (
     friend_profiles_map,
     friend_ratings_by_story,
     my_ratings_by_story,
-    my_reactions_by_story,
     post_participant_ids,
     top_readers,
     visible_post_ids_for_viewer,
@@ -157,9 +156,8 @@ async def get_feed(
             ).all()
         }
 
-    # Viewer log state + reactions
+    # Viewer log state + ratings
     status_by_story: dict[uuid.UUID, StoryStatus] = {}
-    my_reactions: dict[uuid.UUID, str] = {}
     my_ratings: dict[uuid.UUID, int] = {}
     friend_ratings: dict[uuid.UUID, tuple[float, int]] = {}
     activity: dict[uuid.UUID, StoryActivity] = {}
@@ -174,7 +172,6 @@ async def get_feed(
             )
         ).all()
         status_by_story = {r.story_id: r for r in status_rows}
-        my_reactions = await my_reactions_by_story(session, viewer_id, story_ids)
         my_ratings = await my_ratings_by_story(session, viewer_id, story_ids)
         friend_ratings = await friend_ratings_by_story(
             session, viewer_id, story_ids, friend_ids=friends
@@ -276,13 +273,10 @@ async def get_feed(
 
         engagement = FriendEngagementOut()
         if viewer_id is not None:
-            read_ids, commented_n, reactions = aggregate_engagement(
-                activity, [sid]
-            )
+            read_ids, commented_n = aggregate_engagement(activity, [sid])
             engagement = FriendEngagementOut(
                 read=len(read_ids),
                 commented=commented_n,
-                reactions=reactions,
                 readers=[
                     FriendMiniOut(
                         user_id=p.id,
@@ -306,7 +300,6 @@ async def get_feed(
                 kind=story.kind,
                 read=read,
                 starred=starred,
-                my_reaction=my_reactions.get(sid),
                 my_rating=my_ratings.get(sid),
                 friend_rating_avg=rating[0] if rating else None,
                 friend_rating_count=rating[1] if rating else 0,

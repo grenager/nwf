@@ -30,7 +30,6 @@ from core.models import (
     Source,
     Story,
     StoryKind,
-    StoryReaction,
     StoryStatus,
 )
 
@@ -172,11 +171,6 @@ async def friend_profile(
         .select_from(StoryStatus)
         .where(StoryStatus.user_id == friend_id, StoryStatus.read.is_(True))
     )
-    hearts = await session.scalar(
-        select(func.count())
-        .select_from(StoryReaction)
-        .where(StoryReaction.user_id == friend_id)
-    )
     comments = await session.scalar(
         select(func.count()).select_from(Comment).where(Comment.user_id == friend_id)
     )
@@ -199,17 +193,6 @@ async def friend_profile(
         )
     ).all()
 
-    reaction_rows = (
-        await session.execute(
-            select(Story, Source, StoryReaction.reaction, StoryReaction.updated_at)
-            .join(StoryReaction, StoryReaction.story_id == Story.id)
-            .outerjoin(Source, Source.id == Story.source_id)
-            .where(StoryReaction.user_id == friend_id)
-            .order_by(StoryReaction.updated_at.desc())
-            .limit(15)
-        )
-    ).all()
-
     comment_rows = (
         await session.execute(
             select(Comment, Story, Source)
@@ -226,17 +209,6 @@ async def friend_profile(
         items.append(
             FriendActivityItem(
                 kind="read",
-                story_id=story.id,
-                headline=story.full_headline,
-                source_name=source.name if source else None,
-                article_url=story.article_url,
-                at=updated_at,
-            )
-        )
-    for story, source, reaction, updated_at in reaction_rows:
-        items.append(
-            FriendActivityItem(
-                kind=reaction,
                 story_id=story.id,
                 headline=story.full_headline,
                 source_name=source.name if source else None,
@@ -271,7 +243,6 @@ async def friend_profile(
         online=online,
         last_active_at=last_active,
         reads=int(reads or 0),
-        hearts=int(hearts or 0),
         comments=int(comments or 0),
         can_edit=is_self or is_admin,
         recent=items[:15],

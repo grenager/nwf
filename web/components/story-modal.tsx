@@ -3,23 +3,19 @@
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { EngagementSummary } from "@/components/engagement-summary";
-import { ReactionPicker } from "@/components/reaction-picker";
 import { SourceLogo } from "@/components/source-logo";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { Comment, ReactionKind, Story, UUID } from "@/lib/types";
+import type { Comment, Story, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface StoryModalProps {
   storyId: UUID;
   onClose: () => void;
-  onStatusChange?: (
-    storyId: UUID,
-    patch: { read?: boolean; my_reaction?: ReactionKind | null },
-  ) => void;
+  onStatusChange?: (storyId: UUID, patch: { read?: boolean }) => void;
 }
 
 function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
@@ -78,7 +74,6 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   const isGuest: boolean = !session;
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [reaction, setReaction] = useState<ReactionKind | null>(null);
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState<string>("");
@@ -143,7 +138,6 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
         const detail: Story = await api.getStory(storyId);
         if (cancelled) return;
         setStory(detail);
-        setReaction(detail.my_reaction);
 
         if (isGuest) {
           setComments([]);
@@ -171,11 +165,6 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
       cancelled = true;
     };
   }, [storyId, notify, markReadNow, isGuest]);
-
-  function updateReaction(next: ReactionKind | null): void {
-    setReaction(next);
-    onStatusChange?.(storyId, { my_reaction: next });
-  }
 
   async function submitComment(): Promise<void> {
     if (!requireAuth("comment on stories")) return;
@@ -336,7 +325,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                 />
               </div>
 
-              <div className="grid grid-cols-3 border-y border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-2 border-y border-slate-200 dark:border-slate-800">
                 <button
                   onClick={() => void share()}
                   className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -344,12 +333,6 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                   <span className="text-base">↗</span>
                   Share
                 </button>
-                <ReactionPicker
-                  storyId={storyId}
-                  value={reaction}
-                  onChange={updateReaction}
-                  variant="bar"
-                />
                 <button
                   onClick={focusComment}
                   className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
