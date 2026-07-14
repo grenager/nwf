@@ -115,6 +115,7 @@ export interface SourceStatus {
   name: string;
   rss_url: string | null;
   has_rss: boolean;
+  image_url: string | null;
   last_scraped_at: string | null;
   story_count: number;
   newest_story_at: string | null;

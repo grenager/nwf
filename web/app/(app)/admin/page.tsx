@@ -13,6 +13,49 @@ const EMPTY_FORM: SourceInput = {
   has_paywall: false,
 };
 
+function SourceLogo({
+  src,
+  name,
+}: {
+  src: string | null;
+  name: string;
+}): JSX.Element {
+  const [broken, setBroken] = useState<boolean>(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [src]);
+  if (!src) {
+    return (
+      <div
+        title="No logo image URL"
+        className="flex h-8 w-16 items-center justify-center border border-dashed border-slate-300 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-700"
+      >
+        none
+      </div>
+    );
+  }
+  if (broken) {
+    return (
+      <div
+        title={`Broken image: ${src}`}
+        className="flex h-8 w-16 items-center justify-center border border-dashed border-red-400 text-[9px] font-semibold uppercase tracking-wide text-red-500 dark:border-red-700"
+      >
+        broken
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={name}
+      title={src}
+      onError={() => setBroken(true)}
+      className="h-8 w-16 object-contain"
+    />
+  );
+}
+
 function relativeTime(iso: string | null): string {
   if (!iso) return "never";
   const then: number = new Date(iso).getTime();
@@ -204,6 +247,7 @@ export default function AdminPage() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900">
             <tr>
+              <th className="px-4 py-3 font-semibold">Logo</th>
               <th className="px-4 py-3 font-semibold">Source</th>
               <th className="px-4 py-3 font-semibold">Last scraped</th>
               <th className="px-4 py-3 text-right font-semibold">Stories</th>
@@ -214,6 +258,9 @@ export default function AdminPage() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {sortedRows.map((row) => (
               <tr key={row.id} className="bg-white dark:bg-slate-950">
+                <td className="px-4 py-3">
+                  <SourceLogo src={row.image_url} name={row.name} />
+                </td>
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-900 dark:text-slate-100">
                     {row.name}
