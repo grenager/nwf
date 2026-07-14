@@ -33,6 +33,7 @@ from api.schemas import (
     PostOut,
     PostUpdate,
 )
+from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
 from core.enrich import fetch_url_metadata, hosts_match, registrable_host
 from core.models import (
@@ -151,6 +152,7 @@ async def _ensure_story(
         or (metadata.title or "").strip()
         or _headline_from_url(canonical)
     )
+    publisher = metadata.publisher_label(canonical)
 
     if target is not None:
         if provided_title or _is_hostlike(target.full_headline, target.article_url):
@@ -159,6 +161,8 @@ async def _ensure_story(
             target.summary = metadata.description
         if not target.image_url and metadata.image_url:
             target.image_url = metadata.image_url
+        if publisher and not target.publisher:
+            target.publisher = publisher
         if target.source_id is None and source is not None:
             target.source_id = source.id
         # Only trust classification when a known source backed it.
@@ -179,6 +183,7 @@ async def _ensure_story(
         full_headline=headline,
         summary=metadata.description,
         image_url=metadata.image_url,
+        publisher=publisher,
         kind=resolved_kind,
     )
     session.add(story)
@@ -228,6 +233,13 @@ async def serialize_post(
     author = await session.get(Profile, post.author_id)
     source = (
         await session.get(Source, story.source_id) if story.source_id else None
+    )
+    source_name, source_image_url = resolve_attribution(
+        article_url=story.article_url,
+        source_name=source.name if source else None,
+        source_homepage_url=source.homepage_url if source else None,
+        source_image_url=source.image_url if source else None,
+        publisher=story.publisher,
     )
     participants = await post_participant_ids(session, post.id)
     participant_count = len(participants) or 1
@@ -329,8 +341,8 @@ async def serialize_post(
         article_url=story.article_url,
         summary=story.summary,
         image_url=story.image_url,
-        source_name=source.name if source else None,
-        source_image_url=source.image_url if source else None,
+        source_name=source_name,
+        source_image_url=source_image_url,
         kind=story.kind,
         reply_count=len(replies),
         participant_count=participant_count,

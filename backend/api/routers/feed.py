@@ -30,6 +30,7 @@ from api.schemas import (
     FriendEngagementOut,
     FriendMiniOut,
 )
+from core.attribution import resolve_attribution
 from core.config import get_settings
 from core.models import (
     Comment,
@@ -288,6 +289,13 @@ async def get_feed(
             )
 
         rating = friend_ratings.get(sid)
+        source_name, source_image_url = resolve_attribution(
+            article_url=story.article_url,
+            source_name=source.name if source else None,
+            source_homepage_url=source.homepage_url if source else None,
+            source_image_url=source.image_url if source else None,
+            publisher=story.publisher,
+        )
         cards.append(
             FeedCardOut(
                 story_id=sid,
@@ -295,8 +303,8 @@ async def get_feed(
                 article_url=story.article_url,
                 summary=story.summary,
                 image_url=story.image_url,
-                source_name=source.name if source else None,
-                source_image_url=source.image_url if source else None,
+                source_name=source_name,
+                source_image_url=source_image_url,
                 kind=story.kind,
                 read=read,
                 starred=starred,

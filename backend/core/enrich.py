@@ -10,6 +10,7 @@ cheap and never blocks posting when a site is slow or unparseable.
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -43,6 +44,8 @@ class UrlMetadata:
     image_url: str | None = None
     site_name: str | None = None
     canonical_url: str | None = None
+    author: str | None = None
+    platform: str | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -53,8 +56,23 @@ class UrlMetadata:
                 self.image_url,
                 self.site_name,
                 self.canonical_url,
+                self.author,
+                self.platform,
             )
         )
+
+    def publisher_label(self, url: str | None = None) -> str | None:
+        """Human attribution, e.g. ``"Derek Thompson on Substack"``.
+
+        Prefers the article's author (or ``og:site_name``) and appends the
+        hosting platform when it adds information. Falls back to the platform
+        alone (``"Substack"``), then the bare host.
+        """
+        name: str | None = _clean(self.site_name) or _clean(self.author)
+        platform: str | None = _clean(self.platform)
+        if name and platform and platform.lower() not in name.lower():
+            return f"{name} on {platform}"
+        return name or platform or registrable_host(url)
 
 
 def _clean(value: str | None) -> str | None:
@@ -73,10 +91,87 @@ def _tag_attrs(tag: str) -> dict[str, str]:
     return attrs
 
 
+# Platforms detected by signature strings present anywhere in the page. Order
+# matters: the first match wins. Substack is first-class because so many shared
+# links are Substack newsletters.
+_PLATFORM_SIGNALS: tuple[tuple[str, str], ...] = (
+    ("substackcdn.com", "Substack"),
+    ("substack-post-media", "Substack"),
+    (".substack.com", "Substack"),
+    ("cdn-client.medium.com", "Medium"),
+    ("static.ghost.org", "Ghost"),
+    (".beehiiv.com", "beehiiv"),
+)
+
+_PRELOADS_RE: re.Pattern[str] = re.compile(
+    r"window\._preloads\s*=\s*JSON\.parse\(\s*\"", re.IGNORECASE
+)
+
+
+def _js_string_literal(page_html: str, quote_index: int) -> str:
+    """Return the JS/JSON double-quoted string literal starting at ``quote_index``."""
+    out: list[str] = []
+    j = quote_index + 1
+    n = len(page_html)
+    while j < n:
+        ch = page_html[j]
+        if ch == "\\":
+            out.append(page_html[j : j + 2])
+            j += 2
+            continue
+        if ch == '"':
+            break
+        out.append(ch)
+        j += 1
+    return '"' + "".join(out) + '"'
+
+
+def _substack_publication(page_html: str) -> str | None:
+    """Pull the publication name from Substack's ``window._preloads`` blob.
+
+    Substack posts (including custom-domain ones like derekthompson.org that
+    omit ``og:site_name``) embed a JSON preload with ``pub.name`` — the true
+    newsletter/publication name, which is the best possible attribution.
+    """
+    match = _PRELOADS_RE.search(page_html)
+    if match is None:
+        return None
+    literal = _js_string_literal(page_html, match.end() - 1)
+    try:
+        inner: object = json.loads(literal)
+        data: object = json.loads(inner) if isinstance(inner, str) else inner
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    pub = data.get("pub")
+    if not isinstance(pub, dict):
+        return None
+    for key in ("name", "copyright", "subdomain"):
+        value = _clean(pub.get(key) if isinstance(pub.get(key), str) else None)
+        if value:
+            return value
+    return None
+
+
+def _detect_platform(page_html: str, generator: str | None) -> str | None:
+    """Best-effort hosting-platform label (Substack, Medium, Ghost, ...)."""
+    for needle, label in _PLATFORM_SIGNALS:
+        if needle in page_html:
+            return label
+    gen = (generator or "").strip().lower()
+    if gen.startswith("ghost"):
+        return "Ghost"
+    if "wordpress" in gen:
+        return "WordPress"
+    return None
+
+
 def parse_html_metadata(page_html: str) -> UrlMetadata:
     """Extract OpenGraph/Twitter/title metadata from raw HTML (best-effort)."""
     og: dict[str, str] = {}
     twitter: dict[str, str] = {}
+    named: dict[str, str] = {}
     for tag in _META_TAG_RE.findall(page_html):
         attrs = _tag_attrs(tag)
         content = _clean(attrs.get("content"))
@@ -87,6 +182,8 @@ def parse_html_metadata(page_html: str) -> UrlMetadata:
             og.setdefault(prop, content)
         elif prop.startswith("twitter:"):
             twitter.setdefault(prop, content)
+        else:
+            named.setdefault(prop, content)
 
     title = og.get("og:title") or twitter.get("twitter:title")
     if title is None:
@@ -95,12 +192,25 @@ def parse_html_metadata(page_html: str) -> UrlMetadata:
 
     description = og.get("og:description") or twitter.get("twitter:description")
     image_url = og.get("og:image") or twitter.get("twitter:image")
-    site_name = og.get("og:site_name")
 
     canonical_url: str | None = None
     canonical_match = _CANONICAL_RE.search(page_html)
     if canonical_match:
         canonical_url = _clean(_tag_attrs(canonical_match.group(0)).get("href"))
+
+    platform = _detect_platform(page_html, named.get("generator"))
+
+    # Author: prefer an explicit name meta over article:author (often a URL).
+    author = named.get("author") or og.get("og:article:author")
+    article_author = og.get("article:author")
+    if author is None and article_author and not article_author.startswith("http"):
+        author = article_author
+
+    # Site/publication name. Substack omits og:site_name on custom domains, so
+    # recover the real publication name from its preload blob.
+    site_name = og.get("og:site_name")
+    if site_name is None and platform == "Substack":
+        site_name = _substack_publication(page_html)
 
     return UrlMetadata(
         title=title,
@@ -108,6 +218,8 @@ def parse_html_metadata(page_html: str) -> UrlMetadata:
         image_url=image_url,
         site_name=site_name,
         canonical_url=canonical_url,
+        author=author,
+        platform=platform,
     )
 
 

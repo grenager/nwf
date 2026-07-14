@@ -31,6 +31,7 @@ from api.schemas import (
     StoryOut,
     StoryWithStatus,
 )
+from core.attribution import resolve_attribution
 from core.models import Source, Story, StoryStatus, UserSource
 
 router = APIRouter(prefix="/stories", tags=["stories"])
@@ -351,8 +352,13 @@ async def get_story(
         model.read = False
         model.starred = False
         model.friend_stars = []
-        model.source_name = source.name if source else None
-        model.source_image_url = source.image_url if source else None
+        model.source_name, model.source_image_url = resolve_attribution(
+            article_url=story.article_url,
+            source_name=source.name if source else None,
+            source_homepage_url=source.homepage_url if source else None,
+            source_image_url=source.image_url if source else None,
+            publisher=story.publisher,
+        )
 
         activity = await global_activity_by_story(session, [story.id])
         read_ids, commented_n = aggregate_engagement(activity, [story.id])
@@ -376,8 +382,13 @@ async def get_story(
     model = StoryWithStatus.model_validate(story)
     model.read = bool(read)
     model.starred = bool(starred)
-    model.source_name = source.name if source else None
-    model.source_image_url = source.image_url if source else None
+    model.source_name, model.source_image_url = resolve_attribution(
+        article_url=story.article_url,
+        source_name=source.name if source else None,
+        source_homepage_url=source.homepage_url if source else None,
+        source_image_url=source.image_url if source else None,
+        publisher=story.publisher,
+    )
 
     friend_profiles = await friend_stars_by_story(session, user.id, [story.id])
     model.friend_stars = [
