@@ -23,6 +23,15 @@ interface PostCardProps {
   onCardChange: (card: FeedCard) => void;
 }
 
+function hostFromUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.startsWith("www.") ? host.slice(4) : host;
+  } catch {
+    return url;
+  }
+}
+
 function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
   if (imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -337,16 +346,29 @@ export function PostCard({ card, onOpenStory, onCardChange }: PostCardProps) {
           onOpenStory(card.story_id);
           if (!card.read) void markRead();
         }}
-        className="mt-2 w-full text-left"
+        className="mt-2 block w-full overflow-hidden rounded-lg border border-zinc-200 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
       >
-        <h3 className="font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50">
-          {card.full_headline}
-        </h3>
-        {card.summary ? (
-          <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-            {card.summary}
-          </p>
+        {card.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={card.image_url}
+            alt=""
+            className="h-44 w-full border-b border-zinc-200 object-cover dark:border-zinc-800"
+          />
         ) : null}
+        <div className="p-3">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+            {card.source_name ?? hostFromUrl(card.article_url)}
+          </span>
+          <h3 className="mt-0.5 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50">
+            {card.full_headline}
+          </h3>
+          {card.summary ? (
+            <p className="mt-1 line-clamp-3 text-sm text-zinc-600 dark:text-zinc-400">
+              {card.summary}
+            </p>
+          ) : null}
+        </div>
       </button>
 
       {readersLabel ? (
