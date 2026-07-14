@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.models import ConnectionStatus, PostVisibility, StoryKind
 
@@ -174,8 +174,17 @@ class DismissMark(BaseModel):
 
 
 class RatingSet(BaseModel):
+    """A half-star rating: 0.5 - 5.0 in 0.5 increments (Letterboxd-style)."""
+
     story_id: uuid.UUID
-    rating: int = Field(ge=1, le=5)
+    rating: float = Field(ge=0.5, le=5.0)
+
+    @field_validator("rating")
+    @classmethod
+    def _half_step(cls, value: float) -> float:
+        if round(value * 2) != value * 2:
+            raise ValueError("rating must be in 0.5 increments")
+        return value
 
 
 class UserSourcesUpdate(BaseModel):
@@ -193,6 +202,8 @@ class CommentOut(ORMModel):
     author_name: str = "Friend"
     author_image_url: str | None = None
     text: str
+    # The commenter's own half-star rating of the story (shown beside them).
+    author_rating: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -266,12 +277,15 @@ class PostOut(ORMModel):
     audience_label: str = "visible to friends"
     replies: list[CommentOut] = Field(default_factory=list)
     attachments: list[AttachmentOut] = Field(default_factory=list)
+    # The post author's own half-star rating (shown beside their take).
+    author_rating: float | None = None
     # Per-viewer log state on the underlying story
     read: bool = False
     starred: bool = False
-    my_rating: int | None = None
-    friend_rating_avg: float | None = None
-    friend_rating_count: int = 0
+    my_rating: float | None = None
+    # Aggregate over everyone the viewer can see who rated (friends + self).
+    rating_avg: float | None = None
+    rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     readers: list[FriendMiniOut] = Field(default_factory=list)
@@ -292,9 +306,9 @@ class FeedCardOut(BaseModel):
     kind: StoryKind = StoryKind.news
     read: bool = False
     starred: bool = False
-    my_rating: int | None = None
-    friend_rating_avg: float | None = None
-    friend_rating_count: int = 0
+    my_rating: float | None = None
+    rating_avg: float | None = None
+    rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     posts: list[PostOut] = Field(default_factory=list)
@@ -352,13 +366,15 @@ class FriendsOverviewOut(BaseModel):
 
 
 class FriendActivityItem(BaseModel):
-    kind: str  # "read" | "commented"
+    kind: str  # "read" | "commented" | "rated"
     story_id: uuid.UUID
     headline: str
     source_name: str | None = None
     article_url: str
     at: datetime
     comment_text: str | None = None
+    # Present when kind == "rated": the half-star rating (0.5 - 5).
+    rating: float | None = None
 
 
 class FriendProfileOut(BaseModel):
@@ -371,6 +387,7 @@ class FriendProfileOut(BaseModel):
     last_active_at: datetime | None = None
     reads: int = 0
     comments: int = 0
+    ratings: int = 0
     can_edit: bool = False
     recent: list[FriendActivityItem] = Field(default_factory=list)
 

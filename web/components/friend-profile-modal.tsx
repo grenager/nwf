@@ -1,5 +1,6 @@
 "use client";
 
+import { StarsDisplay } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
@@ -22,6 +23,7 @@ interface EditForm {
 function KindLabel({ kind }: { kind: FriendActivityItem["kind"] }) {
   if (kind === "read") return <>Read</>;
   if (kind === "commented") return <>Commented on</>;
+  if (kind === "rated") return <>Rated</>;
   return <>{kind}</>;
 }
 
@@ -229,6 +231,7 @@ export function FriendProfileModal({
 
             <div className="mt-5 flex gap-2">
               <Stat label="Read" value={profile.reads} />
+              <Stat label="Rated" value={profile.ratings} />
               <Stat label="Comments" value={profile.comments} />
             </div>
 
@@ -246,6 +249,9 @@ export function FriendProfileModal({
                         <span className="font-semibold">
                           <KindLabel kind={item.kind} />
                         </span>
+                        {item.kind === "rated" && item.rating != null ? (
+                          <StarsDisplay value={item.rating} size="xs" />
+                        ) : null}
                         {item.source_name ? <span>· {item.source_name}</span> : null}
                         <span className="ml-auto normal-case tracking-normal">
                           {relativeTime(item.at)}

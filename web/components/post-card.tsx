@@ -1,14 +1,20 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
-import { StarRating } from "@/components/star-rating";
+import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { FeedCard, Post, Profile, PostVisibility } from "@/lib/types";
+import type {
+  FeedCard,
+  Post,
+  Profile,
+  PostVisibility,
+  UUID,
+} from "@/lib/types";
 import { useState, type ReactNode } from "react";
 
 interface PostCardProps {
@@ -32,19 +38,30 @@ function hostFromUrl(url: string): string {
   }
 }
 
-function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
+function Avatar({
+  name,
+  imageUrl,
+  size = "sm",
+}: {
+  name: string;
+  imageUrl: string | null;
+  size?: "sm" | "lg";
+}) {
+  const dims: string = size === "lg" ? "h-10 w-10" : "h-7 w-7";
   if (imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={imageUrl}
         alt=""
-        className="h-7 w-7 shrink-0 rounded-[9999px] object-cover"
+        className={`${dims} shrink-0 rounded-[9999px] object-cover`}
       />
     );
   }
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9999px] bg-zinc-200 text-xs font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200">
+    <span
+      className={`${dims} flex shrink-0 items-center justify-center rounded-[9999px] bg-zinc-200 text-sm font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200`}
+    >
       {name.charAt(0).toUpperCase()}
     </span>
   );
@@ -54,12 +71,18 @@ function PostThread({
   post,
   me,
   preview,
+  storyId,
+  myRating,
+  onRate,
   onPostChange,
   onDelete,
 }: {
   post: Post;
   me: Profile | null;
   preview?: ReactNode;
+  storyId: UUID;
+  myRating: number | null;
+  onRate: (value: number | null) => void;
   onPostChange: (post: Post) => void;
   onDelete: () => void;
 }) {
@@ -162,15 +185,22 @@ function PostThread({
   const showComposerActions: boolean = composerActive || draft.trim().length > 0;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-2">
-        <Avatar name={post.author_name} imageUrl={post.author_image_url} />
-        <div className="min-w-0 flex-1">
+    <div className="flex items-start gap-3">
+      <Avatar
+        name={post.author_name}
+        imageUrl={post.author_image_url}
+        size="lg"
+      />
+      <div className="min-w-0 flex-1 space-y-3">
+        <div>
           <div className="flex items-start gap-2">
             <div className="flex flex-1 flex-wrap items-center gap-2 text-sm">
               <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                 {post.author_name}
               </span>
+              {post.author_rating != null ? (
+                <StarsDisplay value={post.author_rating} size="xs" />
+              ) : null}
               <span className="text-xs text-zinc-400">
                 {relativeTime(post.created_at)}
               </span>
@@ -290,11 +320,10 @@ function PostThread({
             </ul>
           ) : null}
         </div>
-      </div>
 
-      {preview}
+        {preview ? <div className="space-y-3">{preview}</div> : null}
 
-      {post.replies.map((r) => (
+        {post.replies.map((r) => (
         <div key={r.id} className="flex items-start gap-2">
           <Avatar name={r.author_name} imageUrl={r.author_image_url} />
           <div className="min-w-0 flex-1">
@@ -302,6 +331,9 @@ function PostThread({
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                 {r.author_name}
               </span>
+              {r.author_rating != null ? (
+                <StarsDisplay value={r.author_rating} size="xs" />
+              ) : null}
               <span className="text-zinc-400">
                 {relativeTime(r.created_at)}
               </span>
@@ -340,6 +372,16 @@ function PostThread({
       >
         <Avatar name={profileName(me)} imageUrl={me?.image_url ?? null} />
         <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  Your rating
+                </span>
+                <RatingInput
+                  storyId={storyId}
+                  value={myRating}
+                  onChange={onRate}
+                />
+              </div>
               <div className="flex gap-2">
                 <input
                   value={draft}
@@ -395,6 +437,7 @@ function PostThread({
               ) : null}
             </div>
           </div>
+      </div>
     </div>
   );
 }
@@ -420,7 +463,45 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
     });
   }
 
+  // Rating my own story updates my_rating + the visible aggregate, and (if I'm
+  // the author) the stars shown beside my take. Recomputed from current card so
+  // it works for both setting and clearing.
+  function handleRate(next: number | null): void {
+    if (!post) return;
+    const old: number | null = card.my_rating;
+    let count: number = card.rating_count;
+    let sum: number = (card.rating_avg ?? 0) * count;
+    if (old === null && next !== null) {
+      count += 1;
+      sum += next;
+    } else if (old !== null && next === null) {
+      count -= 1;
+      sum -= old;
+    } else if (old !== null && next !== null) {
+      sum += next - old;
+    }
+    const isAuthor: boolean = user != null && user.id === post.author_id;
+    onCardChange({
+      ...card,
+      my_rating: next,
+      rating_avg: count > 0 ? sum / count : null,
+      rating_count: count,
+      posts: card.posts.map((p) =>
+        p.id === post.id
+          ? {
+              ...p,
+              my_rating: next,
+              author_rating: isAuthor ? next : p.author_rating,
+            }
+          : p,
+      ),
+    });
+  }
+
   if (!post) return null;
+
+  const hasAggregate: boolean =
+    card.rating_count > 0 && card.rating_avg !== null;
 
   // Substack-style link preview: full-width image, then a bordered footer with
   // the source (logo + name) and the headline. Followed by the engagement row.
@@ -466,19 +547,25 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
         </div>
       </a>
 
-      {/* Rating + friend engagement. */}
-      <div className="flex items-center justify-between gap-3">
-        <StarRating
-          storyId={card.story_id}
-          value={card.my_rating}
-          friendAvg={card.friend_rating_avg}
-          friendCount={card.friend_rating_count}
-          onChange={(next) => onCardChange({ ...card, my_rating: next })}
-        />
-        {hasEngagement ? (
-          <EngagementSummary engagement={engagement} variant="inline" />
-        ) : null}
-      </div>
+      {/* Aggregate rating + friend engagement. */}
+      {hasAggregate || hasEngagement ? (
+        <div className="flex items-center justify-between gap-3">
+          {hasAggregate && card.rating_avg !== null ? (
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <StarsDisplay value={card.rating_avg} size="sm" />
+              <span>
+                {card.rating_avg.toFixed(1)} · {card.rating_count} rating
+                {card.rating_count === 1 ? "" : "s"}
+              </span>
+            </div>
+          ) : (
+            <span />
+          )}
+          {hasEngagement ? (
+            <EngagementSummary engagement={engagement} variant="inline" />
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 
@@ -488,6 +575,9 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
         post={post}
         me={me}
         preview={preview}
+        storyId={card.story_id}
+        myRating={card.my_rating}
+        onRate={handleRate}
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
       />

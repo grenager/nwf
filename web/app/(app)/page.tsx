@@ -27,20 +27,37 @@ export default function FeedPage() {
     void api.getMe().then(setMe).catch(() => undefined);
   }, [isSignedIn]);
 
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    try {
-      const payload: FeedPayload = await api.getFeed();
-      setData(payload);
-    } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Failed to load feed", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [notify]);
+  const load = useCallback(
+    async (opts?: { silent?: boolean }): Promise<void> => {
+      if (!opts?.silent) setLoading(true);
+      try {
+        const payload: FeedPayload = await api.getFeed();
+        setData(payload);
+      } catch (err) {
+        notify(
+          err instanceof ApiError ? err.message : "Failed to load feed",
+          "error",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [notify],
+  );
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // A post created elsewhere (e.g. the nav "+ Post" modal) should appear at the
+  // top right away — silently refetch so the newest card leads the feed.
+  useEffect(() => {
+    function onPostCreated(): void {
+      void load({ silent: true });
+    }
+    window.addEventListener("nwf:post-created", onPostCreated);
+    return () =>
+      window.removeEventListener("nwf:post-created", onPostCreated);
   }, [load]);
 
   useEffect(() => {

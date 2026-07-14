@@ -30,6 +30,7 @@ from core.models import (
     Source,
     Story,
     StoryKind,
+    StoryRating,
     StoryStatus,
 )
 
@@ -174,6 +175,11 @@ async def friend_profile(
     comments = await session.scalar(
         select(func.count()).select_from(Comment).where(Comment.user_id == friend_id)
     )
+    ratings = await session.scalar(
+        select(func.count())
+        .select_from(StoryRating)
+        .where(StoryRating.user_id == friend_id)
+    )
 
     status_rows = (
         await session.execute(
@@ -204,6 +210,17 @@ async def friend_profile(
         )
     ).all()
 
+    rating_rows = (
+        await session.execute(
+            select(StoryRating, Story, Source)
+            .join(Story, Story.id == StoryRating.story_id)
+            .outerjoin(Source, Source.id == Story.source_id)
+            .where(StoryRating.user_id == friend_id)
+            .order_by(StoryRating.updated_at.desc())
+            .limit(15)
+        )
+    ).all()
+
     items: list[FriendActivityItem] = []
     for story, source, updated_at in status_rows:
         items.append(
@@ -228,6 +245,18 @@ async def friend_profile(
                 comment_text=comment.text,
             )
         )
+    for rating_row, story, source in rating_rows:
+        items.append(
+            FriendActivityItem(
+                kind="rated",
+                story_id=story.id,
+                headline=story.full_headline,
+                source_name=source.name if source else None,
+                article_url=story.article_url,
+                at=rating_row.updated_at,
+                rating=float(rating_row.rating),
+            )
+        )
     items.sort(key=lambda i: i.at, reverse=True)
 
     last_active = items[0].at if items else None
@@ -244,6 +273,7 @@ async def friend_profile(
         last_active_at=last_active,
         reads=int(reads or 0),
         comments=int(comments or 0),
+        ratings=int(ratings or 0),
         can_edit=is_self or is_admin,
         recent=items[:15],
     )

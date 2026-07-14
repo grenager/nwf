@@ -237,7 +237,10 @@ export function Nav() {
       {addOpen ? (
         <AddStoryModal
           onClose={() => setAddOpen(false)}
-          onAdded={() => router.refresh()}
+          onAdded={() => {
+            router.refresh();
+            window.dispatchEvent(new CustomEvent("nwf:post-created"));
+          }}
         />
       ) : null}
 

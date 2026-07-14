@@ -119,6 +119,7 @@ export interface Comment {
   author_name: string;
   author_image_url: string | null;
   text: string;
+  author_rating: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -156,11 +157,12 @@ export interface Post {
   audience_label: string;
   replies: Comment[];
   attachments: Attachment[];
+  author_rating: number | null;
   read: boolean;
   starred: boolean;
   my_rating: number | null;
-  friend_rating_avg: number | null;
-  friend_rating_count: number;
+  rating_avg: number | null;
+  rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
   readers: FriendMini[];
@@ -180,8 +182,8 @@ export interface FeedCard {
   read: boolean;
   starred: boolean;
   my_rating: number | null;
-  friend_rating_avg: number | null;
-  friend_rating_count: number;
+  rating_avg: number | null;
+  rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
   posts: Post[];
@@ -223,7 +225,7 @@ export interface FriendsOverview {
   online: number;
 }
 
-export type FriendActivityKind = "read" | "commented";
+export type FriendActivityKind = "read" | "commented" | "rated";
 
 export interface FriendActivityItem {
   kind: FriendActivityKind;
@@ -233,6 +235,7 @@ export interface FriendActivityItem {
   article_url: string;
   at: string;
   comment_text: string | null;
+  rating: number | null;
 }
 
 export interface FriendProfile {
@@ -245,6 +248,7 @@ export interface FriendProfile {
   last_active_at: string | null;
   reads: number;
   comments: number;
+  ratings: number;
   can_edit: boolean;
   recent: FriendActivityItem[];
 }

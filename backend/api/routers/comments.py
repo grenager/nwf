@@ -3,21 +3,28 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
-from api.friends import can_see_post, display_name
+from api.friends import (
+    can_see_post,
+    display_name,
+    ratings_for_users_by_story,
+)
 from api.schemas import CommentCreate, CommentOut, CommentUpdate
 from core.models import Comment, Post, PostParticipant, Profile
 
 router = APIRouter(prefix="/comments", tags=["comments"])
 
 
-def _to_out(comment: Comment, author: Profile | None) -> CommentOut:
+def _to_out(
+    comment: Comment, author: Profile | None, rating: float | None = None
+) -> CommentOut:
     return CommentOut(
         id=comment.id,
         story_id=comment.story_id,
@@ -26,9 +33,29 @@ def _to_out(comment: Comment, author: Profile | None) -> CommentOut:
         author_name=display_name(author) if author else "Friend",
         author_image_url=author.image_url if author else None,
         text=comment.text,
+        author_rating=rating,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
     )
+
+
+async def _single_rating(
+    session: SessionDep, user_id: uuid.UUID, story_id: uuid.UUID
+) -> float | None:
+    """The commenter's own half-star rating of the story, if any."""
+    return (
+        await ratings_for_users_by_story(session, [story_id], [user_id])
+    ).get(story_id, {}).get(user_id)
+
+
+def _rated_outs(
+    rows: Sequence[Row[tuple[Comment, Profile]]],
+    ratings: dict[uuid.UUID, dict[uuid.UUID, float]],
+) -> list[CommentOut]:
+    return [
+        _to_out(c, a, ratings.get(c.story_id, {}).get(c.user_id))
+        for c, a in rows
+    ]
 
 
 async def _add_participant(
@@ -73,7 +100,10 @@ async def list_comments(
             .offset(offset)
         )
         rows = (await session.execute(stmt)).all()
-        return [_to_out(c, a) for c, a in rows]
+        ratings = await ratings_for_users_by_story(
+            session, [post.story_id], {c.user_id for c, _ in rows}
+        )
+        return _rated_outs(rows, ratings)
 
     # story_id path: return replies on posts about that story that the viewer can see
     assert story_id is not None
@@ -97,7 +127,10 @@ async def list_comments(
         .offset(offset)
     )
     rows = (await session.execute(stmt)).all()
-    return [_to_out(c, a) for c, a in rows]
+    ratings = await ratings_for_users_by_story(
+        session, [story_id], {c.user_id for c, _ in rows}
+    )
+    return _rated_outs(rows, ratings)
 
 
 @router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
@@ -122,7 +155,8 @@ async def create_comment(
     post.last_activity_at = datetime.now(UTC)
     await session.refresh(comment)
     author = await session.get(Profile, user.id)
-    return _to_out(comment, author)
+    rating = await _single_rating(session, user.id, comment.story_id)
+    return _to_out(comment, author, rating)
 
 
 @router.get("/{comment_id}", response_model=CommentOut)
@@ -139,7 +173,8 @@ async def get_comment(
     elif comment.user_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
     author = await session.get(Profile, comment.user_id)
-    return _to_out(comment, author)
+    rating = await _single_rating(session, comment.user_id, comment.story_id)
+    return _to_out(comment, author, rating)
 
 
 @router.put("/{comment_id}", response_model=CommentOut)
@@ -158,7 +193,8 @@ async def update_comment(
     await session.flush()
     await session.refresh(comment)
     author = await session.get(Profile, comment.user_id)
-    return _to_out(comment, author)
+    rating = await _single_rating(session, comment.user_id, comment.story_id)
+    return _to_out(comment, author, rating)
 
 
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

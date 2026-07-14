@@ -137,8 +137,8 @@ async def my_ratings_by_story(
     session: AsyncSession,
     user_id: uuid.UUID,
     story_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, int]:
-    """Map story_id -> the current user's own 1-5 rating (if any)."""
+) -> dict[uuid.UUID, float]:
+    """Map story_id -> the current user's own half-star rating (if any)."""
     if not story_ids:
         return {}
     rows = (
@@ -149,7 +149,34 @@ async def my_ratings_by_story(
             )
         )
     ).all()
-    return {story_id: int(rating) for story_id, rating in rows}
+    return {story_id: float(rating) for story_id, rating in rows}
+
+
+async def ratings_for_users_by_story(
+    session: AsyncSession,
+    story_ids: list[uuid.UUID],
+    user_ids: Iterable[uuid.UUID],
+) -> dict[uuid.UUID, dict[uuid.UUID, float]]:
+    """Map story_id -> {user_id: half-star rating} for the given users."""
+    users = list(user_ids)
+    if not story_ids or not users:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                StoryRating.story_id,
+                StoryRating.user_id,
+                StoryRating.rating,
+            ).where(
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id.in_(users),
+            )
+        )
+    ).all()
+    result: dict[uuid.UUID, dict[uuid.UUID, float]] = {}
+    for story_id, uid, rating in rows:
+        result.setdefault(story_id, {})[uid] = float(rating)
+    return result
 
 
 async def friend_ratings_by_story(
@@ -177,9 +204,9 @@ async def friend_ratings_by_story(
             )
         )
     ).all()
-    buckets: dict[uuid.UUID, list[int]] = {}
+    buckets: dict[uuid.UUID, list[float]] = {}
     for story_id, rating in rows:
-        buckets.setdefault(story_id, []).append(int(rating))
+        buckets.setdefault(story_id, []).append(float(rating))
     return {
         story_id: (sum(values) / len(values), len(values))
         for story_id, values in buckets.items()

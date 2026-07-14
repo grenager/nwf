@@ -314,7 +314,7 @@ class StoryStatus(Base):
 
 
 class StoryRating(Base):
-    """A user's 1-5 star rating on a story; the unified-feed engagement signal."""
+    """A user's half-star (0.5-5) rating on a story; the feed engagement signal."""
 
     __tablename__ = "story_ratings"
 
@@ -328,7 +328,9 @@ class StoryRating(Base):
         ForeignKey("stories.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    rating: Mapped[float] = mapped_column(
+        Numeric(2, 1, asdecimal=False), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

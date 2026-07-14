@@ -12,29 +12,29 @@ export function Skeleton({ className = "" }: { className?: string }) {
 /** Placeholder for a single feed post (image, headline, meta, comment row). */
 function FeedCardSkeleton() {
   return (
-    <div className="space-y-3 py-7">
-      {/* Author header + take */}
-      <div className="flex items-start gap-2">
-        <Skeleton className="h-7 w-7 shrink-0 rounded-[9999px]" />
-        <div className="min-w-0 flex-1">
-          <Skeleton className="h-3 w-40" />
-          <Skeleton className="mt-2 h-4 w-full" />
-          <Skeleton className="mt-1.5 h-4 w-5/6" />
+    <div className="py-7">
+      {/* Larger poster avatar; everything else indented under the name */}
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 shrink-0 rounded-[9999px]" />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="mt-2 h-4 w-full" />
+            <Skeleton className="mt-1.5 h-4 w-5/6" />
+          </div>
+          <div className="border border-zinc-200 dark:border-zinc-800">
+            <Skeleton className="h-56 w-full" />
+            <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="mt-2 h-5 w-3/4" />
+            </div>
+          </div>
+          <Skeleton className="h-4 w-32" />
+          <div className="flex items-start gap-2">
+            <Skeleton className="h-7 w-7 shrink-0 rounded-[9999px]" />
+            <Skeleton className="h-8 flex-1" />
+          </div>
         </div>
-      </div>
-      {/* Link preview */}
-      <div className="border border-zinc-200 dark:border-zinc-800">
-        <Skeleton className="h-56 w-full" />
-        <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="mt-2 h-5 w-3/4" />
-        </div>
-      </div>
-      {/* Engagement + composer */}
-      <Skeleton className="h-4 w-32" />
-      <div className="flex items-start gap-2">
-        <Skeleton className="h-7 w-7 shrink-0 rounded-[9999px]" />
-        <Skeleton className="h-8 flex-1" />
       </div>
     </div>
   );
