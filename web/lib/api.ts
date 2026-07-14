@@ -175,6 +175,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updatePost: (
+    id: UUID,
+    payload: { take?: string | null; visibility?: PostVisibility },
+  ): Promise<Post> =>
+    request<Post>(`/posts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   deletePost: (id: UUID): Promise<void> =>
     request<void>(`/posts/${id}`, { method: "DELETE" }),
 

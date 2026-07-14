@@ -53,9 +53,11 @@ function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
 function PostThread({
   post,
   onPostChange,
+  onDelete,
 }: {
   post: Post;
   onPostChange: (post: Post) => void;
+  onDelete: () => void;
 }) {
   const { user } = useAuth();
   const { requireAuth } = useAuthGate();
@@ -64,6 +66,52 @@ function PostThread({
   const [posting, setPosting] = useState<boolean>(false);
   const [attachUrl, setAttachUrl] = useState<string>("");
   const [showAttach, setShowAttach] = useState<boolean>(false);
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
+  const [editing, setEditing] = useState<boolean>(false);
+  const [editDraft, setEditDraft] = useState<string>(post.take ?? "");
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  const isAuthor: boolean = user != null && user.id === post.author_id;
+
+  async function saveEdit(): Promise<void> {
+    const text = editDraft.trim();
+    setSavingEdit(true);
+    try {
+      const updated = await api.updatePost(post.id, { take: text || null });
+      onPostChange(updated);
+      setEditing(false);
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed to save", "error");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function toggleVisibility(): Promise<void> {
+    const next: PostVisibility =
+      post.visibility === "public" ? "private" : "public";
+    setMenuOpen(false);
+    try {
+      const updated = await api.updatePost(post.id, { visibility: next });
+      onPostChange(updated);
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : "Failed to update visibility",
+        "error",
+      );
+    }
+  }
+
+  async function remove(): Promise<void> {
+    setMenuOpen(false);
+    if (!window.confirm("Delete this post?")) return;
+    try {
+      await api.deletePost(post.id);
+      onDelete();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed to delete", "error");
+    }
+  }
 
   async function reply(): Promise<void> {
     if (!requireAuth("reply")) return;
@@ -111,23 +159,104 @@ function PostThread({
       <div className="flex items-start gap-2">
         <Avatar name={post.author_name} imageUrl={post.author_image_url} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-              {post.author_name}
-            </span>
-            <span className="text-xs text-zinc-400">
-              {relativeTime(post.created_at)}
-            </span>
-            <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-              {post.audience_label}
-            </span>
-            {post.unread_replies_for_viewer ? (
-              <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
-                new replies
+          <div className="flex items-start gap-2">
+            <div className="flex flex-1 flex-wrap items-center gap-2 text-sm">
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {post.author_name}
               </span>
+              <span className="text-xs text-zinc-400">
+                {relativeTime(post.created_at)}
+              </span>
+              <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                {post.audience_label}
+              </span>
+              {post.unread_replies_for_viewer ? (
+                <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+                  new replies
+                </span>
+              ) : null}
+            </div>
+            {isAuthor ? (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  aria-label="Post options"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="-mr-1 rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+                >
+                  ⋯
+                </button>
+                {menuOpen ? (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditDraft(post.take ?? "");
+                          setEditing(true);
+                          setMenuOpen(false);
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void toggleVisibility()}
+                        className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        {post.visibility === "public"
+                          ? "Make private"
+                          : "Make public"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void remove()}
+                        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                      >
+                        Delete post
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
             ) : null}
           </div>
-          {post.take ? (
+          {editing ? (
+            <div className="mt-1 space-y-2">
+              <textarea
+                value={editDraft}
+                onChange={(e) => setEditDraft(e.target.value)}
+                rows={2}
+                autoFocus
+                className="w-full resize-none border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void saveEdit()}
+                  disabled={savingEdit}
+                  className="bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                >
+                  {savingEdit ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    setEditDraft(post.take ?? "");
+                  }}
+                  className="border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : post.take ? (
             <p className="mt-1 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
               {post.take}
             </p>
@@ -471,7 +600,17 @@ export function PostCard({ card, onOpenStory, onCardChange }: PostCardProps) {
       ) : null}
 
       {card.posts.map((post) => (
-        <PostThread key={post.id} post={post} onPostChange={onPostChange} />
+        <PostThread
+          key={post.id}
+          post={post}
+          onPostChange={onPostChange}
+          onDelete={() =>
+            onCardChange({
+              ...card,
+              posts: card.posts.filter((p) => p.id !== post.id),
+            })
+          }
+        />
       ))}
     </article>
   );

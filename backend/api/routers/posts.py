@@ -30,6 +30,7 @@ from api.schemas import (
     FriendMiniOut,
     PostCreate,
     PostOut,
+    PostUpdate,
 )
 from core.classify import classify_story_kind
 from core.enrich import fetch_url_metadata, hosts_match, registrable_host
@@ -353,6 +354,37 @@ async def get_post(
     if not await can_see_post(session, viewer_id, post):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
     return await serialize_post(session, post, viewer_id=viewer_id)
+
+
+@router.patch("/{post_id}", response_model=PostOut)
+async def update_post(
+    post_id: uuid.UUID,
+    payload: PostUpdate,
+    session: SessionDep,
+    user: CurrentUser,
+) -> PostOut:
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if post.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
+
+    fields = payload.model_fields_set
+    if "take" in fields:
+        new_take: str | None = (payload.take or "").strip() or None
+        post.take = new_take
+        # Keep the mirrored Log take in sync so ambient presence matches.
+        status_row = await session.get(
+            StoryStatus, {"user_id": user.id, "story_id": post.story_id}
+        )
+        if status_row is not None:
+            status_row.take = new_take
+    if "visibility" in fields and payload.visibility is not None:
+        post.visibility = payload.visibility
+    post.updated_at = datetime.now(UTC)
+    await session.flush()
+    await session.refresh(post)
+    return await serialize_post(session, post, viewer_id=user.id)
 
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)

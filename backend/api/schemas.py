@@ -236,6 +236,13 @@ class PostCreate(BaseModel):
     title: str | None = None
 
 
+class PostUpdate(BaseModel):
+    """Edit a post's take and/or visibility (author only)."""
+
+    take: str | None = Field(default=None, max_length=2_000)
+    visibility: PostVisibility | None = None
+
+
 class PostOut(ORMModel):
     id: uuid.UUID
     story_id: uuid.UUID
