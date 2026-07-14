@@ -1,12 +1,10 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
-import { useAuthGate } from "@/components/auth-gate";
 import { PostCard } from "@/components/post-card";
-import { StoryModal } from "@/components/story-modal";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { FeedCard, FeedPayload, ReactionKind, UUID } from "@/lib/types";
+import type { FeedCard, FeedPayload } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -15,11 +13,9 @@ const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
 export default function FeedPage() {
   const { notify } = useToast();
   const { session } = useAuth();
-  const { requireAuth } = useAuthGate();
   const isSignedIn: boolean = session !== null;
   const [data, setData] = useState<FeedPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [openStoryId, setOpenStoryId] = useState<UUID | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -73,24 +69,6 @@ export default function FeedPage() {
     });
   }
 
-  const patchStatus = useCallback(
-    (
-      storyId: UUID,
-      patch: { read?: boolean; my_reaction?: ReactionKind | null },
-    ): void => {
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          items: prev.items.map((c) =>
-            c.story_id === storyId ? { ...c, ...patch } : c,
-          ),
-        };
-      });
-    },
-    [],
-  );
-
   if (loading) {
     return <p className="text-zinc-400">Loading feed…</p>;
   }
@@ -111,35 +89,6 @@ export default function FeedPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
-      <div className="mb-4 flex items-end justify-between gap-3 border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
-        <div>
-          <h1 className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Feed
-          </h1>
-          {data.unread_count > 0 ? (
-            <p className="mt-0.5 text-xs text-zinc-500">
-              {data.unread_count}{" "}
-              {data.unread_count === 1 ? "conversation" : "conversations"} to
-              catch up on
-            </p>
-          ) : (
-            <p className="mt-0.5 text-xs text-zinc-500">You&apos;re all caught up</p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (!requireAuth("post")) return;
-            // Nav "Add" opens the modal; here we just hint.
-            void load();
-          }}
-          onMouseDown={(e) => e.preventDefault()}
-          className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
-        >
-          Refresh
-        </button>
-      </div>
-
       {!isSignedIn && data.items.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
@@ -174,7 +123,6 @@ export default function FeedPage() {
           <PostCard
             key={card.story_id}
             card={card}
-            onOpenStory={setOpenStoryId}
             onCardChange={onCardChange}
           />
         ))}
@@ -196,19 +144,10 @@ export default function FeedPage() {
             <PostCard
               key={card.story_id}
               card={card}
-              onOpenStory={setOpenStoryId}
               onCardChange={onCardChange}
             />
           ))}
         </div>
-      ) : null}
-
-      {openStoryId ? (
-        <StoryModal
-          storyId={openStoryId}
-          onClose={() => setOpenStoryId(null)}
-          onStatusChange={patchStatus}
-        />
       ) : null}
     </div>
   );
