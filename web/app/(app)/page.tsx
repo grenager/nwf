@@ -687,16 +687,46 @@ export default function TodayPage() {
     }`;
   }
 
+  const statusFooter = (
+    <div className="shrink-0 border-y border-zinc-900 py-4 text-center dark:border-zinc-100">
+      <p className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+        {laneMode === "archived"
+          ? "Archived"
+          : unreadTotal === 0
+            ? "You're caught up"
+            : "Inbox"}
+      </p>
+      <p className="mt-1 text-[12px] uppercase tracking-[0.08em] text-zinc-400">
+        {laneMode === "archived"
+          ? `${archivedEvents.length} events · ${archivedAnalysis.length} analysis pieces`
+          : unreadTotal === 0
+            ? `${data.events.items.length} events · ${data.analysis.items.length} analysis pieces`
+            : `${newsParts.unread.length} unread events · ${analysisParts.unread.length} unread analysis`}
+        {laneMode === "inbox" && data.friend_pick_count > 0
+          ? ` · ${data.friend_pick_count} with friend reactions`
+          : ""}
+      </p>
+    </div>
+  );
+
   return (
-    <div className="space-y-8">
-      <div className="hidden lg:grid lg:grid-cols-2 lg:gap-0">
-        <section className="pr-8">
-          <LaneHeader title="The News" />
-          {newsContent}
+    <div className="space-y-6 lg:flex lg:h-[calc(100vh-7.5rem)] lg:flex-col lg:space-y-0 lg:overflow-hidden">
+      <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-2 lg:gap-0">
+        <section className="flex min-h-0 flex-col pr-8">
+          <div className="shrink-0 bg-white dark:bg-zinc-950">
+            <LaneHeader title="The News" />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {newsContent}
+          </div>
         </section>
-        <section className="border-l border-zinc-200 pl-8 dark:border-zinc-800">
-          <LaneHeader title="Analysis" />
-          {analysisContent}
+        <section className="flex min-h-0 flex-col border-l border-zinc-200 pl-8 pr-6 dark:border-zinc-800">
+          <div className="shrink-0 bg-white dark:bg-zinc-950">
+            <LaneHeader title="Analysis" />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {analysisContent}
+          </div>
         </section>
       </div>
 
@@ -742,25 +772,7 @@ export default function TodayPage() {
         </div>
       </div>
 
-      <div className="border-y border-zinc-900 py-5 text-center dark:border-zinc-100">
-        <p className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {laneMode === "archived"
-            ? "Archived"
-            : unreadTotal === 0
-              ? "You're caught up"
-              : "Inbox"}
-        </p>
-        <p className="mt-1 text-[12px] uppercase tracking-[0.08em] text-zinc-400">
-          {laneMode === "archived"
-            ? `${archivedEvents.length} events · ${archivedAnalysis.length} analysis pieces`
-            : unreadTotal === 0
-              ? `${data.events.items.length} events · ${data.analysis.items.length} analysis pieces`
-              : `${newsParts.unread.length} unread events · ${analysisParts.unread.length} unread analysis`}
-          {laneMode === "inbox" && data.friend_pick_count > 0
-            ? ` · ${data.friend_pick_count} with friend reactions`
-            : ""}
-        </p>
-      </div>
+      <div className="mt-6 lg:mt-4">{statusFooter}</div>
 
       {openEventData ? (
         <EventModal
