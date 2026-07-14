@@ -70,7 +70,9 @@ export default function EventCoveragePage() {
           )}
           <FriendStars stars={event.friend_stars} />
         </div>
-        <h1 className="text-2xl font-bold leading-snug">{event.title}</h1>
+        <h1 className="font-serif text-2xl font-semibold leading-snug tracking-tight">
+          {event.title}
+        </h1>
       </header>
 
       <div className="space-y-4">
@@ -88,7 +90,7 @@ export default function EventCoveragePage() {
               href={row.article_url}
               target="_blank"
               rel="noreferrer noopener"
-              className="block font-medium text-slate-900 hover:text-brand-600 dark:text-slate-100"
+              className="block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:text-brand-600 dark:text-slate-100"
             >
               {row.full_headline}
             </a>

@@ -53,7 +53,7 @@ function CoverageListItem({
           </span>
         </div>
         <p
-          className={`text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100 ${
+          className={`font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-100 ${
             item.read ? "font-normal text-slate-400 dark:text-slate-500" : ""
           }`}
         >
@@ -149,7 +149,7 @@ export function EventModal({ event, onClose, onOpenStory }: EventModalProps) {
               <span>{relativeTime(detail.first_seen_at)}</span>
               <FriendStars stars={detail.friend_stars} />
             </div>
-            <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100">
+            <h2 className="font-serif text-2xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
               {detail.title}
             </h2>
             <div className="mt-4">

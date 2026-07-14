@@ -273,7 +273,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                 <span>{relativeTime(story.created_at)}</span>
               </div>
 
-              <h2 className="mt-3 text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100">
+              <h2 className="mt-3 font-serif text-2xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
                 {story.full_headline}
               </h2>
 

@@ -1,3 +1,4 @@
+import { ReactionIcon } from "@/components/reaction-icon";
 import { REACTIONS } from "@/lib/reactions";
 import type { FriendEngagement, FriendMini } from "@/lib/types";
 
@@ -98,7 +99,7 @@ export function EngagementSummary({
         ) : null}
         {reactionEntries.map((r) => (
           <span key={r.kind} className="flex items-center gap-0.5" title={r.label}>
-            <span className="text-sm leading-none">{r.emoji}</span>
+            <ReactionIcon kind={r.kind} className="h-3.5 w-3.5" />
             <span>{r.count}</span>
           </span>
         ))}
@@ -142,7 +143,7 @@ export function EngagementSummary({
         ) : (
           reactionEntries.map((r) => (
             <span key={r.kind} className="flex items-center gap-0.5" title={r.label}>
-              <span className="text-sm leading-none">{r.emoji}</span>
+              <ReactionIcon kind={r.kind} className="h-3.5 w-3.5" />
               <span>{r.count}</span>
             </span>
           ))

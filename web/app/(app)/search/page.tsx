@@ -90,7 +90,7 @@ function SearchInner() {
       <h1 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
         Search
       </h1>
-      <div className="sticky top-16 z-10 bg-white pb-3 dark:bg-slate-950">
+      <div className="sticky top-0 z-10 bg-white pb-3 dark:bg-slate-950">
         <input
           type="search"
           autoFocus
