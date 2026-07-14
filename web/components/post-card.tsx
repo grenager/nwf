@@ -416,40 +416,38 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
   }
 
   return (
-    <article className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <article className="py-7">
       {/* Link preview: image, journal, headline, summary — click to read. */}
       <a
         href={card.article_url}
         target="_blank"
         rel="noopener noreferrer"
         onClick={markReadOnOpen}
-        className="group block transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+        className="group block"
       >
         {card.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={card.image_url}
             alt=""
-            className="h-52 w-full border-b border-zinc-200 object-cover dark:border-zinc-800"
+            className="mb-3 h-52 w-full rounded-lg object-cover"
           />
         ) : null}
-        <div className="px-4 pt-4">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-            {card.source_name ?? hostFromUrl(card.article_url)}
-          </span>
-          <h3 className="mt-0.5 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 group-hover:underline dark:text-zinc-50">
-            {card.full_headline}
-          </h3>
-          {card.summary ? (
-            <p className="mt-1 line-clamp-3 text-sm text-zinc-600 dark:text-zinc-400">
-              {stripHtml(card.summary)}
-            </p>
-          ) : null}
-        </div>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+          {card.source_name ?? hostFromUrl(card.article_url)}
+        </span>
+        <h3 className="mt-0.5 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 group-hover:underline dark:text-zinc-50">
+          {card.full_headline}
+        </h3>
+        {card.summary ? (
+          <p className="mt-1 line-clamp-3 text-sm text-zinc-600 dark:text-zinc-400">
+            {stripHtml(card.summary)}
+          </p>
+        ) : null}
       </a>
 
-      {/* Rating + friend engagement, still part of the preview block. */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
+      {/* Rating + friend engagement. */}
+      <div className="mt-3 flex items-center justify-between gap-3">
         <StarRating
           storyId={card.story_id}
           value={card.my_rating}
@@ -463,7 +461,7 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
       </div>
 
       {/* Conversation: takes, comments, and the reply/attach composer. */}
-      <div className="space-y-4 border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/30">
+      <div className="mt-4 space-y-4">
         {card.posts.map((post) => (
           <PostThread
             key={post.id}
