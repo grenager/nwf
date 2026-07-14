@@ -12,7 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const LINKS: { href: string; label: string }[] = [
-  { href: "/", label: "Today" },
+  { href: "/", label: "Feed" },
   { href: "/sources", label: "Sources" },
 ];
 
@@ -54,7 +54,7 @@ export function Nav() {
 
   const isAdmin: boolean = profile?.is_admin ?? false;
   const links = isGuest
-    ? [{ href: "/", label: "Today" }]
+    ? [{ href: "/", label: "Feed" }]
     : isAdmin
       ? [...LINKS, { href: "/admin", label: "Admin" }]
       : LINKS;

@@ -55,23 +55,11 @@ class Settings(BaseSettings):
     # --- Embeddings (OpenAI) ----------------------------------------------
     embeddings_api_key: str | None = Field(default=None)
     embeddings_model: str = Field(default="text-embedding-3-small")
-    event_cluster_threshold: float = Field(
-        default=0.72,
-        description="Cosine similarity threshold for joining an existing event",
-    )
-    event_active_hours: int = Field(
-        default=48,
-        description="Only match stories against events seen within this window",
-    )
 
-    # --- Inbox ------------------------------------------------------------
+    # --- Feed -------------------------------------------------------------
     inbox_candidate_days: int = Field(
-        default=7,
-        description="How far back to look for inbox candidates (events + analysis)",
-    )
-    event_min_outlets: int = Field(
-        default=3,
-        description="Minimum distinct outlets for an event to enter the news inbox",
+        default=14,
+        description="How far back to look for feed candidates",
     )
 
     # --- Logging ----------------------------------------------------------

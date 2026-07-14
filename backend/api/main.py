@@ -9,15 +9,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers import (
+    attachments,
     comments,
     connections,
-    events,
+    feed,
     health,
     me,
+    posts,
     profiles,
     sources,
     stories,
-    today,
 )
 from core.config import get_settings
 from core.db import dispose_engine
@@ -38,8 +39,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="NewsWithFriends API",
-        version="0.1.0",
-        summary="Sources, RSS-scraped stories, per-user read/star, comments, friends.",
+        version="0.2.0",
+        summary="Sources, stories, posts, replies, friends, unified feed.",
         lifespan=lifespan,
     )
 
@@ -54,8 +55,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(sources.router)
     app.include_router(stories.router)
-    app.include_router(events.router)
-    app.include_router(today.router)
+    app.include_router(posts.router)
+    app.include_router(feed.router)
+    app.include_router(attachments.router)
     app.include_router(me.router)
     app.include_router(comments.router)
     app.include_router(connections.router)

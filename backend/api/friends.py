@@ -14,6 +14,9 @@ from core.models import (
     Comment,
     Connection,
     ConnectionStatus,
+    Post,
+    PostParticipant,
+    PostVisibility,
     Profile,
     Source,
     StoryReaction,
@@ -297,3 +300,107 @@ def display_name(profile: Profile) -> str:
     if profile.first:
         return profile.first
     return "Friend"
+
+
+async def post_participant_ids(
+    session: AsyncSession, post_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """User ids who author or reply on a post."""
+    rows = await session.scalars(
+        select(PostParticipant.user_id).where(PostParticipant.post_id == post_id)
+    )
+    return list(rows.all())
+
+
+async def can_see_post(
+    session: AsyncSession,
+    viewer_id: uuid.UUID | None,
+    post: Post,
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+    participant_ids: list[uuid.UUID] | None = None,
+) -> bool:
+    """True if viewer may see the post (public, participant, or FoF of participant)."""
+    if post.visibility == PostVisibility.public:
+        return True
+    if viewer_id is None:
+        return False
+    if post.author_id == viewer_id:
+        return True
+    participants: list[uuid.UUID] = (
+        participant_ids
+        if participant_ids is not None
+        else await post_participant_ids(session, post.id)
+    )
+    if viewer_id in participants:
+        return True
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
+    friend_set = set(friends)
+    return any(pid in friend_set for pid in participants)
+
+
+def audience_label(visibility: PostVisibility, participant_count: int) -> str:
+    """Human-readable audience for the composer / card chrome."""
+    if visibility == PostVisibility.public:
+        return "public"
+    if participant_count <= 1:
+        return "visible to friends"
+    return f"visible to friends of {participant_count} participants"
+
+
+async def visible_post_ids_for_viewer(
+    session: AsyncSession,
+    viewer_id: uuid.UUID | None,
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+    limit: int = 100,
+    since_days: int = 14,
+) -> list[uuid.UUID]:
+    """Candidate post ids the viewer may see, newest activity first.
+
+    Guests see only public posts. Authenticated users see public posts plus
+    private posts where they are a participant or a friend of any participant.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    since = datetime.now(UTC) - timedelta(days=since_days)
+
+    if viewer_id is None:
+        rows = await session.scalars(
+            select(Post.id)
+            .where(
+                Post.visibility == PostVisibility.public,
+                Post.last_activity_at >= since,
+            )
+            .order_by(Post.last_activity_at.desc())
+            .limit(limit)
+        )
+        return list(rows.all())
+
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
+    # Posts where viewer or any friend is a participant, OR public.
+    participant_filter = [viewer_id, *friends]
+    stmt = (
+        select(Post.id)
+        .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
+        .where(
+            Post.last_activity_at >= since,
+            or_(
+                Post.visibility == PostVisibility.public,
+                Post.author_id == viewer_id,
+                PostParticipant.user_id.in_(participant_filter),
+            ),
+        )
+        .group_by(Post.id, Post.last_activity_at)
+        .order_by(Post.last_activity_at.desc())
+        .limit(limit)
+    )
+    return list((await session.scalars(stmt)).all())

@@ -3,20 +3,22 @@
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { Story, StoryKind } from "@/lib/types";
+import type { Post, PostVisibility, StoryKind } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface AddStoryModalProps {
   onClose: () => void;
-  onAdded?: (story: Story) => void;
+  onAdded?: (post: Post) => void;
 }
 
 export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   const { notify } = useToast();
   const { requireAuth } = useAuthGate();
   const [url, setUrl] = useState<string>("");
+  const [take, setTake] = useState<string>("");
   const [kind, setKind] = useState<StoryKind>("news");
+  const [visibility, setVisibility] = useState<PostVisibility>("private");
   const [saving, setSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -33,18 +35,23 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (!requireAuth("add stories")) return;
+    if (!requireAuth("post")) return;
     const trimmed: string = url.trim();
     if (!trimmed) return;
     setSaving(true);
     try {
-      const story: Story = await api.addStory(trimmed, kind);
-      notify("Story added and marked read", "success");
-      onAdded?.(story);
+      const post: Post = await api.createPost({
+        url: trimmed,
+        take: take.trim() || null,
+        kind,
+        visibility,
+      });
+      notify("Posted", "success");
+      onAdded?.(post);
       onClose();
     } catch (err) {
       notify(
-        err instanceof ApiError ? err.message : "Failed to add story",
+        err instanceof ApiError ? err.message : "Failed to post",
         "error",
       );
     } finally {
@@ -63,7 +70,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            Add a story
+            Share an article
           </h2>
           <button
             onClick={onClose}
@@ -90,6 +97,19 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
             />
           </label>
 
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              One-line take (optional)
+            </span>
+            <textarea
+              value={take}
+              onChange={(e) => setTake(e.target.value)}
+              rows={2}
+              placeholder="What stood out?"
+              className="resize-none border border-slate-300 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+            />
+          </label>
+
           <div className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               Type
@@ -112,10 +132,19 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
             </div>
           </div>
 
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            We&apos;ll fetch and parse the page later. For now it&apos;s added
-            and marked as read for you.
-          </p>
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <span className="font-semibold">Visible to:</span>
+            <select
+              value={visibility}
+              onChange={(e) =>
+                setVisibility(e.target.value as PostVisibility)
+              }
+              className="border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+            >
+              <option value="private">friends</option>
+              <option value="public">public</option>
+            </select>
+          </label>
 
           <div className="flex justify-end gap-2">
             <button
@@ -130,7 +159,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
               disabled={saving || !url.trim()}
               className="bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
             >
-              {saving ? "Adding…" : "Add story"}
+              {saving ? "Posting…" : "Post"}
             </button>
           </div>
         </form>

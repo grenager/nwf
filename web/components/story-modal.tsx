@@ -149,7 +149,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
           setComments([]);
         } else {
           const threadRaw: Comment[] = await api
-            .listComments(storyId)
+            .listComments({ storyId })
             .catch((): Comment[] => []);
           if (!cancelled) setComments(threadRaw);
           if (!detail.read) {
@@ -180,11 +180,31 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   async function submitComment(): Promise<void> {
     if (!requireAuth("comment on stories")) return;
     const text: string = draft.trim();
-    if (!text || posting) return;
+    if (!text || posting || !story) return;
     setPosting(true);
     try {
-      const created: Comment = await api.createComment(storyId, text);
-      setComments((prev) => [...prev, created]);
+      // Starting a conversation = posting on this story with the take as body.
+      const createdPost = await api.createPost({
+        story_id: storyId,
+        take: text,
+        visibility: "private",
+        kind: story.kind,
+      });
+      // Surface the take as a pseudo-comment in the modal list.
+      setComments((prev) => [
+        ...prev,
+        {
+          id: createdPost.id,
+          story_id: storyId,
+          post_id: createdPost.id,
+          user_id: createdPost.author_id,
+          author_name: createdPost.author_name,
+          author_image_url: createdPost.author_image_url,
+          text,
+          created_at: createdPost.created_at,
+          updated_at: createdPost.updated_at,
+        },
+      ]);
       setDraft("");
     } catch (err) {
       notify(
