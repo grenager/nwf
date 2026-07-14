@@ -73,6 +73,32 @@ async def _match_source_for_url(session: SessionDep, url: str) -> Source | None:
     return None
 
 
+def _is_hostlike(headline: str, url: str) -> bool:
+    """True when the headline is just the site host (no real title yet)."""
+    text = headline.strip().lower()
+    if not text:
+        return True
+    host = registrable_host(url)
+    return host is not None and text in {host, f"www.{host}"}
+
+
+def _looks_unenriched(story: Story) -> bool:
+    """A story we likely created from a bare URL without page metadata."""
+    missing_meta = (
+        story.source_id is None
+        and story.image_url is None
+        and story.summary is None
+    )
+    return missing_meta or _is_hostlike(story.full_headline, story.article_url)
+
+
+async def _story_by_url(session: SessionDep, url: str) -> Story | None:
+    result: Story | None = await session.scalar(
+        select(Story).where(Story.article_url == url)
+    )
+    return result
+
+
 async def _ensure_story(
     session: SessionDep,
     *,
@@ -91,29 +117,68 @@ async def _ensure_story(
             status.HTTP_400_BAD_REQUEST, "story_id or url is required"
         )
     clean_url: str = url.strip()
-    existing = await session.scalar(select(Story).where(Story.article_url == clean_url))
-    if existing is not None:
+
+    existing = await _story_by_url(session, clean_url)
+    if existing is not None and not _looks_unenriched(existing):
         return existing
 
-    # Enrich from the page's metadata and match a known source by domain.
+    # (Re)enrich from the page metadata, following redirects to the canonical
+    # article (e.g. a Substack reader-inbox link -> the publication's post).
     metadata = await fetch_url_metadata(clean_url)
-    source = await _match_source_for_url(session, clean_url)
+    canonical: str = (metadata.canonical_url or "").strip() or clean_url
+
+    # The canonical article may already exist as its own story (e.g. scraped
+    # from its RSS feed). Prefer it so a shared redirect wrapper doesn't create
+    # a duplicate detached from the real, source-backed story.
+    target: Story | None = existing
+    if canonical != clean_url:
+        canonical_story = await _story_by_url(session, canonical)
+        if canonical_story is not None and (
+            existing is None or canonical_story.id != existing.id
+        ):
+            return canonical_story
+
+    source = await _match_source_for_url(session, canonical)
     source_kind: SourceKind = source.kind if source is not None else SourceKind.outlet
-    resolved_kind = classify_story_kind(clean_url, None, source_kind)
+    resolved_kind = classify_story_kind(canonical, None, source_kind)
+    if kind != StoryKind.news:
+        resolved_kind = kind
 
     provided_title = (title or "").strip()
     headline = (
         provided_title
         or (metadata.title or "").strip()
-        or _headline_from_url(clean_url)
+        or _headline_from_url(canonical)
     )
+
+    if target is not None:
+        if provided_title or _is_hostlike(target.full_headline, target.article_url):
+            target.full_headline = headline
+        if not target.summary and metadata.description:
+            target.summary = metadata.description
+        if not target.image_url and metadata.image_url:
+            target.image_url = metadata.image_url
+        if target.source_id is None and source is not None:
+            target.source_id = source.id
+        # Only trust classification when a known source backed it.
+        if source is not None:
+            target.kind = resolved_kind
+        # Upgrade the stored URL to the canonical article when it is free.
+        if (
+            canonical != target.article_url
+            and await _story_by_url(session, canonical) is None
+        ):
+            target.article_url = canonical
+        await session.flush()
+        return target
+
     story = Story(
-        article_url=clean_url,
+        article_url=canonical,
         source_id=source.id if source is not None else None,
         full_headline=headline,
         summary=metadata.description,
         image_url=metadata.image_url,
-        kind=resolved_kind if kind == StoryKind.news else kind,
+        kind=resolved_kind,
     )
     session.add(story)
     await session.flush()
