@@ -1,4 +1,4 @@
-"""RSS parsing, classification, embedding, and event clustering."""
+"""RSS parsing, classification, and embedding (no event clustering)."""
 
 from __future__ import annotations
 
@@ -20,8 +20,7 @@ from core.classify import classify_story_kind
 from core.config import get_settings
 from core.embeddings import build_embed_text, embed_text, embeddings_enabled
 from core.logging import get_logger
-from core.models import Source, Story, StoryKind
-from scraper.cluster import assign_story_to_event, recompute_events
+from core.models import Source, Story
 
 log = get_logger("scraper.ingest")
 
@@ -230,38 +229,22 @@ def _parse_entries(feed_text: str, source: Source) -> list[dict[str, Any]]:
     return stories
 
 
-async def _postprocess_story(
-    session: AsyncSession, story_id: uuid.UUID
-) -> uuid.UUID | None:
-    """Embed and cluster a single story after upsert.
-
-    Returns the event id the story was clustered into (if any). Centroid /
-    outlet_count recomputation is deferred to the caller so a whole ingest batch
-    can refresh each touched event once via ``recompute_events``.
-    """
-    story = await session.get(Story, story_id)
-    if story is None:
-        return None
-
+async def _embed_story(session: AsyncSession, story_id: uuid.UUID) -> None:
+    """Compute and store an embedding for a story after upsert (if missing)."""
     if not embeddings_enabled():
-        return None
-
-    if story.embedding is None:
-        text = build_embed_text(story.full_headline, story.summary)
-        vector = await embed_text(text)
-        if vector is not None:
-            story.embedding = vector
-            await session.flush()
-
-    if story.kind == StoryKind.news and story.embedding is not None:
-        return await assign_story_to_event(
-            session, story, story.embedding, recompute=False
-        )
-    return None
+        return
+    story = await session.get(Story, story_id)
+    if story is None or story.embedding is not None:
+        return
+    text = build_embed_text(story.full_headline, story.summary)
+    vector = await embed_text(text)
+    if vector is not None:
+        story.embedding = vector
+        await session.flush()
 
 
 async def ingest_source(session: AsyncSession, source: Source) -> int:
-    """Fetch, parse, upsert, embed, and cluster a single source's feed."""
+    """Fetch, parse, upsert, and embed a single source's feed."""
     if not source.rss_url:
         log.warning("scraper.skip_no_rss", source_id=str(source.id), name=source.name)
         return 0
@@ -311,20 +294,11 @@ async def ingest_source(session: AsyncSession, source: Source) -> int:
     source.last_scraped_at = datetime.now(UTC)
     await session.flush()
 
-    touched_events: list[uuid.UUID] = []
     for sid in story_ids:
         try:
-            event_id = await _postprocess_story(session, sid)
-            if event_id is not None:
-                touched_events.append(event_id)
+            await _embed_story(session, sid)
         except Exception as exc:  # log and continue
-            log.error("scraper.postprocess_failed", story_id=str(sid), error=str(exc))
-
-    if touched_events:
-        try:
-            await recompute_events(session, touched_events)
-        except Exception as exc:  # log and continue
-            log.error("scraper.recompute_failed", error=str(exc))
+            log.error("scraper.embed_failed", story_id=str(sid), error=str(exc))
 
     log.info(
         "scraper.ingested",

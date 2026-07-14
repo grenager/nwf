@@ -3,8 +3,8 @@
 Reusable and parameterized (unlike ``seed_demo_friends``, which is hardcoded to
 specific real accounts). Pick a target account -- the "me" whose friends get
 activity -- create a set of fake friends, connect them as accepted friends, and
-generate reads, reactions, and comments on recent news events and analysis
-stories so the Today engagement summaries and Friends sidebar can be exercised.
+generate reads and comments on recent news events and analysis
+stories so the engagement summaries and Friends sidebar can be exercised.
 
 Fake friends live under the reserved ``@seed.test`` email domain so the script
 is fully idempotent: each run clears the fake friends' prior activity and
@@ -40,7 +40,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from core.db import dispose_engine, get_engine
-from core.reactions import REACTIONS
 
 # Reserved domain that marks an account as a script-generated fake friend.
 SEED_DOMAIN: str = "seed.test"
@@ -226,10 +225,6 @@ async def _clear_activity(conn: AsyncConnection, friend_ids: list[uuid.UUID]) ->
         text("delete from public.story_statuses where user_id = any(:ids)"),
         {"ids": friend_ids},
     )
-    await conn.execute(
-        text("delete from public.story_reactions where user_id = any(:ids)"),
-        {"ids": friend_ids},
-    )
 
 
 async def _story_pool(
@@ -331,7 +326,6 @@ async def _run_seed(
         # Build all rows first, then bulk-insert (one round-trip per table) so
         # the script stays fast against a remote database.
         status_rows: list[dict[str, object]] = []
-        reaction_rows: list[dict[str, object]] = []
         comment_rows: list[dict[str, object]] = []
 
         for fid, minutes in friends:
@@ -350,17 +344,6 @@ async def _run_seed(
                 )
                 statuses[sid] = ts
                 status_rows.append({"uid": fid, "sid": sid, "ts": ts})
-
-            # React to a subset with varied reaction types.
-            for sid in rng.sample(list(statuses), k=min(6, len(statuses))):
-                reaction_rows.append(
-                    {
-                        "uid": fid,
-                        "sid": sid,
-                        "reaction": rng.choice(REACTIONS),
-                        "ts": statuses[sid],
-                    }
-                )
 
             # Comments on both news and analysis stories.
             commentable = [*read_news, *read_analysis] or [*news_ids, *analysis_ids]
@@ -394,20 +377,6 @@ async def _run_seed(
                 ),
                 status_rows,
             )
-        if reaction_rows:
-            await conn.execute(
-                text(
-                    """
-                    insert into public.story_reactions
-                        (user_id, story_id, reaction, created_at, updated_at)
-                    values (:uid, :sid, :reaction, :ts, :ts)
-                    on conflict (user_id, story_id) do update
-                        set reaction = excluded.reaction,
-                            updated_at = excluded.updated_at
-                    """
-                ),
-                reaction_rows,
-            )
         if comment_rows:
             await conn.execute(
                 text(
@@ -421,7 +390,7 @@ async def _run_seed(
             )
 
         print(
-            f"seeded {len(status_rows)} reads, {len(reaction_rows)} reactions, "
+            f"seeded {len(status_rows)} reads, "
             f"{len(comment_rows)} comments across {len(friend_ids)} friends "
             f"for target {me_id}"
         )

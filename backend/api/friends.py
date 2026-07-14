@@ -14,9 +14,12 @@ from core.models import (
     Comment,
     Connection,
     ConnectionStatus,
+    Post,
+    PostParticipant,
+    PostVisibility,
     Profile,
     Source,
-    StoryReaction,
+    StoryRating,
     StoryStatus,
 )
 
@@ -25,12 +28,10 @@ CURATED_SOURCE_LIMIT: int = 40
 
 @dataclass
 class StoryActivity:
-    """Sets of friend user-ids who read/reacted/commented on a single story."""
+    """Sets of friend user-ids who read/commented on a single story."""
 
     read: set[uuid.UUID] = field(default_factory=set)
     commented: set[uuid.UUID] = field(default_factory=set)
-    # reaction type -> set of friend ids who used that reaction
-    reactions: dict[str, set[uuid.UUID]] = field(default_factory=dict)
 
 
 def curated_source_subquery(limit: int = CURATED_SOURCE_LIMIT) -> Any:
@@ -47,7 +48,7 @@ async def global_activity_by_story(
     session: AsyncSession,
     story_ids: list[uuid.UUID],
 ) -> dict[uuid.UUID, StoryActivity]:
-    """Map story_id -> global read/reaction/comment activity (all users)."""
+    """Map story_id -> global read/comment activity (all users)."""
     if not story_ids:
         return {}
 
@@ -65,19 +66,6 @@ async def global_activity_by_story(
         entry = activity.setdefault(story_id, StoryActivity())
         if read:
             entry.read.add(user_id)
-
-    reaction_rows = (
-        await session.execute(
-            select(
-                StoryReaction.story_id,
-                StoryReaction.user_id,
-                StoryReaction.reaction,
-            ).where(StoryReaction.story_id.in_(story_ids))
-        )
-    ).all()
-    for story_id, user_id, reaction in reaction_rows:
-        entry = activity.setdefault(story_id, StoryActivity())
-        entry.reactions.setdefault(reaction, set()).add(user_id)
 
     comment_rows = (
         await session.execute(
@@ -116,7 +104,7 @@ async def friend_stars_by_story(
     *,
     friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, list[Profile]]:
-    """Map story_id -> profiles of friends who reacted to it (any reaction)."""
+    """Map story_id -> profiles of friends who rated it."""
     if not story_ids:
         return {}
 
@@ -130,11 +118,11 @@ async def friend_stars_by_story(
 
     rows = (
         await session.execute(
-            select(StoryReaction.story_id, Profile)
-            .join(Profile, Profile.id == StoryReaction.user_id)
+            select(StoryRating.story_id, Profile)
+            .join(Profile, Profile.id == StoryRating.user_id)
             .where(
-                StoryReaction.story_id.in_(story_ids),
-                StoryReaction.user_id.in_(friends),
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id.in_(friends),
             )
         )
     ).all()
@@ -145,23 +133,57 @@ async def friend_stars_by_story(
     return result
 
 
-async def my_reactions_by_story(
+async def my_ratings_by_story(
     session: AsyncSession,
     user_id: uuid.UUID,
     story_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, str]:
-    """Map story_id -> the current user's own reaction (if any)."""
+) -> dict[uuid.UUID, int]:
+    """Map story_id -> the current user's own 1-5 rating (if any)."""
     if not story_ids:
         return {}
     rows = (
         await session.execute(
-            select(StoryReaction.story_id, StoryReaction.reaction).where(
-                StoryReaction.story_id.in_(story_ids),
-                StoryReaction.user_id == user_id,
+            select(StoryRating.story_id, StoryRating.rating).where(
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id == user_id,
             )
         )
     ).all()
-    return {story_id: reaction for story_id, reaction in rows}
+    return {story_id: int(rating) for story_id, rating in rows}
+
+
+async def friend_ratings_by_story(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    story_ids: list[uuid.UUID],
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+) -> dict[uuid.UUID, tuple[float, int]]:
+    """Map story_id -> (average rating, count) among the viewer's friends."""
+    if not story_ids:
+        return {}
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, user_id)
+    )
+    if not friends:
+        return {}
+    rows = (
+        await session.execute(
+            select(StoryRating.story_id, StoryRating.rating).where(
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id.in_(friends),
+            )
+        )
+    ).all()
+    buckets: dict[uuid.UUID, list[int]] = {}
+    for story_id, rating in rows:
+        buckets.setdefault(story_id, []).append(int(rating))
+    return {
+        story_id: (sum(values) / len(values), len(values))
+        for story_id, values in buckets.items()
+    }
 
 
 async def friend_activity_by_story(
@@ -171,7 +193,7 @@ async def friend_activity_by_story(
     *,
     friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, StoryActivity]:
-    """Map story_id -> which friends read/hearted/commented on it.
+    """Map story_id -> which friends read/commented on it.
 
     Only accepted connections (friends) are counted; the current user is
     excluded so counts reflect *friends'* engagement.
@@ -204,22 +226,6 @@ async def friend_activity_by_story(
         if read:
             entry.read.add(friend_id)
 
-    reaction_rows = (
-        await session.execute(
-            select(
-                StoryReaction.story_id,
-                StoryReaction.user_id,
-                StoryReaction.reaction,
-            ).where(
-                StoryReaction.story_id.in_(story_ids),
-                StoryReaction.user_id.in_(friends),
-            )
-        )
-    ).all()
-    for story_id, friend_id, reaction in reaction_rows:
-        entry = activity.setdefault(story_id, StoryActivity())
-        entry.reactions.setdefault(reaction, set()).add(friend_id)
-
     comment_rows = (
         await session.execute(
             select(Comment.story_id, Comment.user_id).where(
@@ -237,23 +243,17 @@ async def friend_activity_by_story(
 def aggregate_engagement(
     activity: dict[uuid.UUID, StoryActivity],
     story_ids: Iterable[uuid.UUID],
-) -> tuple[set[uuid.UUID], int, dict[str, int]]:
-    """Distinct friend readers, comment count, and per-reaction counts."""
+) -> tuple[set[uuid.UUID], int]:
+    """Distinct friend readers and comment count across the given stories."""
     read: set[uuid.UUID] = set()
     commented: set[uuid.UUID] = set()
-    reactions: dict[str, set[uuid.UUID]] = {}
     for sid in story_ids:
         entry = activity.get(sid)
         if entry is None:
             continue
         read |= entry.read
         commented |= entry.commented
-        for kind, friend_ids in entry.reactions.items():
-            reactions.setdefault(kind, set()).update(friend_ids)
-    reaction_counts: dict[str, int] = {
-        kind: len(ids) for kind, ids in reactions.items() if ids
-    }
-    return read, len(commented), reaction_counts
+    return read, len(commented)
 
 
 async def friend_profiles_map(
@@ -297,3 +297,107 @@ def display_name(profile: Profile) -> str:
     if profile.first:
         return profile.first
     return "Friend"
+
+
+async def post_participant_ids(
+    session: AsyncSession, post_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """User ids who author or reply on a post."""
+    rows = await session.scalars(
+        select(PostParticipant.user_id).where(PostParticipant.post_id == post_id)
+    )
+    return list(rows.all())
+
+
+async def can_see_post(
+    session: AsyncSession,
+    viewer_id: uuid.UUID | None,
+    post: Post,
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+    participant_ids: list[uuid.UUID] | None = None,
+) -> bool:
+    """True if viewer may see the post (public, participant, or FoF of participant)."""
+    if post.visibility == PostVisibility.public:
+        return True
+    if viewer_id is None:
+        return False
+    if post.author_id == viewer_id:
+        return True
+    participants: list[uuid.UUID] = (
+        participant_ids
+        if participant_ids is not None
+        else await post_participant_ids(session, post.id)
+    )
+    if viewer_id in participants:
+        return True
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
+    friend_set = set(friends)
+    return any(pid in friend_set for pid in participants)
+
+
+def audience_label(visibility: PostVisibility, participant_count: int) -> str:
+    """Human-readable audience for the composer / card chrome."""
+    if visibility == PostVisibility.public:
+        return "public"
+    if participant_count <= 1:
+        return "visible to friends"
+    return f"visible to friends of {participant_count} participants"
+
+
+async def visible_post_ids_for_viewer(
+    session: AsyncSession,
+    viewer_id: uuid.UUID | None,
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+    limit: int = 100,
+    since_days: int = 14,
+) -> list[uuid.UUID]:
+    """Candidate post ids the viewer may see, newest activity first.
+
+    Guests see only public posts. Authenticated users see public posts plus
+    private posts where they are a participant or a friend of any participant.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    since = datetime.now(UTC) - timedelta(days=since_days)
+
+    if viewer_id is None:
+        rows = await session.scalars(
+            select(Post.id)
+            .where(
+                Post.visibility == PostVisibility.public,
+                Post.last_activity_at >= since,
+            )
+            .order_by(Post.last_activity_at.desc())
+            .limit(limit)
+        )
+        return list(rows.all())
+
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
+    # Posts where viewer or any friend is a participant, OR public.
+    participant_filter = [viewer_id, *friends]
+    stmt = (
+        select(Post.id)
+        .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
+        .where(
+            Post.last_activity_at >= since,
+            or_(
+                Post.visibility == PostVisibility.public,
+                Post.author_id == viewer_id,
+                PostParticipant.user_id.in_(participant_filter),
+            ),
+        )
+        .group_by(Post.id, Post.last_activity_at)
+        .order_by(Post.last_activity_at.desc())
+        .limit(limit)
+    )
+    return list((await session.scalars(stmt)).all())

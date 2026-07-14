@@ -3,22 +3,19 @@
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { EngagementSummary } from "@/components/engagement-summary";
-import { ReactionPicker } from "@/components/reaction-picker";
+import { SourceLogo } from "@/components/source-logo";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
-import type { Comment, ReactionKind, Story, UUID } from "@/lib/types";
+import type { Comment, Story, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface StoryModalProps {
   storyId: UUID;
   onClose: () => void;
-  onStatusChange?: (
-    storyId: UUID,
-    patch: { read?: boolean; my_reaction?: ReactionKind | null },
-  ) => void;
+  onStatusChange?: (storyId: UUID, patch: { read?: boolean }) => void;
 }
 
 function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
@@ -77,7 +74,6 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   const isGuest: boolean = !session;
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [reaction, setReaction] = useState<ReactionKind | null>(null);
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState<string>("");
@@ -142,13 +138,12 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
         const detail: Story = await api.getStory(storyId);
         if (cancelled) return;
         setStory(detail);
-        setReaction(detail.my_reaction);
 
         if (isGuest) {
           setComments([]);
         } else {
           const threadRaw: Comment[] = await api
-            .listComments(storyId)
+            .listComments({ storyId })
             .catch((): Comment[] => []);
           if (!cancelled) setComments(threadRaw);
           if (!detail.read) {
@@ -171,19 +166,34 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
     };
   }, [storyId, notify, markReadNow, isGuest]);
 
-  function updateReaction(next: ReactionKind | null): void {
-    setReaction(next);
-    onStatusChange?.(storyId, { my_reaction: next });
-  }
-
   async function submitComment(): Promise<void> {
     if (!requireAuth("comment on stories")) return;
     const text: string = draft.trim();
-    if (!text || posting) return;
+    if (!text || posting || !story) return;
     setPosting(true);
     try {
-      const created: Comment = await api.createComment(storyId, text);
-      setComments((prev) => [...prev, created]);
+      // Starting a conversation = posting on this story with the take as body.
+      const createdPost = await api.createPost({
+        story_id: storyId,
+        take: text,
+        visibility: "private",
+        kind: story.kind,
+      });
+      // Surface the take as a pseudo-comment in the modal list.
+      setComments((prev) => [
+        ...prev,
+        {
+          id: createdPost.id,
+          story_id: storyId,
+          post_id: createdPost.id,
+          user_id: createdPost.author_id,
+          author_name: createdPost.author_name,
+          author_image_url: createdPost.author_image_url,
+          text,
+          created_at: createdPost.created_at,
+          updated_at: createdPost.updated_at,
+        },
+      ]);
       setDraft("");
     } catch (err) {
       notify(
@@ -257,18 +267,12 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
 
             <div className="p-6">
               <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                {story.source_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={story.source_image_url}
-                    alt={story.source_name ?? ""}
-                    className="h-6 w-auto max-w-[180px] shrink-0 object-contain"
-                  />
-                ) : story.source_name ? (
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    {story.source_name}
-                  </span>
-                ) : null}
+                <SourceLogo
+                  src={story.source_image_url}
+                  name={story.source_name}
+                  imgClassName="h-6 w-auto max-w-[180px] shrink-0 object-contain"
+                  fallbackClassName="font-semibold text-slate-700 dark:text-slate-200"
+                />
                 <span aria-hidden>·</span>
                 <span>{relativeTime(story.created_at)}</span>
               </div>
@@ -321,7 +325,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                 />
               </div>
 
-              <div className="grid grid-cols-3 border-y border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-2 border-y border-slate-200 dark:border-slate-800">
                 <button
                   onClick={() => void share()}
                   className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -329,12 +333,6 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                   <span className="text-base">↗</span>
                   Share
                 </button>
-                <ReactionPicker
-                  storyId={storyId}
-                  value={reaction}
-                  onChange={updateReaction}
-                  variant="bar"
-                />
                 <button
                   onClick={focusComment}
                   className="flex items-center justify-center gap-1.5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"

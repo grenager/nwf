@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.models import ConnectionStatus, StoryKind
+from core.models import ConnectionStatus, PostVisibility, StoryKind
 
 
 class ORMModel(BaseModel):
@@ -63,6 +63,7 @@ class SourceStatus(BaseModel):
     name: str
     rss_url: str | None = None
     has_rss: bool
+    image_url: str | None = None
     last_scraped_at: datetime | None = None
     story_count: int
     newest_story_at: datetime | None = None
@@ -126,7 +127,6 @@ class FriendEngagementOut(BaseModel):
 
     read: int = 0
     commented: int = 0
-    reactions: dict[str, int] = Field(default_factory=dict)
     # A few reader avatars (subset of `read`) for display.
     readers: list[FriendMiniOut] = Field(default_factory=list)
 
@@ -135,7 +135,6 @@ class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
     dismissed: bool = False
-    my_reaction: str | None = None
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
 
@@ -174,9 +173,9 @@ class DismissMark(BaseModel):
     story_id: uuid.UUID
 
 
-class ReactionSet(BaseModel):
+class RatingSet(BaseModel):
     story_id: uuid.UUID
-    reaction: str
+    rating: int = Field(ge=1, le=5)
 
 
 class UserSourcesUpdate(BaseModel):
@@ -185,10 +184,11 @@ class UserSourcesUpdate(BaseModel):
     source_ids: list[uuid.UUID]
 
 
-# --- Comments -------------------------------------------------------------
+# --- Comments (replies under a post) --------------------------------------
 class CommentOut(ORMModel):
     id: uuid.UUID
     story_id: uuid.UUID
+    post_id: uuid.UUID | None = None
     user_id: uuid.UUID
     author_name: str = "Friend"
     author_image_url: str | None = None
@@ -198,12 +198,123 @@ class CommentOut(ORMModel):
 
 
 class CommentCreate(BaseModel):
-    story_id: uuid.UUID
+    post_id: uuid.UUID
     text: str = Field(min_length=1, max_length=10_000)
 
 
 class CommentUpdate(BaseModel):
     text: str = Field(min_length=1, max_length=10_000)
+
+
+# --- Posts ----------------------------------------------------------------
+class AttachmentOut(ORMModel):
+    id: uuid.UUID
+    post_id: uuid.UUID
+    comment_id: uuid.UUID | None = None
+    article_url: str
+    story_id: uuid.UUID | None = None
+    attached_by: uuid.UUID
+    created_at: datetime
+
+
+class AttachmentCreate(BaseModel):
+    post_id: uuid.UUID
+    article_url: str = Field(min_length=4)
+    comment_id: uuid.UUID | None = None
+
+
+class PostCreate(BaseModel):
+    """Share a story by id or URL, with optional take + visibility."""
+
+    story_id: uuid.UUID | None = None
+    url: str | None = None
+    take: str | None = Field(default=None, max_length=2_000)
+    visibility: PostVisibility = PostVisibility.private
+    kind: StoryKind = StoryKind.news
+    title: str | None = None
+
+
+class PostUpdate(BaseModel):
+    """Edit a post's take and/or visibility (author only)."""
+
+    take: str | None = Field(default=None, max_length=2_000)
+    visibility: PostVisibility | None = None
+
+
+class PostOut(ORMModel):
+    id: uuid.UUID
+    story_id: uuid.UUID
+    author_id: uuid.UUID
+    author_name: str = "Friend"
+    author_image_url: str | None = None
+    take: str | None = None
+    visibility: PostVisibility
+    last_activity_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    # Story teaser
+    full_headline: str = ""
+    article_url: str = ""
+    summary: str | None = None
+    image_url: str | None = None
+    source_name: str | None = None
+    source_image_url: str | None = None
+    kind: StoryKind = StoryKind.news
+    # Social
+    reply_count: int = 0
+    participant_count: int = 0
+    audience_label: str = "visible to friends"
+    replies: list[CommentOut] = Field(default_factory=list)
+    attachments: list[AttachmentOut] = Field(default_factory=list)
+    # Per-viewer log state on the underlying story
+    read: bool = False
+    starred: bool = False
+    my_rating: int | None = None
+    friend_rating_avg: float | None = None
+    friend_rating_count: int = 0
+    my_take: str | None = None
+    engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
+    readers: list[FriendMiniOut] = Field(default_factory=list)
+    unread_replies_for_viewer: bool = False
+
+
+class FeedCardOut(BaseModel):
+    """One card per post. Two posts about the same article are two cards."""
+
+    card_id: uuid.UUID
+    story_id: uuid.UUID
+    full_headline: str
+    article_url: str
+    summary: str | None = None
+    image_url: str | None = None
+    source_name: str | None = None
+    source_image_url: str | None = None
+    kind: StoryKind = StoryKind.news
+    read: bool = False
+    starred: bool = False
+    my_rating: int | None = None
+    friend_rating_avg: float | None = None
+    friend_rating_count: int = 0
+    my_take: str | None = None
+    engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
+    posts: list[PostOut] = Field(default_factory=list)
+    score: float = 0.0
+
+
+class FeedOut(BaseModel):
+    """Unified feed payload."""
+
+    items: list[FeedCardOut]
+    caught_up_after: int
+    unread_count: int
+    aggregate_readers: int = 0
+    aggregate_private_conversations: int = 0
+    new_since: datetime | None = None
+
+
+class TakeMark(BaseModel):
+    story_id: uuid.UUID
+    take: str | None = Field(default=None, max_length=2_000)
 
 
 # --- Connections ----------------------------------------------------------
@@ -241,7 +352,7 @@ class FriendsOverviewOut(BaseModel):
 
 
 class FriendActivityItem(BaseModel):
-    kind: str  # "read" | "hearted" | "commented"
+    kind: str  # "read" | "commented"
     story_id: uuid.UUID
     headline: str
     source_name: str | None = None
@@ -259,7 +370,6 @@ class FriendProfileOut(BaseModel):
     online: bool = False
     last_active_at: datetime | None = None
     reads: int = 0
-    hearts: int = 0
     comments: int = 0
     can_edit: bool = False
     recent: list[FriendActivityItem] = Field(default_factory=list)
@@ -280,52 +390,3 @@ class InviteResult(BaseModel):
     status: str  # "connected" | "requested"
     user_id: uuid.UUID | None = None
     message: str
-
-
-# --- Events (news clusters) -----------------------------------------------
-class EventCoverageOut(BaseModel):
-    story_id: uuid.UUID
-    source_id: uuid.UUID | None = None
-    source_name: str
-    bias_score: float | None = None
-    prominence: int = 0
-    image_url: str | None = None
-    story_image_url: str | None = None
-    full_headline: str
-    summary: str | None = None
-    article_url: str
-    read: bool = False
-    starred: bool = False
-
-
-class EventSummaryOut(BaseModel):
-    id: uuid.UUID
-    title: str
-    first_seen_at: datetime
-    outlet_count: int
-    story_count: int
-    is_scoop: bool
-    source_names: list[str] = Field(default_factory=list)
-    coverage: list[EventCoverageOut] = Field(default_factory=list)
-    friend_stars: list[FriendStarOut] = Field(default_factory=list)
-    engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
-    read: bool = False
-    dismissed: bool = False
-
-
-class EventDetailOut(EventSummaryOut):
-    """Full event with all coverage rows."""
-
-
-class EventList(BaseModel):
-    items: list[EventSummaryOut]
-    total: int
-
-
-class TodayOut(BaseModel):
-    """Combined Today screen payload."""
-
-    events: EventList
-    analysis: StoryList
-    friend_pick_count: int
-    new_since: datetime | None = None

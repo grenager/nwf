@@ -2,24 +2,25 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type {
+  Attachment,
   Comment,
   Connection,
   ConnectionStatus,
+  FeedPayload,
   FriendProfile,
   FriendsOverview,
   InviteResult,
+  Post,
+  PostVisibility,
   PreferencesUpdate,
   Profile,
   ProfileEdit,
-  ReactionKind,
   Source,
   SourceInput,
   SourceStatus,
   Story,
   StoryKind,
   StoryList,
-  TodayPayload,
-  EventSummary,
   UUID,
 } from "@/lib/types";
 
@@ -43,10 +44,7 @@ async function authHeader(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function request<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(await authHeader()),
@@ -93,6 +91,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ story_id: storyId, read }),
     }),
+  setTake: (storyId: UUID, take: string | null): Promise<void> =>
+    request<void>("/me/take", {
+      method: "POST",
+      body: JSON.stringify({ story_id: storyId, take }),
+    }),
   dismissStory: (storyId: UUID): Promise<void> =>
     request<void>("/me/dismiss", {
       method: "POST",
@@ -100,20 +103,6 @@ export const api = {
     }),
   undismissStory: (storyId: UUID): Promise<void> =>
     request<void>(`/me/dismiss/${storyId}`, { method: "DELETE" }),
-  markEventRead: (eventId: UUID): Promise<void> =>
-    request<void>(`/me/events/${eventId}/read`, { method: "POST" }),
-  unmarkEventRead: (eventId: UUID): Promise<void> =>
-    request<void>(`/me/events/${eventId}/read`, { method: "DELETE" }),
-  dismissEvent: (eventId: UUID): Promise<void> =>
-    request<void>(`/me/events/${eventId}/dismiss`, { method: "POST" }),
-  undismissEvent: (eventId: UUID): Promise<void> =>
-    request<void>(`/me/events/${eventId}/dismiss`, { method: "DELETE" }),
-  getArchivedEvents: (limit = 50): Promise<{ items: EventSummary[]; total: number }> =>
-    request<{ items: EventSummary[]; total: number }>(
-      `/me/archived/events?limit=${limit}`,
-    ),
-  getArchivedAnalysis: (limit = 50): Promise<StoryList> =>
-    request<StoryList>(`/me/archived/analysis?limit=${limit}`),
   addStar: (storyId: UUID): Promise<void> =>
     request<void>("/me/stars", {
       method: "POST",
@@ -122,13 +111,13 @@ export const api = {
   removeStar: (storyId: UUID): Promise<void> =>
     request<void>(`/me/stars/${storyId}`, { method: "DELETE" }),
   getStarred: (): Promise<StoryList> => request<StoryList>("/me/starred"),
-  setReaction: (storyId: UUID, reaction: ReactionKind): Promise<void> =>
-    request<void>("/me/reactions", {
+  setRating: (storyId: UUID, rating: number): Promise<void> =>
+    request<void>("/me/ratings", {
       method: "PUT",
-      body: JSON.stringify({ story_id: storyId, reaction }),
+      body: JSON.stringify({ story_id: storyId, rating }),
     }),
-  clearReaction: (storyId: UUID): Promise<void> =>
-    request<void>(`/me/reactions/${storyId}`, { method: "DELETE" }),
+  clearRating: (storyId: UUID): Promise<void> =>
+    request<void>(`/me/ratings/${storyId}`, { method: "DELETE" }),
 
   // --- sources ---
   listSources: (): Promise<Source[]> => request<Source[]>("/sources"),
@@ -170,23 +159,64 @@ export const api = {
     }),
   getStory: (id: UUID): Promise<Story> => request<Story>(`/stories/${id}`),
 
-  // --- today / events ---
-  getToday: (): Promise<TodayPayload> => request<TodayPayload>("/today"),
-  getEvent: (id: UUID): Promise<EventSummary> =>
-    request<EventSummary>(`/events/${id}`),
+  // --- feed / posts ---
+  getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
+  getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
+  createPost: (payload: {
+    story_id?: UUID;
+    url?: string;
+    take?: string | null;
+    visibility?: PostVisibility;
+    kind?: StoryKind;
+    title?: string;
+  }): Promise<Post> =>
+    request<Post>("/posts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updatePost: (
+    id: UUID,
+    payload: { take?: string | null; visibility?: PostVisibility },
+  ): Promise<Post> =>
+    request<Post>(`/posts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deletePost: (id: UUID): Promise<void> =>
+    request<void>(`/posts/${id}`, { method: "DELETE" }),
 
-  // --- comments ---
-  listComments: (storyId?: UUID): Promise<Comment[]> =>
-    request<Comment[]>(
-      storyId ? `/comments?story_id=${storyId}` : "/comments",
-    ),
-  createComment: (storyId: UUID, text: string): Promise<Comment> =>
+  // --- comments (replies) ---
+  listComments: (opts?: { postId?: UUID; storyId?: UUID }): Promise<Comment[]> => {
+    const params = new URLSearchParams();
+    if (opts?.postId) params.set("post_id", opts.postId);
+    if (opts?.storyId) params.set("story_id", opts.storyId);
+    const qs = params.toString();
+    return request<Comment[]>(qs ? `/comments?${qs}` : "/comments");
+  },
+  createComment: (postId: UUID, text: string): Promise<Comment> =>
     request<Comment>("/comments", {
       method: "POST",
-      body: JSON.stringify({ story_id: storyId, text }),
+      body: JSON.stringify({ post_id: postId, text }),
     }),
   deleteComment: (id: UUID): Promise<void> =>
     request<void>(`/comments/${id}`, { method: "DELETE" }),
+
+  // --- attachments ---
+  createAttachment: (
+    postId: UUID,
+    articleUrl: string,
+    commentId?: UUID,
+  ): Promise<Attachment> =>
+    request<Attachment>("/attachments", {
+      method: "POST",
+      body: JSON.stringify({
+        post_id: postId,
+        article_url: articleUrl,
+        comment_id: commentId ?? null,
+      }),
+    }),
+  deleteAttachment: (id: UUID): Promise<void> =>
+    request<void>(`/attachments/${id}`, { method: "DELETE" }),
 
   // --- connections ---
   listConnections: (): Promise<Connection[]> =>

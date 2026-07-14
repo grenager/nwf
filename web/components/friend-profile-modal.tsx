@@ -2,15 +2,8 @@
 
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { ReactionIcon } from "@/components/reaction-icon";
-import { reactionLabel } from "@/lib/reactions";
 import { relativeTime } from "@/lib/time";
-import type {
-  FriendActivityItem,
-  FriendProfile,
-  ReactionKind,
-  UUID,
-} from "@/lib/types";
+import type { FriendActivityItem, FriendProfile, UUID } from "@/lib/types";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -26,27 +19,9 @@ interface EditForm {
   image_url: string;
 }
 
-const REACTION_KINDS: ReadonlySet<string> = new Set<ReactionKind>([
-  "thumbsup",
-  "heart",
-  "laugh",
-  "wow",
-  "sad",
-  "angry",
-]);
-
 function KindLabel({ kind }: { kind: FriendActivityItem["kind"] }) {
   if (kind === "read") return <>Read</>;
   if (kind === "commented") return <>Commented on</>;
-  if (REACTION_KINDS.has(kind)) {
-    const reactionKind = kind as ReactionKind;
-    return (
-      <span className="inline-flex items-center gap-1">
-        <ReactionIcon kind={reactionKind} className="h-3.5 w-3.5" />
-        {reactionLabel(reactionKind)}
-      </span>
-    );
-  }
   return <>{kind}</>;
 }
 
@@ -254,7 +229,6 @@ export function FriendProfileModal({
 
             <div className="mt-5 flex gap-2">
               <Stat label="Read" value={profile.reads} />
-              <Stat label="Reactions" value={profile.hearts} />
               <Stat label="Comments" value={profile.comments} />
             </div>
 

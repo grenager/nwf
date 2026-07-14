@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { EngagementSummary } from "@/components/engagement-summary";
 import { InboxCardActions } from "@/components/inbox-card-actions";
 import { ReadBadge } from "@/components/read-badge";
+import { SourceLogo } from "@/components/source-logo";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Story, UUID } from "@/lib/types";
@@ -63,18 +64,12 @@ export function StoryCard({
       <div>
         {!dense && story.source_name ? (
           <div className="mb-1.5 flex items-center gap-2">
-            {story.source_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={story.source_image_url}
-                alt={story.source_name}
-                className="h-5 w-auto max-w-[160px] shrink-0 object-contain"
-              />
-            ) : (
-              <span className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
-                {story.source_name}
-              </span>
-            )}
+            <SourceLogo
+              src={story.source_image_url}
+              name={story.source_name}
+              imgClassName="h-5 w-auto max-w-[160px] shrink-0 object-contain"
+              fallbackClassName="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500"
+            />
           </div>
         ) : null}
         <div className={dense ? "" : "flex gap-3"}>

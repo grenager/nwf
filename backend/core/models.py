@@ -55,6 +55,13 @@ class StoryKind(enum.StrEnum):
     analysis = "analysis"
 
 
+class PostVisibility(enum.StrEnum):
+    """Audience for a post; private is FoF-of-participants, public is everyone."""
+
+    private = "private"
+    public = "public"
+
+
 def _uuid_col(primary_key: bool = False) -> Mapped[uuid.UUID]:
     return mapped_column(
         PgUUID(as_uuid=True),
@@ -151,6 +158,9 @@ class Story(Base):
     full_headline: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # OpenGraph/Substack-derived attribution (e.g. "Derek Thompson on Substack")
+    # for stories not backed by a curated source we scrape directly.
+    publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     section: Mapped[str | None] = mapped_column(Text, nullable=True)
     type: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -175,27 +185,34 @@ class Story(Base):
     )
 
     source: Mapped[Source | None] = relationship(back_populates="stories")
-    events: Mapped[list[Event]] = relationship(
-        secondary="story_events", back_populates="stories"
-    )
+    posts: Mapped[list[Post]] = relationship(back_populates="story")
 
 
-class Event(Base):
-    __tablename__ = "events"
+class Post(Base):
+    """A user sharing an article with an optional take; the unified-feed unit."""
+
+    __tablename__ = "posts"
 
     id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    centroid: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
-    origin_story_id: Mapped[uuid.UUID | None] = mapped_column(
+    story_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("stories.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("stories.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    first_seen_at: Mapped[datetime] = mapped_column(
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    take: Mapped[str | None] = mapped_column(Text, nullable=True)
+    visibility: Mapped[PostVisibility] = mapped_column(
+        Enum(PostVisibility, name="post_visibility", create_type=False),
+        nullable=False,
+        default=PostVisibility.private,
+    )
+    last_activity_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    outlet_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    saga_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -203,30 +220,68 @@ class Event(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    stories: Mapped[list[Story]] = relationship(
-        secondary="story_events", back_populates="events"
+    story: Mapped[Story] = relationship(back_populates="posts")
+    comments: Mapped[list[Comment]] = relationship(back_populates="post")
+    attachments: Mapped[list[Attachment]] = relationship(back_populates="post")
+
+
+class PostParticipant(Base):
+    """Authors + repliers; drives FoF visibility as a fast union."""
+
+    __tablename__ = "post_participants"
+
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
-class StoryEvent(Base):
-    __tablename__ = "story_events"
+class Attachment(Base):
+    """A related article URL attached to a post (optionally tied to a reply)."""
 
-    story_id: Mapped[uuid.UUID] = mapped_column(
+    __tablename__ = "attachments"
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    post_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("stories.id", ondelete="CASCADE"),
-        primary_key=True,
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    event_id: Mapped[uuid.UUID] = mapped_column(
+    comment_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("events.id", ondelete="CASCADE"),
-        primary_key=True,
+        ForeignKey("comments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    article_url: Mapped[str] = mapped_column(Text, nullable=False)
+    story_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    attached_by: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    post: Mapped[Post] = relationship(back_populates="attachments")
+
 
 class StoryStatus(Base):
+    """Per-user Log entry: read / star / one-line take on a story."""
+
     __tablename__ = "story_statuses"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -249,6 +304,7 @@ class StoryStatus(Base):
         DateTime(timezone=True), nullable=True
     )
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    take: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -257,39 +313,10 @@ class StoryStatus(Base):
     )
 
 
-class EventStatus(Base):
-    """Per-user read/dismiss state for a news event cluster."""
+class StoryRating(Base):
+    """A user's 1-5 star rating on a story; the unified-feed engagement signal."""
 
-    __tablename__ = "event_statuses"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("profiles.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    event_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("events.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    read_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    dismissed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class StoryReaction(Base):
-    __tablename__ = "story_reactions"
+    __tablename__ = "story_ratings"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
@@ -301,7 +328,7 @@ class StoryReaction(Base):
         ForeignKey("stories.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    reaction: Mapped[str] = mapped_column(Text, nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -311,6 +338,8 @@ class StoryReaction(Base):
 
 
 class Comment(Base):
+    """A reply under a post (story_id kept denormalized for legacy queries)."""
+
     __tablename__ = "comments"
 
     id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
@@ -318,6 +347,11 @@ class Comment(Base):
         PgUUID(as_uuid=True),
         ForeignKey("stories.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    post_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
@@ -331,6 +365,8 @@ class Comment(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    post: Mapped[Post | None] = relationship(back_populates="comments")
 
 
 class Connection(Base):

@@ -1,5 +1,4 @@
 // API types mirroring the FastAPI Pydantic schemas.
-// Regenerate from OpenAPI with `npm run gen:api` (see README) once the API is running.
 
 export type UUID = string;
 
@@ -42,19 +41,12 @@ export interface Source {
 }
 
 export type StoryKind = "news" | "analysis";
+export type PostVisibility = "private" | "public";
 
 export interface FriendStar {
   user_id: UUID;
   display_name: string;
 }
-
-export type ReactionKind =
-  | "thumbsup"
-  | "heart"
-  | "laugh"
-  | "wow"
-  | "sad"
-  | "angry";
 
 export interface FriendMini {
   user_id: UUID;
@@ -65,7 +57,6 @@ export interface FriendMini {
 export interface FriendEngagement {
   read: number;
   commented: number;
-  reactions: Partial<Record<ReactionKind, number>>;
   readers: FriendMini[];
 }
 
@@ -90,7 +81,6 @@ export interface Story {
   read: boolean;
   starred: boolean;
   dismissed: boolean;
-  my_reaction: ReactionKind | null;
   friend_stars?: FriendStar[];
   engagement: FriendEngagement;
 }
@@ -115,6 +105,7 @@ export interface SourceStatus {
   name: string;
   rss_url: string | null;
   has_rss: boolean;
+  image_url: string | null;
   last_scraped_at: string | null;
   story_count: number;
   newest_story_at: string | null;
@@ -123,12 +114,87 @@ export interface SourceStatus {
 export interface Comment {
   id: UUID;
   story_id: UUID;
+  post_id: UUID | null;
   user_id: UUID;
   author_name: string;
   author_image_url: string | null;
   text: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Attachment {
+  id: UUID;
+  post_id: UUID;
+  comment_id: UUID | null;
+  article_url: string;
+  story_id: UUID | null;
+  attached_by: UUID;
+  created_at: string;
+}
+
+export interface Post {
+  id: UUID;
+  story_id: UUID;
+  author_id: UUID;
+  author_name: string;
+  author_image_url: string | null;
+  take: string | null;
+  visibility: PostVisibility;
+  last_activity_at: string;
+  created_at: string;
+  updated_at: string;
+  full_headline: string;
+  article_url: string;
+  summary: string | null;
+  image_url: string | null;
+  source_name: string | null;
+  source_image_url: string | null;
+  kind: StoryKind;
+  reply_count: number;
+  participant_count: number;
+  audience_label: string;
+  replies: Comment[];
+  attachments: Attachment[];
+  read: boolean;
+  starred: boolean;
+  my_rating: number | null;
+  friend_rating_avg: number | null;
+  friend_rating_count: number;
+  my_take: string | null;
+  engagement: FriendEngagement;
+  readers: FriendMini[];
+  unread_replies_for_viewer: boolean;
+}
+
+export interface FeedCard {
+  card_id: UUID;
+  story_id: UUID;
+  full_headline: string;
+  article_url: string;
+  summary: string | null;
+  image_url: string | null;
+  source_name: string | null;
+  source_image_url: string | null;
+  kind: StoryKind;
+  read: boolean;
+  starred: boolean;
+  my_rating: number | null;
+  friend_rating_avg: number | null;
+  friend_rating_count: number;
+  my_take: string | null;
+  engagement: FriendEngagement;
+  posts: Post[];
+  score: number;
+}
+
+export interface FeedPayload {
+  items: FeedCard[];
+  caught_up_after: number;
+  unread_count: number;
+  aggregate_readers: number;
+  aggregate_private_conversations: number;
+  new_since: string | null;
 }
 
 export type ConnectionStatus = "pending" | "accepted" | "blocked";
@@ -157,7 +223,7 @@ export interface FriendsOverview {
   online: number;
 }
 
-export type FriendActivityKind = "read" | "commented" | ReactionKind;
+export type FriendActivityKind = "read" | "commented";
 
 export interface FriendActivityItem {
   kind: FriendActivityKind;
@@ -178,7 +244,6 @@ export interface FriendProfile {
   online: boolean;
   last_active_at: string | null;
   reads: number;
-  hearts: number;
   comments: number;
   can_edit: boolean;
   recent: FriendActivityItem[];
@@ -195,46 +260,4 @@ export interface InviteResult {
   status: string;
   user_id: UUID | null;
   message: string;
-}
-
-export interface EventCoverage {
-  story_id: UUID;
-  source_id: UUID | null;
-  source_name: string;
-  bias_score: number | null;
-  prominence: number;
-  image_url: string | null;
-  story_image_url: string | null;
-  full_headline: string;
-  summary: string | null;
-  article_url: string;
-  read: boolean;
-  starred: boolean;
-}
-
-export interface EventSummary {
-  id: UUID;
-  title: string;
-  first_seen_at: string;
-  outlet_count: number;
-  story_count: number;
-  is_scoop: boolean;
-  source_names: string[];
-  coverage: EventCoverage[];
-  friend_stars: FriendStar[];
-  engagement: FriendEngagement;
-  read: boolean;
-  dismissed: boolean;
-}
-
-export interface EventList {
-  items: EventSummary[];
-  total: number;
-}
-
-export interface TodayPayload {
-  events: EventList;
-  analysis: StoryList;
-  friend_pick_count: number;
-  new_since: string | null;
 }
