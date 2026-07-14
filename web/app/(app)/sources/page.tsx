@@ -31,7 +31,7 @@ export default function SourcesPage() {
     try {
       const [mySources, feed, all] = await Promise.all([
         api.getMySources(),
-        api.getRecommended(),
+        api.getStoriesBySource(),
         api.listSources(),
       ]);
       setSources(mySources);

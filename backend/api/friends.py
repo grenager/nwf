@@ -168,6 +168,8 @@ async def friend_activity_by_story(
     session: AsyncSession,
     user_id: uuid.UUID,
     story_ids: list[uuid.UUID],
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, StoryActivity]:
     """Map story_id -> which friends read/hearted/commented on it.
 
@@ -177,7 +179,11 @@ async def friend_activity_by_story(
     if not story_ids:
         return {}
 
-    friends = await accepted_friend_ids(session, user_id)
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, user_id)
+    )
     if not friends:
         return {}
 
@@ -251,10 +257,17 @@ def aggregate_engagement(
 
 
 async def friend_profiles_map(
-    session: AsyncSession, user_id: uuid.UUID
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, Profile]:
     """Map friend user-id -> Profile for all accepted connections."""
-    friends = await accepted_friend_ids(session, user_id)
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, user_id)
+    )
     if not friends:
         return {}
     rows = await session.scalars(select(Profile).where(Profile.id.in_(friends)))

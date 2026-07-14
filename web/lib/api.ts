@@ -157,6 +157,8 @@ export const api = {
   // --- stories ---
   getRecommended: (): Promise<StoryList> =>
     request<StoryList>("/stories/recommended"),
+  getStoriesBySource: (perSource = 6): Promise<StoryList> =>
+    request<StoryList>(`/stories/by-source?per_source=${perSource}`),
   searchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
   titleSearchStories: (q: string): Promise<StoryList> =>

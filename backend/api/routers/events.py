@@ -436,6 +436,25 @@ async def _load_events_for_user(
     return [(event, bool(read), bool(dismissed)) for event, read, dismissed in rows]
 
 
+async def _member_story_ids_by_event(
+    session: SessionDep, event_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """Map event_id -> ids of every member story in the cluster."""
+    if not event_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(StoryEvent.event_id, StoryEvent.story_id).where(
+                StoryEvent.event_id.in_(event_ids)
+            )
+        )
+    ).all()
+    out: dict[uuid.UUID, list[uuid.UUID]] = {eid: [] for eid in event_ids}
+    for event_id, story_id in rows:
+        out.setdefault(event_id, []).append(story_id)
+    return out
+
+
 async def _events_list_for_user(
     session: SessionDep,
     user_id: uuid.UUID | None,
@@ -473,25 +492,47 @@ async def _events_list_for_user(
             for eid, lead in leads.items()
         }
 
+    # Friend engagement is aggregated over every member story of an event. The
+    # inbox list only loads a lead coverage row, so fetch full membership here.
+    if full_coverage:
+        member_ids_by_event: dict[uuid.UUID, list[uuid.UUID]] = {
+            eid: [c.story_id for c in cov] for eid, cov in coverage_by_event.items()
+        }
+    elif user_id is not None:
+        member_ids_by_event = await _member_story_ids_by_event(session, event_ids)
+    else:
+        member_ids_by_event = {}
+
     all_story_ids: list[uuid.UUID] = [
         c.story_id for coverage in coverage_by_event.values() for c in coverage
     ]
 
-    # Inbox list: skip friend engagement enrichment (extra round-trips). Detail
-    # modal / full_coverage path can still enrich when needed.
     friend_map: dict[uuid.UUID, list[FriendStarOut]] = {}
     activity: dict[uuid.UUID, StoryActivity] = {}
     profiles: dict[uuid.UUID, Profile] = {}
-    if full_coverage and user_id is not None and all_story_ids:
-        friend_profiles = await friend_stars_by_story(session, user_id, all_story_ids)
-        friend_map = {
-            sid: [
-                FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles
+    if user_id is not None:
+        friends = await accepted_friend_ids(session, user_id)
+        if friends:
+            member_story_ids: list[uuid.UUID] = [
+                sid for ids in member_ids_by_event.values() for sid in ids
             ]
-            for sid, profiles in friend_profiles.items()
-        }
-        activity = await friend_activity_by_story(session, user_id, all_story_ids)
-        profiles = await friend_profiles_map(session, user_id)
+            activity = await friend_activity_by_story(
+                session, user_id, member_story_ids, friend_ids=friends
+            )
+            profiles = await friend_profiles_map(
+                session, user_id, friend_ids=friends
+            )
+            if full_coverage and all_story_ids:
+                friend_profiles = await friend_stars_by_story(
+                    session, user_id, all_story_ids, friend_ids=friends
+                )
+                friend_map = {
+                    sid: [
+                        FriendStarOut(user_id=p.id, display_name=display_name(p))
+                        for p in profs
+                    ]
+                    for sid, profs in friend_profiles.items()
+                }
 
     summaries: list[EventSummaryOut] = []
     for event, event_read, event_dismissed in loaded:
@@ -508,6 +549,25 @@ async def _events_list_for_user(
             event_dismissed=event_dismissed,
             source_names=names_by_event.get(event.id, []),
         )
+        # Recompute engagement across all member stories (not just the lead).
+        if user_id is not None:
+            member_ids = member_ids_by_event.get(event.id, [])
+            read_ids, commented_n, reactions = aggregate_engagement(
+                activity, member_ids
+            )
+            summary.engagement = FriendEngagementOut(
+                read=len(read_ids),
+                commented=commented_n,
+                reactions=reactions,
+                readers=[
+                    FriendMiniOut(
+                        user_id=p.id,
+                        display_name=display_name(p),
+                        image_url=p.image_url,
+                    )
+                    for p in top_readers(read_ids, profiles)
+                ],
+            )
         if not full_coverage:
             summary.story_count = max(event.outlet_count, len(summary.source_names), 1)
             summary.outlet_count = event.outlet_count
@@ -898,13 +958,19 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
             break
 
     story_ids = [row[0] for row in ordered_rows if isinstance(row[0], uuid.UUID)]
-    friend_profiles, my_reactions = await asyncio.gather(
+    friend_profiles, my_reactions, activity, profiles = await asyncio.gather(
         _run_read(
             lambda s: friend_stars_by_story(
                 s, user_id, story_ids, friend_ids=friends
             )
         ),
         _run_read(lambda s: my_reactions_by_story(s, user_id, story_ids)),
+        _run_read(
+            lambda s: friend_activity_by_story(
+                s, user_id, story_ids, friend_ids=friends
+            )
+        ),
+        _run_read(lambda s: friend_profiles_map(s, user_id, friend_ids=friends)),
     )
 
     friend_pick_set = set(friend_pick_ids)
@@ -918,6 +984,20 @@ async def today_payload(session: SessionDep, user: OptionalUser) -> TodayOut:
         ]
         model.friend_stars = fs
         model.my_reaction = my_reactions.get(model.id)
+        read_ids, commented_n, reactions = aggregate_engagement(activity, [model.id])
+        model.engagement = FriendEngagementOut(
+            read=len(read_ids),
+            commented=commented_n,
+            reactions=reactions,
+            readers=[
+                FriendMiniOut(
+                    user_id=p.id,
+                    display_name=display_name(p),
+                    image_url=p.image_url,
+                )
+                for p in top_readers(read_ids, profiles)
+            ],
+        )
         if model.id in friend_pick_set or fs:
             friend_pick_count += 1
         auth_analysis_items.append(model)

@@ -21,7 +21,7 @@ from core.config import get_settings
 from core.embeddings import build_embed_text, embed_text, embeddings_enabled
 from core.logging import get_logger
 from core.models import Source, Story, StoryKind
-from scraper.cluster import assign_story_to_event
+from scraper.cluster import assign_story_to_event, recompute_events
 
 log = get_logger("scraper.ingest")
 
@@ -212,14 +212,21 @@ def _parse_entries(feed_text: str, source: Source) -> list[dict[str, Any]]:
     return stories
 
 
-async def _postprocess_story(session: AsyncSession, story_id: uuid.UUID) -> None:
-    """Embed and cluster a single story after upsert."""
+async def _postprocess_story(
+    session: AsyncSession, story_id: uuid.UUID
+) -> uuid.UUID | None:
+    """Embed and cluster a single story after upsert.
+
+    Returns the event id the story was clustered into (if any). Centroid /
+    outlet_count recomputation is deferred to the caller so a whole ingest batch
+    can refresh each touched event once via ``recompute_events``.
+    """
     story = await session.get(Story, story_id)
     if story is None:
-        return
+        return None
 
     if not embeddings_enabled():
-        return
+        return None
 
     if story.embedding is None:
         text = build_embed_text(story.full_headline, story.summary)
@@ -229,7 +236,10 @@ async def _postprocess_story(session: AsyncSession, story_id: uuid.UUID) -> None
             await session.flush()
 
     if story.kind == StoryKind.news and story.embedding is not None:
-        await assign_story_to_event(session, story, story.embedding)
+        return await assign_story_to_event(
+            session, story, story.embedding, recompute=False
+        )
+    return None
 
 
 async def ingest_source(session: AsyncSession, source: Source) -> int:
@@ -283,11 +293,20 @@ async def ingest_source(session: AsyncSession, source: Source) -> int:
     source.last_scraped_at = datetime.now(UTC)
     await session.flush()
 
+    touched_events: list[uuid.UUID] = []
     for sid in story_ids:
         try:
-            await _postprocess_story(session, sid)
+            event_id = await _postprocess_story(session, sid)
+            if event_id is not None:
+                touched_events.append(event_id)
         except Exception as exc:  # log and continue
             log.error("scraper.postprocess_failed", story_id=str(sid), error=str(exc))
+
+    if touched_events:
+        try:
+            await recompute_events(session, touched_events)
+        except Exception as exc:  # log and continue
+            log.error("scraper.recompute_failed", error=str(exc))
 
     log.info(
         "scraper.ingested",
