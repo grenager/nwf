@@ -31,10 +31,17 @@ from api.schemas import (
     PostCreate,
     PostOut,
     PostUpdate,
+    PreviewCreate,
+    PreviewOut,
 )
 from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
-from core.enrich import fetch_url_metadata, hosts_match, registrable_host
+from core.enrich import (
+    UrlMetadata,
+    fetch_url_metadata,
+    hosts_match,
+    registrable_host,
+)
 from core.models import (
     Attachment,
     Comment,
@@ -116,6 +123,8 @@ async def _ensure_story(
     url: str | None,
     title: str | None,
     kind: StoryKind,
+    metadata: UrlMetadata | None = None,
+    publisher_override: str | None = None,
 ) -> Story:
     if story_id is not None:
         story = await session.get(Story, story_id)
@@ -132,9 +141,10 @@ async def _ensure_story(
     if existing is not None and not _looks_unenriched(existing):
         return existing
 
-    # (Re)enrich from the page metadata, following redirects to the canonical
-    # article (e.g. a Substack reader-inbox link -> the publication's post).
-    metadata = await fetch_url_metadata(clean_url)
+    # Prefer client-supplied preview metadata (from POST /posts/preview) so
+    # create doesn't re-scrape. Fall back to a fresh fetch for legacy callers.
+    if metadata is None:
+        metadata = await fetch_url_metadata(clean_url)
     canonical: str = (metadata.canonical_url or "").strip() or clean_url
 
     # The canonical article may already exist as its own story (e.g. scraped
@@ -160,7 +170,9 @@ async def _ensure_story(
         or (metadata.title or "").strip()
         or _headline_from_url(canonical)
     )
-    publisher = metadata.publisher_label(canonical)
+    publisher = (publisher_override or "").strip() or metadata.publisher_label(
+        canonical
+    )
 
     if target is not None:
         if provided_title or _is_hostlike(target.full_headline, target.article_url):
@@ -385,16 +397,94 @@ async def serialize_post(
     )
 
 
+@router.post("/preview", response_model=PreviewOut)
+async def preview_url(
+    payload: PreviewCreate, session: SessionDep, user: CurrentUser
+) -> PreviewOut:
+    """Resolve OpenGraph metadata for a URL without creating a post.
+
+    Used by the share composer to show a live preview before the user posts.
+    Returns 422 when the page yields no usable metadata so the client can
+    block posting rather than creating a bare-host card.
+    """
+    del user  # auth required; value unused
+    clean_url: str = payload.url.strip()
+    parsed = urlparse(clean_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Couldn't load a preview for this link",
+        )
+
+    metadata = await fetch_url_metadata(clean_url)
+    has_usable: bool = bool(
+        metadata.title or metadata.description or metadata.image_url
+    )
+    if not has_usable:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Couldn't load a preview for this link",
+        )
+
+    canonical: str = (metadata.canonical_url or "").strip() or clean_url
+    source = await _match_source_for_url(session, canonical)
+    source_kind: SourceKind = (
+        source.kind if source is not None else SourceKind.outlet
+    )
+    resolved_kind = classify_story_kind(canonical, None, source_kind)
+    if payload.kind != StoryKind.news:
+        resolved_kind = payload.kind
+
+    headline = (metadata.title or "").strip() or _headline_from_url(canonical)
+    publisher = metadata.publisher_label(canonical)
+    source_name, source_image_url = resolve_attribution(
+        article_url=canonical,
+        source_name=source.name if source else None,
+        source_homepage_url=source.homepage_url if source else None,
+        source_image_url=source.image_url if source else None,
+        publisher=publisher,
+    )
+    return PreviewOut(
+        canonical_url=canonical,
+        full_headline=headline,
+        summary=metadata.description,
+        image_url=metadata.image_url,
+        source_name=source_name,
+        source_image_url=source_image_url,
+        kind=resolved_kind,
+        publisher=publisher,
+        platform=metadata.platform,
+    )
+
+
 @router.post("", response_model=PostOut, status_code=status.HTTP_201_CREATED)
 async def create_post(
     payload: PostCreate, session: SessionDep, user: CurrentUser
 ) -> PostOut:
+    preview_meta: UrlMetadata | None = None
+    has_preview: bool = bool(
+        (payload.full_headline or "").strip()
+        or (payload.canonical_url or "").strip()
+        or (payload.image_url or "").strip()
+        or (payload.summary or "").strip()
+    )
+    if has_preview:
+        preview_meta = UrlMetadata(
+            title=(payload.full_headline or payload.title or "").strip() or None,
+            description=(payload.summary or "").strip() or None,
+            image_url=(payload.image_url or "").strip() or None,
+            site_name=(payload.publisher or "").strip() or None,
+            canonical_url=(payload.canonical_url or "").strip() or None,
+            platform=(payload.platform or "").strip() or None,
+        )
     story = await _ensure_story(
         session,
         story_id=payload.story_id,
         url=payload.url,
-        title=payload.title,
+        title=payload.full_headline or payload.title,
         kind=payload.kind,
+        metadata=preview_meta,
+        publisher_override=payload.publisher,
     )
     post = Post(
         story_id=story.id,

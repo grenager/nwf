@@ -250,9 +250,10 @@ export function Nav() {
       {addOpen ? (
         <AddStoryModal
           onClose={() => setAddOpen(false)}
-          onAdded={() => {
-            router.refresh();
-            window.dispatchEvent(new CustomEvent("nwf:post-created"));
+          onAdded={(post) => {
+            window.dispatchEvent(
+              new CustomEvent("nwf:post-created", { detail: post }),
+            );
           }}
         />
       ) : null}

@@ -5,7 +5,7 @@ import { PostCard } from "@/components/post-card";
 import { FeedSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { FeedCard, FeedPayload, Profile } from "@/lib/types";
+import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -50,10 +50,63 @@ export default function FeedPage() {
   }, [load]);
 
   // A post created elsewhere (e.g. the nav "+ Post" modal) should appear at the
-  // top right away — silently refetch so the newest card leads the feed.
+  // very top immediately — prepend from the event payload, no refetch.
   useEffect(() => {
-    function onPostCreated(): void {
-      void load({ silent: true });
+    function onPostCreated(event: Event): void {
+      const custom: CustomEvent = event as CustomEvent;
+      const post: Post | undefined = custom.detail as Post | undefined;
+      if (!post || typeof post.id !== "string") {
+        void load({ silent: true });
+        return;
+      }
+      const card: FeedCard = {
+        card_id: post.id,
+        story_id: post.story_id,
+        full_headline: post.full_headline,
+        article_url: post.article_url,
+        summary: post.summary,
+        image_url: post.image_url,
+        source_name: post.source_name,
+        source_image_url: post.source_image_url,
+        kind: post.kind,
+        read: true,
+        starred: post.starred,
+        my_rating: post.my_rating,
+        rating_avg: post.rating_avg,
+        rating_count: post.rating_count,
+        my_take: post.take,
+        engagement: post.engagement,
+        posts: [post],
+        score: Number.MAX_SAFE_INTEGER,
+      };
+      setData((prev) => {
+        if (!prev) {
+          return {
+            items: [card],
+            caught_up_after: 1,
+            unread_count: 0,
+            aggregate_readers: 0,
+            aggregate_private_conversations: 0,
+            new_since: null,
+          };
+        }
+        const existingIndex: number = prev.items.findIndex(
+          (c) => c.card_id === card.card_id,
+        );
+        const withoutDup: FeedCard[] =
+          existingIndex === -1
+            ? prev.items
+            : prev.items.filter((c) => c.card_id !== card.card_id);
+        let caughtUp: number = prev.caught_up_after;
+        if (existingIndex !== -1 && existingIndex < prev.caught_up_after) {
+          caughtUp = Math.max(0, caughtUp - 1);
+        }
+        return {
+          ...prev,
+          items: [card, ...withoutDup],
+          caught_up_after: caughtUp + 1,
+        };
+      });
     }
     window.addEventListener("nwf:post-created", onPostCreated);
     return () =>
