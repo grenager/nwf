@@ -235,7 +235,11 @@ class AttachmentCreate(BaseModel):
 
 
 class PostCreate(BaseModel):
-    """Share a story by id or URL, with optional take + visibility."""
+    """Share a story by id or URL, with optional take + visibility.
+
+    When the client has already resolved a link preview (``POST /posts/preview``),
+    pass the metadata fields so create skips a second scrape.
+    """
 
     story_id: uuid.UUID | None = None
     url: str | None = None
@@ -243,6 +247,34 @@ class PostCreate(BaseModel):
     visibility: PostVisibility = PostVisibility.private
     kind: StoryKind = StoryKind.news
     title: str | None = None
+    # Optional preview metadata — skips re-enrichment on create
+    canonical_url: str | None = None
+    full_headline: str | None = None
+    summary: str | None = None
+    image_url: str | None = None
+    publisher: str | None = None
+    platform: str | None = None
+
+
+class PreviewCreate(BaseModel):
+    """Request body for ``POST /posts/preview``."""
+
+    url: str = Field(min_length=4)
+    kind: StoryKind = StoryKind.news
+
+
+class PreviewOut(BaseModel):
+    """Card-shaped link preview used in the share composer."""
+
+    canonical_url: str
+    full_headline: str
+    summary: str | None = None
+    image_url: str | None = None
+    source_name: str | None = None
+    source_image_url: str | None = None
+    kind: StoryKind
+    publisher: str | None = None
+    platform: str | None = None
 
 
 class PostUpdate(BaseModel):

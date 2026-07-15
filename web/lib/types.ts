@@ -134,6 +134,19 @@ export interface Post {
   unread_replies_for_viewer: boolean;
 }
 
+/** Live link preview returned by ``POST /posts/preview``. */
+export interface PreviewCard {
+  canonical_url: string;
+  full_headline: string;
+  summary: string | null;
+  image_url: string | null;
+  source_name: string | null;
+  source_image_url: string | null;
+  kind: StoryKind;
+  publisher: string | null;
+  platform: string | null;
+}
+
 export interface FeedCard {
   card_id: UUID;
   story_id: UUID;

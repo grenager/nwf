@@ -17,6 +17,7 @@ import type {
   Post,
   PostVisibility,
   PreferencesUpdate,
+  PreviewCard,
   Profile,
   ProfileEdit,
   RecommendedFriend,
@@ -132,6 +133,14 @@ export const api = {
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
   getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
+  previewUrl: (payload: {
+    url: string;
+    kind?: StoryKind;
+  }): Promise<PreviewCard> =>
+    request<PreviewCard>("/posts/preview", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   createPost: (payload: {
     story_id?: UUID;
     url?: string;
@@ -139,6 +148,12 @@ export const api = {
     visibility?: PostVisibility;
     kind?: StoryKind;
     title?: string;
+    canonical_url?: string;
+    full_headline?: string;
+    summary?: string | null;
+    image_url?: string | null;
+    publisher?: string | null;
+    platform?: string | null;
   }): Promise<Post> =>
     request<Post>("/posts", {
       method: "POST",
