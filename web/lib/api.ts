@@ -244,9 +244,10 @@ export const api = {
 
   // --- invitations (email / magic-link) ---
   createInvitation: (payload: {
-    email: string;
+    email?: string | null;
     post_id?: UUID | null;
     message?: string | null;
+    become_friend?: boolean;
   }): Promise<InvitationCreateResult> =>
     request<InvitationCreateResult>("/invitations", {
       method: "POST",
@@ -254,9 +255,19 @@ export const api = {
     }),
   getInvitePreview: (token: string): Promise<InvitePreview> =>
     request<InvitePreview>(`/invitations/${encodeURIComponent(token)}`),
-  acceptInvite: (token: string): Promise<InvitationAcceptResult> =>
+  getInvitePost: (token: string): Promise<Post> =>
+    request<Post>(`/invitations/${encodeURIComponent(token)}/post`),
+  acceptInvite: (
+    token: string,
+    addFriend?: boolean | null,
+  ): Promise<InvitationAcceptResult> =>
     request<InvitationAcceptResult>(
       `/invitations/${encodeURIComponent(token)}/accept`,
-      { method: "POST" },
+      {
+        method: "POST",
+        body: JSON.stringify(
+          addFriend === undefined ? {} : { add_friend: addFriend },
+        ),
+      },
     ),
 };

@@ -464,11 +464,18 @@ class RecommendedFriendOut(BaseModel):
     mutual_count: int = 0
 
 
-# --- Email invitations (non-users) ----------------------------------------
+# --- Email invitations / share links --------------------------------------
 class InvitationCreate(BaseModel):
-    email: str = Field(min_length=3, max_length=320)
+    """Create an email invite or an open reusable share link.
+
+    Omit ``email`` (or pass null/empty) to mint a reusable share link for
+    messaging apps. Pass ``email`` for the classic single-use email invite.
+    """
+
+    email: str | None = Field(default=None, max_length=320)
     post_id: uuid.UUID | None = None
     message: str | None = Field(default=None, max_length=2_000)
+    become_friend: bool = False
 
 
 class InvitationCreateResult(BaseModel):
@@ -484,7 +491,7 @@ class InvitationCreateResult(BaseModel):
 class InvitePreviewOut(BaseModel):
     token: str
     status: str
-    invitee_email: str
+    invitee_email: str | None = None
     inviter_id: uuid.UUID
     inviter_name: str
     inviter_image_url: str | None = None
@@ -496,10 +503,24 @@ class InvitePreviewOut(BaseModel):
     image_url: str | None = None
     publisher: str | None = None
     take: str | None = None
+    become_friend: bool = False
+    reply_count: int = 0
+    reusable: bool = False
+
+
+class InvitationAcceptRequest(BaseModel):
+    """Optional body for accepting a share link.
+
+    When the invitation was not created with ``become_friend``, the recipient
+    must pass ``add_friend=true`` to friend the inviter and join the thread.
+    """
+
+    add_friend: bool | None = None
 
 
 class InvitationAcceptResult(BaseModel):
-    status: str  # "accepted" | "already_friends" | "already_accepted"
+    status: str  # "accepted" | "already_friends" | "already_accepted" | "view_only"
     inviter_id: uuid.UUID
     post_id: uuid.UUID | None = None
     message: str
+    became_friend: bool = False

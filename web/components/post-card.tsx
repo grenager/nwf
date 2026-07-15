@@ -1,7 +1,7 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
-import { InviteToConversationModal } from "@/components/invite-to-conversation-modal";
+import { SharePostModal } from "@/components/share-post-modal";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
@@ -223,13 +223,13 @@ function PostThread({
             <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                aria-label="Invite a friend to this conversation"
+                aria-label="Share this conversation"
                 title="Share"
                 onClick={() => {
-                  if (!requireAuth("invite friends")) return;
+                  if (!requireAuth("share this conversation")) return;
                   onInvite();
                 }}
-                className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-800 hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-500 dark:hover:bg-zinc-900"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -239,13 +239,14 @@ function PostThread({
                   strokeWidth="1.75"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5"
                   aria-hidden="true"
                 >
                   <path d="M12 3v11" />
                   <path d="M8.5 6.5 12 3l3.5 3.5" />
                   <path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
                 </svg>
+                Share
               </button>
               {isAuthor ? (
                 <div className="relative">
@@ -636,7 +637,7 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
         onInvite={() => setInviteOpen(true)}
       />
       {inviteOpen ? (
-        <InviteToConversationModal
+        <SharePostModal
           postId={post.id}
           headline={card.full_headline}
           articleUrl={card.article_url}

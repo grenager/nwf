@@ -421,13 +421,20 @@ class Invitation(Base):
         ForeignKey("profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
-    invitee_email: Mapped[str] = mapped_column(Text, nullable=False)
+    # Null for open/reusable share links (no targeted recipient).
+    invitee_email: Mapped[str | None] = mapped_column(Text, nullable=True)
     post_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("posts.id", ondelete="SET NULL"),
         nullable=True,
     )
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    become_friend: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    reusable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     status: Mapped[InvitationStatus] = mapped_column(
         Enum(InvitationStatus, name="invitation_status", create_type=False),
         nullable=False,
@@ -446,4 +453,35 @@ class Invitation(Base):
     )
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class InvitationRedemption(Base):
+    """One row per user who redeemed a reusable share link."""
+
+    __tablename__ = "invitation_redemptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "invitation_id",
+            "user_id",
+            name="invitation_redemptions_invitation_id_user_id_key",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    invitation_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("invitations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    became_friend: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
