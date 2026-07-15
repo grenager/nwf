@@ -1,5 +1,6 @@
 "use client";
 
+import { setApiAuthToken } from "@/lib/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 import {
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      setApiAuthToken(nextSession?.access_token ?? null);
       if (!settled) {
         settled = true;
         setLoading(false);
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setApiAuthToken(data.session?.access_token ?? null);
       if (!settled) {
         settled = true;
         setLoading(false);
