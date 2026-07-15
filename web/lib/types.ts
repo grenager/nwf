@@ -277,7 +277,7 @@ export interface InvitationCreateResult {
 export interface InvitePreview {
   token: string;
   status: string;
-  invitee_email: string;
+  invitee_email: string | null;
   inviter_id: UUID;
   inviter_name: string;
   inviter_image_url: string | null;
@@ -289,6 +289,9 @@ export interface InvitePreview {
   image_url: string | null;
   publisher: string | null;
   take: string | null;
+  become_friend: boolean;
+  reply_count: number;
+  reusable: boolean;
 }
 
 export interface InvitationAcceptResult {
@@ -296,4 +299,5 @@ export interface InvitationAcceptResult {
   inviter_id: UUID;
   post_id: UUID | null;
   message: string;
+  became_friend: boolean;
 }

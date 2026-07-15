@@ -22,6 +22,7 @@ def test_openapi_includes_people_and_invite_routes() -> None:
     assert "/connections/recommended" in paths
     assert "/invitations" in paths
     assert "/invitations/{token}" in paths
+    assert "/invitations/{token}/post" in paths
     assert "/invitations/{token}/accept" in paths
 
 
@@ -33,6 +34,7 @@ def test_share_message_includes_article_and_link() -> None:
         personal="Thought of you",
         invite_url="https://nwf.example/invite/abc",
     )
+    assert "I wanted to discuss this article with you" in msg
     assert "Ada" in msg
     assert "Quiet week in AI" in msg
     assert "Worth your time" in msg
@@ -145,6 +147,8 @@ async def test_accept_invitation_creates_friendship() -> None:
         invitee_email="friend@example.com",
         post_id=post_id,
         status=InvitationStatus.pending,
+        reusable=False,
+        become_friend=False,
     )
 
     session = AsyncMock()
@@ -159,8 +163,71 @@ async def test_accept_invitation_creates_friendship() -> None:
     assert invitation.status == InvitationStatus.accepted
     assert invitation.accepted_user_id == invitee
     assert result.post_id == post_id
+    assert result.became_friend is True
     session.add.assert_called()
     session.execute.assert_awaited()  # post participant upsert
+
+
+@pytest.mark.asyncio
+async def test_accept_reusable_requires_friend_opt_in() -> None:
+    inviter = uuid.uuid4()
+    invitee = uuid.uuid4()
+    post_id = uuid.uuid4()
+    invitation = Invitation(
+        token="tok3",
+        inviter_id=inviter,
+        invitee_email=None,
+        post_id=post_id,
+        status=InvitationStatus.pending,
+        reusable=True,
+        become_friend=False,
+    )
+
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=None)
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+
+    # Without add_friend → view-only redemption.
+    view_only = await accept_invitation_for_user(session, invitation, invitee)
+    assert view_only.status == "view_only"
+    assert view_only.became_friend is False
+    assert invitation.status == InvitationStatus.pending
+
+    # With add_friend → friend + join.
+    session.scalar = AsyncMock(return_value=None)
+    session.execute = AsyncMock()
+    joined = await accept_invitation_for_user(
+        session, invitation, invitee, add_friend=True
+    )
+    assert joined.status == "accepted"
+    assert joined.became_friend is True
+
+
+@pytest.mark.asyncio
+async def test_accept_reusable_auto_friends_when_flag_set() -> None:
+    inviter = uuid.uuid4()
+    invitee = uuid.uuid4()
+    invitation = Invitation(
+        token="tok4",
+        inviter_id=inviter,
+        invitee_email=None,
+        post_id=uuid.uuid4(),
+        status=InvitationStatus.pending,
+        reusable=True,
+        become_friend=True,
+    )
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=None)
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+
+    result = await accept_invitation_for_user(session, invitation, invitee)
+    assert result.status == "accepted"
+    assert result.became_friend is True
+    assert invitation.status == InvitationStatus.pending  # reusable stays pending
+
 
 
 def test_recommended_and_requests_require_auth() -> None:

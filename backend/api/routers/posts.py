@@ -249,8 +249,13 @@ async def serialize_post(
     viewer_id: uuid.UUID | None,
     include_replies: bool = True,
     friend_ids: list[uuid.UUID] | None = None,
+    force_replies: bool = False,
 ) -> PostOut:
-    """Build a PostOut with story teaser, replies, attachments, engagement."""
+    """Build a PostOut with story teaser, replies, attachments, engagement.
+
+    When ``force_replies`` is True (token-scoped invite preview), reply bodies
+    are returned even for unauthenticated viewers.
+    """
     story = await session.get(Story, post.story_id)
     if story is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "story not found")
@@ -381,8 +386,9 @@ async def serialize_post(
         reply_count=len(replies),
         participant_count=participant_count,
         audience_label=audience_label(post.visibility, participant_count),
-        # Guests get the count only; reply content is gated behind auth.
-        replies=replies if viewer_id is not None else [],
+        # Guests get the count only; reply content is gated behind auth
+        # unless force_replies (token-scoped invite preview).
+        replies=replies if (viewer_id is not None or force_replies) else [],
         attachments=attachment_outs,
         author_rating=author_rating,
         read=read,
