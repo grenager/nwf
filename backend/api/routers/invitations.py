@@ -73,7 +73,8 @@ async def _find_connection(
             (Connection.first_id == b) & (Connection.second_id == a),
         )
     )
-    return await session.scalar(stmt)
+    connection: Connection | None = await session.scalar(stmt)
+    return connection
 
 
 async def _ensure_accepted_connection(
@@ -201,7 +202,8 @@ async def _lookup_user_id_by_email(
         return None
     if row is None:
         return None
-    return row[0]
+    user_id: uuid.UUID = row[0]
+    return user_id
 
 
 async def _post_teaser(
