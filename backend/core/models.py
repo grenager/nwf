@@ -41,6 +41,15 @@ class ConnectionStatus(enum.StrEnum):
     blocked = "blocked"
 
 
+class InvitationStatus(enum.StrEnum):
+    """Email invitation lifecycle for non-users."""
+
+    pending = "pending"
+    accepted = "accepted"
+    revoked = "revoked"
+    expired = "expired"
+
+
 class SourceKind(enum.StrEnum):
     """Whether a source is a news outlet or an author-centric publication."""
 
@@ -399,4 +408,42 @@ class Connection(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    token: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    inviter_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    invitee_email: Mapped[str] = mapped_column(Text, nullable=False)
+    post_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[InvitationStatus] = mapped_column(
+        Enum(InvitationStatus, name="invitation_status", create_type=False),
+        nullable=False,
+        default=InvitationStatus.pending,
+    )
+    accepted_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

@@ -1,184 +1,415 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { useAuthGate } from "@/components/auth-gate";
+import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { Connection } from "@/lib/types";
+import type {
+  FriendRequest,
+  FriendSummary,
+  InvitationCreateResult,
+  RecommendedFriend,
+  UUID,
+} from "@/lib/types";
 import { useCallback, useEffect, useState } from "react";
 
-export default function FriendsPage() {
-  const { user } = useAuth();
+function Avatar({
+  name,
+  imageUrl,
+}: {
+  name: string;
+  imageUrl: string | null;
+}) {
+  if (imageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        className="h-10 w-10 shrink-0 rounded-[9999px] object-cover"
+      />
+    );
+  }
+  return (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[9999px] bg-zinc-200 text-sm font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200">
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function mutualLabel(count: number): string {
+  if (count <= 0) return "";
+  return count === 1 ? "1 mutual friend" : `${count} mutual friends`;
+}
+
+export default function PeoplePage() {
+  const { session } = useAuth();
+  const { requireAuth } = useAuthGate();
   const { notify } = useToast();
-  const [connections, setConnections] = useState<Connection[]>([]);
+
+  const [incoming, setIncoming] = useState<FriendRequest[]>([]);
+  const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
+  const [recommended, setRecommended] = useState<RecommendedFriend[]>([]);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [targetId, setTargetId] = useState<string>("");
+  const [openId, setOpenId] = useState<UUID | null>(null);
+
+  const [email, setEmail] = useState<string>("");
+  const [sending, setSending] = useState<boolean>(false);
+  const [lastInvite, setLastInvite] = useState<InvitationCreateResult | null>(
+    null,
+  );
+  const [copied, setCopied] = useState<boolean>(false);
 
   const load = useCallback(async (): Promise<void> => {
+    if (!session) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      setConnections(await api.listConnections());
+      const [requests, recs, overview] = await Promise.all([
+        api.getConnectionRequests(),
+        api.getRecommendedFriends(),
+        api.getFriends(),
+      ]);
+      setIncoming(requests.incoming);
+      setOutgoing(requests.outgoing);
+      setRecommended(recs);
+      setFriends(overview.friends);
     } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Failed to load friends", "error");
+      notify(
+        err instanceof ApiError ? err.message : "Failed to load people",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [notify, session]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function sendRequest(e: React.FormEvent): Promise<void> {
+  async function acceptRequest(userId: UUID): Promise<void> {
+    try {
+      await api.updateConnection(userId, "accepted");
+      notify("Friend request accepted", "success");
+      void load();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed to accept", "error");
+    }
+  }
+
+  async function ignoreRequest(userId: UUID): Promise<void> {
+    try {
+      await api.deleteConnection(userId);
+      notify("Request ignored", "info");
+      void load();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed", "error");
+    }
+  }
+
+  async function addRecommended(userId: UUID): Promise<void> {
+    try {
+      await api.createConnection(userId);
+      notify("Friend request sent", "success");
+      void load();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed to add", "error");
+    }
+  }
+
+  async function sendInvite(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (!targetId.trim()) return;
+    if (!requireAuth("invite friends")) return;
+    const value: string = email.trim();
+    if (!value || sending) return;
+    setSending(true);
+    setCopied(false);
     try {
-      await api.createConnection(targetId.trim());
-      setTargetId("");
-      notify("Request sent", "success");
-      void load();
+      const result = await api.createInvitation({ email: value });
+      setLastInvite(result);
+      notify(result.message, "success");
+      if (result.status !== "invited") {
+        setEmail("");
+        void load();
+      }
     } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Failed to send request", "error");
+      notify(
+        err instanceof ApiError ? err.message : "Failed to send invite",
+        "error",
+      );
+    } finally {
+      setSending(false);
     }
   }
 
-  function otherId(c: Connection): string {
-    return c.first_id === user?.id ? c.second_id : c.first_id;
-  }
-
-  async function accept(c: Connection): Promise<void> {
+  async function copyInviteLink(): Promise<void> {
+    if (!lastInvite?.invite_url) return;
     try {
-      await api.updateConnection(otherId(c), "accepted");
-      notify("Connection accepted", "success");
-      void load();
-    } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Failed", "error");
+      await navigator.clipboard.writeText(
+        lastInvite.share_message || lastInvite.invite_url,
+      );
+      setCopied(true);
+      notify("Invitation copied", "success");
+    } catch {
+      notify("Could not copy — select the link manually", "error");
     }
   }
 
-  async function remove(c: Connection): Promise<void> {
-    try {
-      await api.deleteConnection(otherId(c));
-      notify("Connection removed", "info");
-      void load();
-    } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Failed", "error");
-    }
+  if (!session) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <h1 className="font-serif text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          People
+        </h1>
+        <p className="mt-3 text-sm text-zinc-500">
+          Sign in to see friend requests and recommendations.
+        </p>
+      </div>
+    );
   }
-
-  const incoming: Connection[] = connections.filter(
-    (c) => c.status === "pending" && c.second_id === user?.id,
-  );
-  const outgoing: Connection[] = connections.filter(
-    (c) => c.status === "pending" && c.first_id === user?.id,
-  );
-  const accepted: Connection[] = connections.filter((c) => c.status === "accepted");
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-2xl space-y-10 px-4 py-8">
       <div>
-        <h1 className="text-2xl font-bold">Friends</h1>
-        <form onSubmit={sendRequest} className="mt-4 flex gap-2">
-          <input
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-            placeholder="Friend's user ID (UUID)"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-800"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            Add friend
-          </button>
-        </form>
-        <p className="mt-1 text-xs text-slate-400">
-          Your ID: <code>{user?.id}</code>
+        <h1 className="font-serif text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          People
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          Accept requests, find friends of friends, and invite someone new.
         </p>
       </div>
 
+      <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-400">
+          Invite by email
+        </h2>
+        <form onSubmit={sendInvite} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="friend@email.com"
+            className="flex-1 border-b border-zinc-300 bg-transparent px-0 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
+          />
+          <button
+            type="submit"
+            disabled={sending || email.trim().length === 0}
+            className="bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            {sending ? "Sending…" : "Send invite"}
+          </button>
+        </form>
+        {lastInvite?.invite_url ? (
+          <div className="mt-3 space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              {lastInvite.email_sent
+                ? "Email sent. You can also copy a message to share:"
+                : "Copy this invitation and send it yourself:"}
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <code className="flex-1 truncate rounded bg-zinc-50 px-2 py-1.5 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                {lastInvite.invite_url}
+              </code>
+              <button
+                type="button"
+                onClick={() => void copyInviteLink()}
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100"
+              >
+                {copied ? "Copied!" : "Copy invite"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
       {loading ? (
-        <UserListSkeleton count={4} />
+        <UserListSkeleton count={5} />
       ) : (
         <>
-          <ConnectionSection
-            title="Incoming requests"
-            items={incoming}
-            otherId={otherId}
-            actionLabel="Accept"
-            onAction={accept}
-            onRemove={remove}
-          />
-          <ConnectionSection
-            title="Sent requests"
-            items={outgoing}
-            otherId={otherId}
-            onRemove={remove}
-          />
-          <ConnectionSection
-            title="Friends"
-            items={accepted}
-            otherId={otherId}
-            onRemove={remove}
-          />
+          <section>
+            <div className="mb-3 flex items-end justify-between border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
+              <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+                Friend requests
+              </h2>
+              {incoming.length > 0 ? (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-600">
+                  {incoming.length} new
+                </span>
+              ) : null}
+            </div>
+            {incoming.length === 0 ? (
+              <p className="text-sm text-zinc-400">No pending requests.</p>
+            ) : (
+              <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                {incoming.map((req) => (
+                  <li
+                    key={req.user_id}
+                    className="flex items-center gap-3 py-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(req.user_id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <Avatar
+                        name={req.display_name}
+                        imageUrl={req.image_url}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                          {req.display_name}
+                        </p>
+                        {req.mutual_count > 0 ? (
+                          <p className="text-xs text-zinc-400">
+                            {mutualLabel(req.mutual_count)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void acceptRequest(req.user_id)}
+                      className="bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void ignoreRequest(req.user_id)}
+                      className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400 hover:text-zinc-700"
+                    >
+                      Ignore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {outgoing.length > 0 ? (
+              <div className="mt-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                  Sent ({outgoing.length})
+                </h3>
+                <ul className="space-y-2">
+                  {outgoing.map((req) => (
+                    <li
+                      key={req.user_id}
+                      className="flex items-center justify-between gap-3 text-sm text-zinc-500"
+                    >
+                      <span className="truncate">{req.display_name}</span>
+                      <button
+                        type="button"
+                        onClick={() => void ignoreRequest(req.user_id)}
+                        className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400 hover:text-zinc-700"
+                      >
+                        Cancel
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+
+          <section>
+            <div className="mb-3 border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
+              <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+                Recommended
+              </h2>
+              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+                Friends of friends
+              </p>
+            </div>
+            {recommended.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No recommendations yet — invite a friend or accept a request to
+                grow your circle.
+              </p>
+            ) : (
+              <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                {recommended.map((rec) => (
+                  <li
+                    key={rec.user_id}
+                    className="flex items-center gap-3 py-3"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <Avatar
+                        name={rec.display_name}
+                        imageUrl={rec.image_url}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                          {rec.display_name}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          {mutualLabel(rec.mutual_count)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void addRecommended(rec.user_id)}
+                      className="border border-zinc-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    >
+                      Add
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-3 border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
+              <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+                Your friends
+              </h2>
+              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+                {friends.length} total
+              </p>
+            </div>
+            {friends.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No friends yet. Invite someone by email above.
+              </p>
+            ) : (
+              <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                {friends.map((friend) => (
+                  <li key={friend.user_id}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(friend.user_id)}
+                      className="flex w-full items-center gap-3 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                    >
+                      <Avatar
+                        name={friend.display_name}
+                        imageUrl={friend.image_url}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                          {friend.display_name}
+                        </p>
+                        <p className="truncate text-xs text-zinc-400">
+                          {friend.last_activity ?? "No activity yet"}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </>
       )}
+
+      {openId ? (
+        <FriendProfileModal friendId={openId} onClose={() => setOpenId(null)} />
+      ) : null}
     </div>
-  );
-}
-
-interface SectionProps {
-  title: string;
-  items: Connection[];
-  otherId: (c: Connection) => string;
-  actionLabel?: string;
-  onAction?: (c: Connection) => void;
-  onRemove: (c: Connection) => void;
-}
-
-function ConnectionSection({
-  title,
-  items,
-  otherId,
-  actionLabel,
-  onAction,
-  onRemove,
-}: SectionProps) {
-  return (
-    <section>
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
-        {title} ({items.length})
-      </h2>
-      {items.length === 0 ? (
-        <p className="text-sm text-slate-400">None</p>
-      ) : (
-        <ul className="space-y-2">
-          {items.map((c) => (
-            <li
-              key={c.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <code className="truncate text-xs text-slate-500">{otherId(c)}</code>
-              <div className="flex gap-2">
-                {actionLabel && onAction ? (
-                  <button
-                    onClick={() => onAction(c)}
-                    className="bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-                  >
-                    {actionLabel}
-                  </button>
-                ) : null}
-                <button
-                  onClick={() => onRemove(c)}
-                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

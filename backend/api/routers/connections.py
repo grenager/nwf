@@ -17,19 +17,22 @@ from api.schemas import (
     ConnectionUpdate,
     FriendActivityItem,
     FriendProfileOut,
+    FriendRequestOut,
+    FriendRequestsOut,
     FriendsOverviewOut,
     FriendSummaryOut,
     InviteCreate,
     InviteResult,
+    RecommendedFriendOut,
 )
 from core.models import (
     Comment,
     Connection,
     ConnectionStatus,
+    Post,
     Profile,
     Source,
     Story,
-    StoryKind,
     StoryRating,
     StoryStatus,
 )
@@ -38,6 +41,7 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 # No presence system exists; treat "online" as any engagement within this window.
 _ONLINE_WINDOW = timedelta(minutes=5)
+_RECOMMENDED_LIMIT = 12
 
 
 async def _find_between(
@@ -53,6 +57,40 @@ async def _find_between(
     return connection
 
 
+async def _all_connection_partner_ids(
+    session: SessionDep, user_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """Partners of any status (pending/accepted/blocked)."""
+    rows = (
+        await session.execute(
+            select(Connection.first_id, Connection.second_id).where(
+                or_(Connection.first_id == user_id, Connection.second_id == user_id)
+            )
+        )
+    ).all()
+    partners: set[uuid.UUID] = set()
+    for first_id, second_id in rows:
+        partners.add(second_id if first_id == user_id else first_id)
+    return partners
+
+
+async def _mutual_counts(
+    session: SessionDep, user_id: uuid.UUID, other_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Number of accepted friends shared between ``user_id`` and each other."""
+    if not other_ids:
+        return {}
+    my_friends = set(await accepted_friend_ids(session, user_id))
+    if not my_friends:
+        return {oid: 0 for oid in other_ids}
+
+    counts: dict[uuid.UUID, int] = {oid: 0 for oid in other_ids}
+    for oid in other_ids:
+        their = set(await accepted_friend_ids(session, oid))
+        counts[oid] = len(my_friends & their)
+    return counts
+
+
 @router.get("", response_model=list[ConnectionOut])
 async def list_connections(
     session: SessionDep, user: CurrentUser
@@ -61,6 +99,131 @@ async def list_connections(
         or_(Connection.first_id == user.id, Connection.second_id == user.id)
     )
     return list((await session.scalars(stmt)).all())
+
+
+@router.get("/requests", response_model=FriendRequestsOut)
+async def list_friend_requests(
+    session: SessionDep, user: CurrentUser
+) -> FriendRequestsOut:
+    """Pending inbound and outbound friend requests with mutual counts."""
+    pending = list(
+        (
+            await session.scalars(
+                select(Connection).where(
+                    Connection.status == ConnectionStatus.pending,
+                    or_(Connection.first_id == user.id, Connection.second_id == user.id),
+                )
+            )
+        ).all()
+    )
+    incoming_ids: list[uuid.UUID] = []
+    outgoing_ids: list[uuid.UUID] = []
+    incoming_created: dict[uuid.UUID, datetime] = {}
+    outgoing_created: dict[uuid.UUID, datetime] = {}
+    for conn in pending:
+        if conn.second_id == user.id:
+            incoming_ids.append(conn.first_id)
+            incoming_created[conn.first_id] = conn.created_at
+        elif conn.first_id == user.id:
+            outgoing_ids.append(conn.second_id)
+            outgoing_created[conn.second_id] = conn.created_at
+
+    all_ids: list[uuid.UUID] = list(dict.fromkeys([*incoming_ids, *outgoing_ids]))
+    profiles: dict[uuid.UUID, Profile] = {}
+    if all_ids:
+        profiles = {
+            p.id: p
+            for p in (
+                await session.scalars(select(Profile).where(Profile.id.in_(all_ids)))
+            ).all()
+        }
+    mutuals = await _mutual_counts(session, user.id, all_ids)
+
+    def _row(uid: uuid.UUID, created: datetime) -> FriendRequestOut:
+        profile = profiles.get(uid)
+        return FriendRequestOut(
+            user_id=uid,
+            display_name=display_name(profile) if profile else "Friend",
+            image_url=profile.image_url if profile else None,
+            mutual_count=mutuals.get(uid, 0),
+            created_at=created,
+        )
+
+    incoming = sorted(
+        [_row(uid, incoming_created[uid]) for uid in incoming_ids],
+        key=lambda r: r.created_at,
+        reverse=True,
+    )
+    outgoing = sorted(
+        [_row(uid, outgoing_created[uid]) for uid in outgoing_ids],
+        key=lambda r: r.created_at,
+        reverse=True,
+    )
+    return FriendRequestsOut(incoming=incoming, outgoing=outgoing)
+
+
+@router.get("/recommended", response_model=list[RecommendedFriendOut])
+async def list_recommended_friends(
+    session: SessionDep, user: CurrentUser
+) -> list[RecommendedFriendOut]:
+    """Friends-of-friends ranked by mutual-friend count."""
+    my_friends = await accepted_friend_ids(session, user.id)
+    if not my_friends:
+        return []
+
+    already = await _all_connection_partner_ids(session, user.id)
+    already.add(user.id)
+
+    # Gather FoF via accepted edges of my friends.
+    fof_rows = (
+        await session.execute(
+            select(Connection.first_id, Connection.second_id).where(
+                Connection.status == ConnectionStatus.accepted,
+                or_(
+                    Connection.first_id.in_(my_friends),
+                    Connection.second_id.in_(my_friends),
+                ),
+            )
+        )
+    ).all()
+
+    mutual_tally: dict[uuid.UUID, int] = {}
+    friend_set = set(my_friends)
+    for first_id, second_id in fof_rows:
+        # For each edge touching a friend, the other endpoint is a FoF candidate
+        # (unless it's me or already connected).
+        for a, b in ((first_id, second_id), (second_id, first_id)):
+            if a not in friend_set:
+                continue
+            if b in already:
+                continue
+            mutual_tally[b] = mutual_tally.get(b, 0) + 1
+
+    if not mutual_tally:
+        return []
+
+    ranked = sorted(mutual_tally.items(), key=lambda kv: (-kv[1], str(kv[0])))[
+        :_RECOMMENDED_LIMIT
+    ]
+    candidate_ids = [uid for uid, _count in ranked]
+    profiles: dict[uuid.UUID, Profile] = {
+        p.id: p
+        for p in (
+            await session.scalars(select(Profile).where(Profile.id.in_(candidate_ids)))
+        ).all()
+    }
+    results: list[RecommendedFriendOut] = []
+    for uid, count in ranked:
+        profile = profiles.get(uid)
+        results.append(
+            RecommendedFriendOut(
+                user_id=uid,
+                display_name=display_name(profile) if profile else "Friend",
+                image_url=profile.image_url if profile else None,
+                mutual_count=count,
+            )
+        )
+    return results
 
 
 @router.get("/friends", response_model=FriendsOverviewOut)
@@ -77,17 +240,6 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         ).all()
     }
 
-    status_last: dict[uuid.UUID, datetime] = dict(
-        (
-            await session.execute(
-                select(StoryStatus.user_id, func.max(StoryStatus.updated_at))
-                .where(StoryStatus.user_id.in_(friend_ids))
-                .group_by(StoryStatus.user_id)
-            )
-        )
-        .tuples()
-        .all()
-    )
     comment_last: dict[uuid.UUID, datetime] = dict(
         (
             await session.execute(
@@ -99,33 +251,67 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         .tuples()
         .all()
     )
-
-    # Most recent news source each friend read (Postgres DISTINCT ON).
-    last_source: dict[uuid.UUID, str] = dict(
+    rating_last: dict[uuid.UUID, datetime] = dict(
         (
             await session.execute(
-                select(StoryStatus.user_id, Source.name)
-                .join(Story, Story.id == StoryStatus.story_id)
-                .join(Source, Source.id == Story.source_id)
-                .where(
-                    StoryStatus.user_id.in_(friend_ids),
-                    StoryStatus.read.is_(True),
-                    Story.kind == StoryKind.news,
-                )
-                .order_by(StoryStatus.user_id, StoryStatus.updated_at.desc())
-                .distinct(StoryStatus.user_id)
+                select(StoryRating.user_id, func.max(StoryRating.updated_at))
+                .where(StoryRating.user_id.in_(friend_ids))
+                .group_by(StoryRating.user_id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    post_last: dict[uuid.UUID, datetime] = dict(
+        (
+            await session.execute(
+                select(Post.author_id, func.max(Post.created_at))
+                .where(Post.author_id.in_(friend_ids))
+                .group_by(Post.author_id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    # Ambient reads — count toward online/last_active, not the subtitle.
+    status_last: dict[uuid.UUID, datetime] = dict(
+        (
+            await session.execute(
+                select(StoryStatus.user_id, func.max(StoryStatus.updated_at))
+                .where(StoryStatus.user_id.in_(friend_ids))
+                .group_by(StoryStatus.user_id)
             )
         )
         .tuples()
         .all()
     )
 
+    def _activity_label(fid: uuid.UUID) -> str | None:
+        events: list[tuple[datetime, str]] = []
+        if (at := post_last.get(fid)) is not None:
+            events.append((at, "posted a story"))
+        if (at := comment_last.get(fid)) is not None:
+            events.append((at, "added a comment"))
+        if (at := rating_last.get(fid)) is not None:
+            events.append((at, "rated a story"))
+        if not events:
+            return None
+        events.sort(key=lambda e: e[0], reverse=True)
+        return events[0][1]
+
     now = datetime.now(UTC)
     summaries: list[FriendSummaryOut] = []
     for fid in friend_ids:
         profile = profiles.get(fid)
         candidates = [
-            t for t in (status_last.get(fid), comment_last.get(fid)) if t is not None
+            t
+            for t in (
+                status_last.get(fid),
+                comment_last.get(fid),
+                rating_last.get(fid),
+                post_last.get(fid),
+            )
+            if t is not None
         ]
         last_active = max(candidates) if candidates else None
         online = last_active is not None and (now - last_active) <= _ONLINE_WINDOW
@@ -136,7 +322,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
                 image_url=profile.image_url if profile else None,
                 online=online,
                 last_active_at=last_active,
-                last_source_name=last_source.get(fid),
+                last_activity=_activity_label(fid),
             )
         )
 

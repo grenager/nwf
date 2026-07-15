@@ -8,13 +8,18 @@ import type {
   ConnectionStatus,
   FeedPayload,
   FriendProfile,
+  FriendRequests,
   FriendsOverview,
+  InvitationAcceptResult,
+  InvitationCreateResult,
+  InvitePreview,
   InviteResult,
   Post,
   PostVisibility,
   PreferencesUpdate,
   Profile,
   ProfileEdit,
+  RecommendedFriend,
   Story,
   StoryKind,
   StoryList,
@@ -207,6 +212,10 @@ export const api = {
     request<FriendsOverview>("/connections/friends"),
   getFriendProfile: (friendId: UUID): Promise<FriendProfile> =>
     request<FriendProfile>(`/connections/friends/${friendId}`),
+  getConnectionRequests: (): Promise<FriendRequests> =>
+    request<FriendRequests>("/connections/requests"),
+  getRecommendedFriends: (): Promise<RecommendedFriend[]> =>
+    request<RecommendedFriend[]>("/connections/recommended"),
   updateProfile: (userId: UUID, payload: ProfileEdit): Promise<Profile> =>
     request<Profile>(`/profiles/${userId}`, {
       method: "PUT",
@@ -217,4 +226,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
+
+  // --- invitations (email / magic-link) ---
+  createInvitation: (payload: {
+    email: string;
+    post_id?: UUID | null;
+    message?: string | null;
+  }): Promise<InvitationCreateResult> =>
+    request<InvitationCreateResult>("/invitations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getInvitePreview: (token: string): Promise<InvitePreview> =>
+    request<InvitePreview>(`/invitations/${encodeURIComponent(token)}`),
+  acceptInvite: (token: string): Promise<InvitationAcceptResult> =>
+    request<InvitationAcceptResult>(
+      `/invitations/${encodeURIComponent(token)}/accept`,
+      { method: "POST" },
+    ),
 };

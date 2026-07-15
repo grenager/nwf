@@ -51,9 +51,18 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   }
 
   const isPublic: boolean =
-    pathname === "/" || pathname === "/signin" || pathname.startsWith("/auth");
+    pathname === "/" ||
+    pathname === "/signin" ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/invite");
 
   if (user && pathname === "/signin") {
+    // Allow invite-aware sign-in redirect via next= param on the page itself;
+    // middleware still bounces bare /signin to home.
+    const nextParam: string | null = request.nextUrl.searchParams.get("next");
+    if (nextParam && nextParam.startsWith("/invite/")) {
+      return redirectTo(nextParam);
+    }
     return redirectTo("/");
   }
 

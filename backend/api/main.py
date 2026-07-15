@@ -14,6 +14,7 @@ from api.routers import (
     connections,
     feed,
     health,
+    invitations,
     me,
     posts,
     profiles,
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(me.router)
     app.include_router(comments.router)
     app.include_router(connections.router)
+    app.include_router(invitations.router)
     app.include_router(profiles.router)
     return app
 

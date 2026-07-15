@@ -22,6 +22,8 @@ def test_openapi_schema_exposed() -> None:
     assert "/stories/recommended" in paths
     assert "/me/starred" in paths
     assert "/connections" in paths
+    assert "/connections/requests" in paths
+    assert "/invitations" in paths
     assert "/feed" in paths
     assert "/posts" in paths
 

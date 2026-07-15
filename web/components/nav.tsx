@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 
 const LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Feed" },
+  { href: "/friends", label: "People" },
 ];
 
 export function Nav() {
@@ -25,12 +26,14 @@ export function Nav() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [profileOpen, setProfileOpen] = useState<boolean>(false);
   const [addOpen, setAddOpen] = useState<boolean>(false);
+  const [incomingCount, setIncomingCount] = useState<number>(0);
 
   const isGuest: boolean = !session;
 
   useEffect(() => {
     if (!user?.id) {
       setProfile(null);
+      setIncomingCount(0);
       return;
     }
     let active = true;
@@ -41,6 +44,14 @@ export function Nav() {
       })
       .catch(() => {
         if (active) setProfile(null);
+      });
+    api
+      .getConnectionRequests()
+      .then((reqs) => {
+        if (active) setIncomingCount(reqs.incoming.length);
+      })
+      .catch(() => {
+        if (active) setIncomingCount(0);
       });
     return () => {
       active = false;
@@ -100,6 +111,11 @@ export function Nav() {
               className={linkClass(pathname === link.href)}
             >
               {link.label}
+              {link.href === "/friends" && incomingCount > 0 ? (
+                <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-[9999px] bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                  {incomingCount}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>
@@ -197,6 +213,9 @@ export function Nav() {
               className={linkClass(pathname === link.href)}
             >
               {link.label}
+              {link.href === "/friends" && incomingCount > 0
+                ? ` (${incomingCount})`
+                : ""}
             </Link>
           ))}
           {isGuest ? (
