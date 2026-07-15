@@ -303,6 +303,7 @@ async def _build_post_outs(
             author_name=display_name(author) if author else "Friend",
             author_image_url=author.image_url if author else None,
             take=post.take,
+            shared_text=post.shared_text,
             visibility=post.visibility,
             last_activity_at=post.last_activity_at,
             created_at=post.created_at,

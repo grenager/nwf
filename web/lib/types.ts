@@ -125,6 +125,8 @@ export interface Post {
   author_name: string;
   author_image_url: string | null;
   take: string | null;
+  /** Article text the author pasted from the source page (reader view). */
+  shared_text: string | null;
   visibility: PostVisibility;
   last_activity_at: string;
   created_at: string;

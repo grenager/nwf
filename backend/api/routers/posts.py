@@ -412,6 +412,7 @@ async def serialize_post(
         author_name=display_name(author) if author else "Friend",
         author_image_url=author.image_url if author else None,
         take=post.take,
+        shared_text=post.shared_text,
         visibility=post.visibility,
         last_activity_at=post.last_activity_at,
         created_at=post.created_at,
@@ -538,6 +539,7 @@ async def create_post(
         story_id=story.id,
         author_id=user.id,
         take=(payload.take or "").strip() or None,
+        shared_text=(payload.shared_text or "").strip() or None,
         visibility=payload.visibility,
         last_activity_at=datetime.now(UTC),
     )
@@ -628,6 +630,8 @@ async def update_post(
         )
         if status_row is not None:
             status_row.take = new_take
+    if "shared_text" in fields:
+        post.shared_text = (payload.shared_text or "").strip() or None
     if "visibility" in fields and payload.visibility is not None:
         post.visibility = payload.visibility
     post.updated_at = datetime.now(UTC)
