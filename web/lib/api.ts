@@ -20,6 +20,7 @@ import type {
   PreviewCard,
   Profile,
   ProfileEdit,
+  ReactionKind,
   RecommendedFriend,
   Story,
   StoryKind,
@@ -178,13 +179,37 @@ export const api = {
     const qs = params.toString();
     return request<Comment[]>(qs ? `/comments?${qs}` : "/comments");
   },
-  createComment: (postId: UUID, text: string): Promise<Comment> =>
+  createComment: (
+    postId: UUID,
+    text: string,
+    parentCommentId?: UUID | null,
+  ): Promise<Comment> =>
     request<Comment>("/comments", {
       method: "POST",
-      body: JSON.stringify({ post_id: postId, text }),
+      body: JSON.stringify({
+        post_id: postId,
+        text,
+        parent_comment_id: parentCommentId ?? null,
+      }),
     }),
   deleteComment: (id: UUID): Promise<void> =>
     request<void>(`/comments/${id}`, { method: "DELETE" }),
+  reactToComment: (id: UUID, reaction: ReactionKind): Promise<Comment> =>
+    request<Comment>(`/comments/${id}/reactions`, {
+      method: "PUT",
+      body: JSON.stringify({ reaction }),
+    }),
+  clearCommentReaction: (id: UUID): Promise<Comment> =>
+    request<Comment>(`/comments/${id}/reactions`, { method: "DELETE" }),
+
+  // --- post reactions ---
+  reactToPost: (id: UUID, reaction: ReactionKind): Promise<Post> =>
+    request<Post>(`/posts/${id}/reactions`, {
+      method: "PUT",
+      body: JSON.stringify({ reaction }),
+    }),
+  clearPostReaction: (id: UUID): Promise<Post> =>
+    request<Post>(`/posts/${id}/reactions`, { method: "DELETE" }),
 
   // --- attachments ---
   createAttachment: (

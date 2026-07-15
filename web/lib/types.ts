@@ -76,15 +76,34 @@ export interface StoryList {
   offset: number;
 }
 
+/** Fixed emoji reaction set for posts and comments. */
+export const REACTIONS = [
+  { kind: "like", emoji: "👍", label: "Like" },
+  { kind: "love", emoji: "❤️", label: "Love" },
+  { kind: "laugh", emoji: "😂", label: "Laugh" },
+  { kind: "insightful", emoji: "💡", label: "Insightful" },
+  { kind: "sad", emoji: "😢", label: "Sad" },
+] as const;
+
+export type ReactionKind = (typeof REACTIONS)[number]["kind"];
+
+export interface ReactionSummary {
+  reaction: ReactionKind;
+  count: number;
+}
+
 export interface Comment {
   id: UUID;
   story_id: UUID;
   post_id: UUID | null;
+  parent_comment_id: UUID | null;
   user_id: UUID;
   author_name: string;
   author_image_url: string | null;
   text: string;
   author_rating: number | null;
+  reactions: ReactionSummary[];
+  my_reaction: ReactionKind | null;
   created_at: string;
   updated_at: string;
 }
@@ -123,6 +142,8 @@ export interface Post {
   replies: Comment[];
   attachments: Attachment[];
   author_rating: number | null;
+  reactions: ReactionSummary[];
+  my_reaction: ReactionKind | null;
   read: boolean;
   starred: boolean;
   my_rating: number | null;

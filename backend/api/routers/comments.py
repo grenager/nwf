@@ -1,4 +1,8 @@
-"""Comments are replies under a post; maintain post_participants on insert."""
+"""Comments are replies under a post; maintain post_participants on insert.
+
+Supports one level of nesting via ``parent_comment_id`` (deeper replies are
+flattened to the top-level ancestor) and emoji reactions on comments.
+"""
 
 from __future__ import annotations
 
@@ -16,24 +20,43 @@ from api.friends import (
     display_name,
     ratings_for_users_by_story,
 )
-from api.schemas import CommentCreate, CommentOut, CommentUpdate
+from api.reactions import (
+    delete_comment_reaction,
+    load_comment_reactions,
+    upsert_comment_reaction,
+)
+from api.schemas import (
+    CommentCreate,
+    CommentOut,
+    CommentUpdate,
+    ReactionSet,
+    ReactionSummary,
+)
 from core.models import Comment, Post, PostParticipant, Profile
 
 router = APIRouter(prefix="/comments", tags=["comments"])
 
 
 def _to_out(
-    comment: Comment, author: Profile | None, rating: float | None = None
+    comment: Comment,
+    author: Profile | None,
+    rating: float | None = None,
+    *,
+    reactions: list[ReactionSummary] | None = None,
+    my_reaction: str | None = None,
 ) -> CommentOut:
     return CommentOut(
         id=comment.id,
         story_id=comment.story_id,
         post_id=comment.post_id,
+        parent_comment_id=comment.parent_comment_id,
         user_id=comment.user_id,
         author_name=display_name(author) if author else "Friend",
         author_image_url=author.image_url if author else None,
         text=comment.text,
         author_rating=rating,
+        reactions=reactions if reactions is not None else [],
+        my_reaction=my_reaction,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
     )
@@ -48,14 +71,28 @@ async def _single_rating(
     ).get(story_id, {}).get(user_id)
 
 
-def _rated_outs(
+async def _rated_outs(
+    session: SessionDep,
     rows: Sequence[Row[tuple[Comment, Profile]]],
     ratings: dict[uuid.UUID, dict[uuid.UUID, float]],
+    viewer_id: uuid.UUID | None,
 ) -> list[CommentOut]:
-    return [
-        _to_out(c, a, ratings.get(c.story_id, {}).get(c.user_id))
-        for c, a in rows
-    ]
+    reaction_map = await load_comment_reactions(
+        session, [c.id for c, _ in rows], viewer_id
+    )
+    outs: list[CommentOut] = []
+    for c, a in rows:
+        summaries, mine = reaction_map.get(c.id, ([], None))
+        outs.append(
+            _to_out(
+                c,
+                a,
+                ratings.get(c.story_id, {}).get(c.user_id),
+                reactions=summaries,
+                my_reaction=mine,
+            )
+        )
+    return outs
 
 
 async def _add_participant(
@@ -69,6 +106,29 @@ async def _add_participant(
         )
     )
     await session.execute(stmt)
+
+
+async def _resolve_parent_id(
+    session: SessionDep,
+    *,
+    post_id: uuid.UUID,
+    parent_comment_id: uuid.UUID | None,
+) -> uuid.UUID | None:
+    """Validate parent and flatten to a top-level comment (depth ≤ 1)."""
+    if parent_comment_id is None:
+        return None
+    parent = await session.get(Comment, parent_comment_id)
+    if parent is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "parent comment not found")
+    if parent.post_id != post_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "parent comment must belong to the same post",
+        )
+    # Flatten: reply-to-a-child becomes a sibling under the root.
+    if parent.parent_comment_id is not None:
+        return parent.parent_comment_id
+    return parent.id
 
 
 @router.get("", response_model=list[CommentOut])
@@ -103,7 +163,7 @@ async def list_comments(
         ratings = await ratings_for_users_by_story(
             session, [post.story_id], {c.user_id for c, _ in rows}
         )
-        return _rated_outs(rows, ratings)
+        return await _rated_outs(session, rows, ratings, user.id)
 
     # story_id path: return replies on posts about that story that the viewer can see
     assert story_id is not None
@@ -130,7 +190,7 @@ async def list_comments(
     ratings = await ratings_for_users_by_story(
         session, [story_id], {c.user_id for c, _ in rows}
     )
-    return _rated_outs(rows, ratings)
+    return await _rated_outs(session, rows, ratings, user.id)
 
 
 @router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
@@ -143,9 +203,14 @@ async def create_comment(
     if not await can_see_post(session, user.id, post):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
 
+    parent_id = await _resolve_parent_id(
+        session, post_id=post.id, parent_comment_id=payload.parent_comment_id
+    )
+
     comment = Comment(
         story_id=post.story_id,
         post_id=post.id,
+        parent_comment_id=parent_id,
         user_id=user.id,
         text=payload.text,
     )
@@ -174,7 +239,11 @@ async def get_comment(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
     author = await session.get(Profile, comment.user_id)
     rating = await _single_rating(session, comment.user_id, comment.story_id)
-    return _to_out(comment, author, rating)
+    reaction_map = await load_comment_reactions(session, [comment.id], user.id)
+    summaries, mine = reaction_map.get(comment.id, ([], None))
+    return _to_out(
+        comment, author, rating, reactions=summaries, my_reaction=mine
+    )
 
 
 @router.put("/{comment_id}", response_model=CommentOut)
@@ -194,7 +263,11 @@ async def update_comment(
     await session.refresh(comment)
     author = await session.get(Profile, comment.user_id)
     rating = await _single_rating(session, comment.user_id, comment.story_id)
-    return _to_out(comment, author, rating)
+    reaction_map = await load_comment_reactions(session, [comment.id], user.id)
+    summaries, mine = reaction_map.get(comment.id, ([], None))
+    return _to_out(
+        comment, author, rating, reactions=summaries, my_reaction=mine
+    )
 
 
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -207,3 +280,61 @@ async def delete_comment(
     if comment.user_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
     await session.delete(comment)
+
+
+@router.put("/{comment_id}/reactions", response_model=CommentOut)
+async def set_comment_reaction(
+    comment_id: uuid.UUID,
+    payload: ReactionSet,
+    session: SessionDep,
+    user: CurrentUser,
+) -> CommentOut:
+    comment = await session.get(Comment, comment_id)
+    if comment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "comment not found")
+    if comment.post_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+    post = await session.get(Post, comment.post_id)
+    if post is None or not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+
+    await upsert_comment_reaction(
+        session,
+        user_id=user.id,
+        comment_id=comment.id,
+        reaction=payload.reaction,
+    )
+    await session.flush()
+    author = await session.get(Profile, comment.user_id)
+    rating = await _single_rating(session, comment.user_id, comment.story_id)
+    reaction_map = await load_comment_reactions(session, [comment.id], user.id)
+    summaries, mine = reaction_map.get(comment.id, ([], None))
+    return _to_out(
+        comment, author, rating, reactions=summaries, my_reaction=mine
+    )
+
+
+@router.delete("/{comment_id}/reactions", response_model=CommentOut)
+async def clear_comment_reaction(
+    comment_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> CommentOut:
+    comment = await session.get(Comment, comment_id)
+    if comment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "comment not found")
+    if comment.post_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+    post = await session.get(Post, comment.post_id)
+    if post is None or not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+
+    await delete_comment_reaction(
+        session, user_id=user.id, comment_id=comment.id
+    )
+    await session.flush()
+    author = await session.get(Profile, comment.user_id)
+    rating = await _single_rating(session, comment.user_id, comment.story_id)
+    reaction_map = await load_comment_reactions(session, [comment.id], user.id)
+    summaries, mine = reaction_map.get(comment.id, ([], None))
+    return _to_out(
+        comment, author, rating, reactions=summaries, my_reaction=mine
+    )

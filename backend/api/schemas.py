@@ -193,17 +193,46 @@ class UserSourcesUpdate(BaseModel):
     source_ids: list[uuid.UUID]
 
 
+# --- Reactions (fixed set on posts and comments) --------------------------
+REACTION_VALUES: frozenset[str] = frozenset(
+    {"like", "love", "laugh", "insightful", "sad"}
+)
+
+
+class ReactionSummary(BaseModel):
+    reaction: str
+    count: int
+
+
+class ReactionSet(BaseModel):
+    """Body for PUT /posts|comments/{id}/reactions."""
+
+    reaction: str
+
+    @field_validator("reaction")
+    @classmethod
+    def _known_reaction(cls, value: str) -> str:
+        if value not in REACTION_VALUES:
+            raise ValueError(
+                f"reaction must be one of: {', '.join(sorted(REACTION_VALUES))}"
+            )
+        return value
+
+
 # --- Comments (replies under a post) --------------------------------------
 class CommentOut(ORMModel):
     id: uuid.UUID
     story_id: uuid.UUID
     post_id: uuid.UUID | None = None
+    parent_comment_id: uuid.UUID | None = None
     user_id: uuid.UUID
     author_name: str = "Friend"
     author_image_url: str | None = None
     text: str
     # The commenter's own half-star rating of the story (shown beside them).
     author_rating: float | None = None
+    reactions: list[ReactionSummary] = Field(default_factory=list)
+    my_reaction: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -211,6 +240,7 @@ class CommentOut(ORMModel):
 class CommentCreate(BaseModel):
     post_id: uuid.UUID
     text: str = Field(min_length=1, max_length=10_000)
+    parent_comment_id: uuid.UUID | None = None
 
 
 class CommentUpdate(BaseModel):
@@ -311,6 +341,8 @@ class PostOut(ORMModel):
     attachments: list[AttachmentOut] = Field(default_factory=list)
     # The post author's own half-star rating (shown beside their take).
     author_rating: float | None = None
+    reactions: list[ReactionSummary] = Field(default_factory=list)
+    my_reaction: str | None = None
     # Per-viewer log state on the underlying story
     read: bool = False
     starred: bool = False
