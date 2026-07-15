@@ -43,6 +43,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   const { requireAuth } = useAuthGate();
   const [url, setUrl] = useState<string>("");
   const [take, setTake] = useState<string>("");
+  const [sharedText, setSharedText] = useState<string>("");
   const [kind, setKind] = useState<StoryKind>("news");
   const [visibility, setVisibility] = useState<PostVisibility>("private");
   const [rating, setRating] = useState<number | null>(null);
@@ -120,6 +121,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
       const post: Post = await api.createPost({
         url: trimmed,
         take: take.trim() || null,
+        shared_text: sharedText.trim() || null,
         kind,
         visibility,
         canonical_url: preview.canonical_url,
@@ -273,6 +275,31 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
               placeholder="What stood out?"
               className="resize-none border border-slate-300 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
             />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Article text (optional)
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Behind a paywall? Paste the article text you can read so friends
+              can read it here too. We always link back to{" "}
+              {preview?.source_name ?? "the publisher"}. By pasting, you confirm
+              you have access to this content and choose to share it.
+            </span>
+            <textarea
+              value={sharedText}
+              onChange={(e) => setSharedText(e.target.value)}
+              rows={5}
+              placeholder="Paste the article text here…"
+              className="resize-y border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800"
+            />
+            {sharedText.trim() ? (
+              <span className="text-[11px] text-slate-400">
+                {sharedText.trim().length.toLocaleString()} characters · shown
+                as a reader view on your post
+              </span>
+            ) : null}
           </label>
 
           <div className="flex flex-col gap-1">
