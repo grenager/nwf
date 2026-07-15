@@ -26,7 +26,7 @@ def test_openapi_includes_people_and_invite_routes() -> None:
     assert "/invitations/{token}/accept" in paths
 
 
-def test_share_message_includes_article_and_link() -> None:
+def test_share_message_includes_prefix_note_and_link() -> None:
     msg = _share_message(
         inviter_name="Ada",
         headline="Quiet week in AI",
@@ -34,12 +34,12 @@ def test_share_message_includes_article_and_link() -> None:
         personal="Thought of you",
         invite_url="https://nwf.example/invite/abc",
     )
-    assert "I wanted to discuss this article with you" in msg
-    assert "Ada" in msg
-    assert "Quiet week in AI" in msg
-    assert "Worth your time" in msg
+    assert msg.startswith(
+        "I'm loving NewsWithFriends, and I wanted to discuss this article "
+        "with you there:"
+    )
     assert "Thought of you" in msg
-    assert "https://nwf.example/invite/abc" in msg
+    assert msg.rstrip().endswith("https://nwf.example/invite/abc")
 
 
 def test_invite_email_html_and_plain() -> None:

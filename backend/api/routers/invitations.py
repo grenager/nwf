@@ -44,7 +44,10 @@ router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 _TOKEN_BYTES = 24
 _DEFAULT_EXPIRY = timedelta(days=14)
-_DEFAULT_SHARE_PREFIX = "I wanted to discuss this article with you"
+_DEFAULT_SHARE_PREFIX = (
+    "I'm loving NewsWithFriends, and I wanted to discuss this article "
+    "with you there:"
+)
 
 
 def _new_token() -> str:
@@ -59,14 +62,12 @@ def _share_message(
     personal: str | None,
     invite_url: str,
 ) -> str:
-    bits: list[str] = [f"{_DEFAULT_SHARE_PREFIX}."]
-    if headline:
-        bits.append(f"\n\n{headline}")
-    if take:
-        bits.append(f'\n\n{inviter_name}: "{take}"')
+    # The link renders a rich preview (headline + image) in messaging apps, so
+    # keep the text itself to a short friendly line plus any personal note.
+    bits: list[str] = [_DEFAULT_SHARE_PREFIX]
     if personal:
         bits.append(f"\n\n{personal}")
-    bits.append(f"\n\n{invite_url}")
+    bits.append(f"\n{invite_url}")
     return "".join(bits)
 
 
