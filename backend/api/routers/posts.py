@@ -23,6 +23,12 @@ from api.friends import (
     ratings_for_users_by_story,
     top_readers,
 )
+from api.reactions import (
+    delete_post_reaction,
+    load_comment_reactions,
+    load_post_reactions,
+    upsert_post_reaction,
+)
 from api.schemas import (
     AttachmentOut,
     CommentOut,
@@ -33,6 +39,8 @@ from api.schemas import (
     PostUpdate,
     PreviewCreate,
     PreviewOut,
+    ReactionSet,
+    ReactionSummary,
 )
 from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
@@ -228,15 +236,24 @@ async def _add_participant(
     await session.execute(stmt)
 
 
-def _comment_out(comment: Comment, author: Profile | None) -> CommentOut:
+def _comment_out(
+    comment: Comment,
+    author: Profile | None,
+    *,
+    reactions: list[ReactionSummary] | None = None,
+    my_reaction: str | None = None,
+) -> CommentOut:
     return CommentOut(
         id=comment.id,
         story_id=comment.story_id,
         post_id=comment.post_id,
+        parent_comment_id=comment.parent_comment_id,
         user_id=comment.user_id,
         author_name=display_name(author) if author else "Friend",
         author_image_url=author.image_url if author else None,
         text=comment.text,
+        reactions=reactions if reactions is not None else [],
+        my_reaction=my_reaction,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
     )
@@ -283,7 +300,24 @@ async def serialize_post(
                 .order_by(Comment.created_at.asc())
             )
         ).all()
-        replies = [_comment_out(c, a) for c, a in rows]
+        # Guests (unless force_replies) get counts without reaction detail.
+        show_reply_bodies: bool = viewer_id is not None or force_replies
+        comment_rx = (
+            await load_comment_reactions(
+                session, [c.id for c, _ in rows], viewer_id
+            )
+            if show_reply_bodies
+            else {}
+        )
+        replies = [
+            _comment_out(
+                c,
+                a,
+                reactions=comment_rx.get(c.id, ([], None))[0],
+                my_reaction=comment_rx.get(c.id, ([], None))[1],
+            )
+            for c, a in rows
+        ]
 
     attachments = list(
         (
@@ -365,6 +399,12 @@ async def serialize_post(
         rating_avg = sum(ratings_map.values()) / len(ratings_map)
         rating_count = len(ratings_map)
 
+    show_bodies: bool = viewer_id is not None or force_replies
+    post_rx = await load_post_reactions(session, [post.id], viewer_id)
+    post_reactions, my_post_reaction = post_rx.get(post.id, ([], None))
+    if not show_bodies:
+        my_post_reaction = None
+
     return PostOut(
         id=post.id,
         story_id=post.story_id,
@@ -388,9 +428,11 @@ async def serialize_post(
         audience_label=audience_label(post.visibility, participant_count),
         # Guests get the count only; reply content is gated behind auth
         # unless force_replies (token-scoped invite preview).
-        replies=replies if (viewer_id is not None or force_replies) else [],
+        replies=replies if show_bodies else [],
         attachments=attachment_outs,
         author_rating=author_rating,
+        reactions=post_reactions,
+        my_reaction=my_post_reaction,
         read=read,
         starred=starred,
         my_rating=my_rating,
@@ -604,3 +646,39 @@ async def delete_post(
     if post.author_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
     await session.delete(post)
+
+
+@router.put("/{post_id}/reactions", response_model=PostOut)
+async def set_post_reaction(
+    post_id: uuid.UUID,
+    payload: ReactionSet,
+    session: SessionDep,
+    user: CurrentUser,
+) -> PostOut:
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+    await upsert_post_reaction(
+        session,
+        user_id=user.id,
+        post_id=post.id,
+        reaction=payload.reaction,
+    )
+    await session.flush()
+    return await serialize_post(session, post, viewer_id=user.id)
+
+
+@router.delete("/{post_id}/reactions", response_model=PostOut)
+async def clear_post_reaction(
+    post_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> PostOut:
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+    await delete_post_reaction(session, user_id=user.id, post_id=post.id)
+    await session.flush()
+    return await serialize_post(session, post, viewer_id=user.id)

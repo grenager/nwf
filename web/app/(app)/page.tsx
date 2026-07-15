@@ -202,7 +202,7 @@ export default function FeedPage() {
         </div>
       ) : null}
 
-      <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+      <div className="divide-y divide-zinc-200 [&>article:first-child]:pt-1 dark:divide-zinc-800">
         {inbox.map((card) => (
           <PostCard
             key={card.card_id}

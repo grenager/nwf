@@ -1,6 +1,7 @@
 "use client";
 
 import { EngagementSummary } from "@/components/engagement-summary";
+import { applyReactionToggle } from "@/components/reaction-bar";
 import { SharePostModal } from "@/components/share-post-modal";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
@@ -10,6 +11,7 @@ import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type {
+  Comment,
   FeedCard,
   Post,
   Profile,
@@ -17,7 +19,7 @@ import type {
   UUID,
 } from "@/lib/types";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
 interface PostCardProps {
   card: FeedCard;
@@ -103,8 +105,67 @@ function PostThread({
   const [editing, setEditing] = useState<boolean>(false);
   const [editDraft, setEditDraft] = useState<string>(post.take ?? "");
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [reacting, setReacting] = useState<boolean>(false);
+  const composerRef = useRef<HTMLInputElement | null>(null);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
+
+  const { tops, childrenByParent } = useMemo(() => {
+    const topsLocal: Comment[] = [];
+    const kids: Map<UUID, Comment[]> = new Map();
+    for (const r of post.replies) {
+      if (r.parent_comment_id == null) {
+        topsLocal.push(r);
+      } else {
+        const list: Comment[] = kids.get(r.parent_comment_id) ?? [];
+        list.push(r);
+        kids.set(r.parent_comment_id, list);
+      }
+    }
+    return { tops: topsLocal, childrenByParent: kids };
+  }, [post.replies]);
+
+  function startReplyTo(comment: Comment): void {
+    setReplyTo(comment);
+    setComposerActive(true);
+    composerRef.current?.focus();
+  }
+
+  async function toggleCommentLike(comment: Comment): Promise<void> {
+    if (!requireAuth("like a comment")) return;
+    if (reacting) return;
+    const optimistic = applyReactionToggle(
+      comment.reactions ?? [],
+      comment.my_reaction ?? null,
+      "like",
+    );
+    const patched: Comment = {
+      ...comment,
+      reactions: optimistic.reactions,
+      my_reaction: optimistic.my_reaction,
+    };
+    onPostChange({
+      ...post,
+      replies: post.replies.map((r) => (r.id === comment.id ? patched : r)),
+    });
+    setReacting(true);
+    try {
+      const updated: Comment =
+        optimistic.my_reaction === null
+          ? await api.clearCommentReaction(comment.id)
+          : await api.reactToComment(comment.id, "like");
+      onPostChange({
+        ...post,
+        replies: post.replies.map((r) => (r.id === comment.id ? updated : r)),
+      });
+    } catch (err) {
+      onPostChange(post);
+      notify(err instanceof ApiError ? err.message : "Failed to like", "error");
+    } finally {
+      setReacting(false);
+    }
+  }
 
   async function saveEdit(): Promise<void> {
     const text = editDraft.trim();
@@ -152,7 +213,11 @@ function PostThread({
     if (!text || posting) return;
     setPosting(true);
     try {
-      const created = await api.createComment(post.id, text);
+      const created = await api.createComment(
+        post.id,
+        text,
+        replyTo?.id ?? null,
+      );
       onPostChange({
         ...post,
         replies: [...post.replies, created],
@@ -160,6 +225,7 @@ function PostThread({
         participant_count: post.participant_count + 1,
       });
       setDraft("");
+      setReplyTo(null);
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to reply", "error");
     } finally {
@@ -190,15 +256,11 @@ function PostThread({
   const showComposerActions: boolean = composerActive || draft.trim().length > 0;
 
   return (
-    <div className="flex items-start gap-3">
-      <Avatar
-        name={post.author_name}
-        imageUrl={post.author_image_url}
-        size="lg"
-      />
+    <div className="flex items-start gap-2">
+      <Avatar name={post.author_name} imageUrl={post.author_image_url} />
       <div className="min-w-0 flex-1 space-y-3">
         <div>
-          <div className="flex items-start gap-2">
+          <div className="mb-2 flex items-start gap-2">
             <div className="flex flex-1 flex-wrap items-center gap-2 text-sm">
               <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                 {post.author_name}
@@ -209,16 +271,6 @@ function PostThread({
               <span className="text-xs text-zinc-400">
                 {relativeTime(post.created_at)}
               </span>
-              {post.visibility === "public" ? (
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                  Public
-                </span>
-              ) : null}
-              {post.unread_replies_for_viewer ? (
-                <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
-                  new replies
-                </span>
-              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
               <button
@@ -373,44 +425,62 @@ function PostThread({
             </p>
           ) : null
         ) : (
-          post.replies.map((r) => (
-            <div key={r.id} className="flex items-start gap-2">
-              <Avatar name={r.author_name} imageUrl={r.author_image_url} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                    {r.author_name}
-                  </span>
-                  {r.author_rating != null ? (
-                    <StarsDisplay value={r.author_rating} size="xs" />
-                  ) : null}
-                  <span className="text-zinc-400">
-                    {relativeTime(r.created_at)}
-                  </span>
-                  {user && r.user_id === user.id ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void api.deleteComment(r.id).then(() => {
-                          onPostChange({
-                            ...post,
-                            replies: post.replies.filter((x) => x.id !== r.id),
-                            reply_count: Math.max(0, post.reply_count - 1),
+          tops.map((r) => {
+            const kids: Comment[] = childrenByParent.get(r.id) ?? [];
+            return (
+              <div key={r.id} className="space-y-2">
+                <CommentRow
+                  comment={r}
+                  userId={user?.id ?? null}
+                  reacting={reacting}
+                  onReply={() => startReplyTo(r)}
+                  onLike={() => void toggleCommentLike(r)}
+                  onDelete={() => {
+                    void api.deleteComment(r.id).then(() => {
+                      const childIds = new Set(
+                        (childrenByParent.get(r.id) ?? []).map((c) => c.id),
+                      );
+                      onPostChange({
+                        ...post,
+                        replies: post.replies.filter(
+                          (x) => x.id !== r.id && !childIds.has(x.id),
+                        ),
+                        reply_count: Math.max(
+                          0,
+                          post.reply_count - 1 - childIds.size,
+                        ),
+                      });
+                    });
+                  }}
+                />
+                {kids.length > 0 ? (
+                  <div className="ml-6 space-y-2 border-l border-zinc-200 pl-3 dark:border-zinc-700">
+                    {kids.map((child) => (
+                      <CommentRow
+                        key={child.id}
+                        comment={child}
+                        userId={user?.id ?? null}
+                        reacting={reacting}
+                        onReply={() => startReplyTo(child)}
+                        onLike={() => void toggleCommentLike(child)}
+                        onDelete={() => {
+                          void api.deleteComment(child.id).then(() => {
+                            onPostChange({
+                              ...post,
+                              replies: post.replies.filter(
+                                (x) => x.id !== child.id,
+                              ),
+                              reply_count: Math.max(0, post.reply_count - 1),
+                            });
                           });
-                        });
-                      }}
-                      className="text-zinc-400 hover:text-red-600"
-                    >
-                      Delete
-                    </button>
-                  ) : null}
-                </div>
-                <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-                  {r.text}
-                </p>
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
 
       {isGuest ? null : (
@@ -434,12 +504,34 @@ function PostThread({
                   onChange={onRate}
                 />
               </div>
+              {replyTo ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                  <span>
+                    Replying to{" "}
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                      {replyTo.author_name}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReplyTo(null)}
+                    className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
               <div className="flex gap-2">
                 <input
+                  ref={composerRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onFocus={() => setComposerActive(true)}
-                  placeholder="Reply…"
+                  placeholder={
+                    replyTo
+                      ? `Reply to ${replyTo.author_name}…`
+                      : "Reply…"
+                  }
                   className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -490,6 +582,79 @@ function PostThread({
             </div>
           </div>
       )}
+      </div>
+    </div>
+  );
+}
+
+function CommentRow({
+  comment,
+  userId,
+  reacting,
+  onReply,
+  onLike,
+  onDelete,
+}: {
+  comment: Comment;
+  userId: UUID | null;
+  reacting: boolean;
+  onReply: () => void;
+  onLike: () => void;
+  onDelete: () => void;
+}) {
+  const liked: boolean = comment.my_reaction === "like";
+  const likeCount: number =
+    comment.reactions.find((r) => r.reaction === "like")?.count ?? 0;
+
+  return (
+    <div className="flex items-start gap-2">
+      <Avatar name={comment.author_name} imageUrl={comment.author_image_url} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+            {comment.author_name}
+          </span>
+          {comment.author_rating != null ? (
+            <StarsDisplay value={comment.author_rating} size="xs" />
+          ) : null}
+          <span className="text-zinc-400">
+            {relativeTime(comment.created_at)}
+          </span>
+        </div>
+        <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
+          {comment.text}
+        </p>
+        <div className="mt-0.5 flex items-center gap-3 text-xs">
+          <button
+            type="button"
+            disabled={reacting}
+            onClick={onLike}
+            aria-pressed={liked}
+            className={`disabled:opacity-40 ${
+              liked
+                ? "font-semibold text-zinc-800 dark:text-zinc-100"
+                : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            }`}
+          >
+            Like{likeCount > 0 ? ` · ${likeCount}` : ""}
+          </button>
+          <button
+            type="button"
+            onClick={onReply}
+            className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+          >
+            Reply
+          </button>
+          {userId !== null && comment.user_id === userId ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-zinc-400 hover:text-red-600"
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
