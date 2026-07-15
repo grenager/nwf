@@ -7,7 +7,8 @@ import type { InvitationCreateResult, UUID } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-const SHARE_TEXT = "I wanted to discuss this article with you";
+const SHARE_TEXT =
+  "I'm loving NewsWithFriends, and I wanted to discuss this article with you there:";
 
 interface SharePostModalProps {
   postId: UUID;
