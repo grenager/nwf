@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from api.routers import (
     attachments,
@@ -52,6 +53,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Compress JSON payloads (the feed can be tens of KB) above ~1KB.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     app.include_router(health.router)
     app.include_router(sources.router)

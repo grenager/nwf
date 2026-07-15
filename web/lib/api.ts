@@ -39,12 +39,26 @@ export class ApiError extends Error {
   }
 }
 
+// The AuthProvider keeps this in sync via onAuthStateChange, so most requests
+// avoid a redundant supabase.auth.getSession() round-trip on the hot path.
+let cachedAccessToken: string | null = null;
+
+export function setApiAuthToken(token: string | null): void {
+  cachedAccessToken = token;
+}
+
 async function authHeader(): Promise<Record<string, string>> {
+  if (cachedAccessToken !== null) {
+    return { Authorization: `Bearer ${cachedAccessToken}` };
+  }
   const supabase = getSupabaseBrowserClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token: string | undefined = session?.access_token;
+  if (token) {
+    cachedAccessToken = token;
+  }
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
