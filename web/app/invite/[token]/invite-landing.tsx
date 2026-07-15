@@ -248,23 +248,16 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const summary: string | null = post?.summary ?? null;
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-4 py-8 sm:px-6">
-      <Link
-        href="/"
-        className="mb-6 block text-center font-serif text-2xl font-semibold text-zinc-900 dark:text-zinc-50"
-      >
-        NewsWithFriends
-      </Link>
-
-      <div className="mb-6 border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+    <main className="mx-auto min-h-screen max-w-2xl px-4 py-6 sm:px-6">
+      <div className="mb-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
           Shared with you
         </p>
-        <h1 className="mt-1 font-serif text-xl font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-2xl">
-          {preview.inviter_name} wanted to discuss this article with you
+        <h1 className="mt-1 font-serif text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-xl">
+          {preview.inviter_name} wanted to discuss this with you
         </h1>
         {preview.message ? (
-          <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">
+          <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">
             {preview.message}
           </p>
         ) : null}
@@ -327,18 +320,6 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         </div>
       ) : null}
 
-      {isGuest ? (
-        <div className="mb-6 border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-          <p>
-            You can read the conversation below.{" "}
-            <Link href={signInHref} className="font-semibold underline">
-              Sign up
-            </Link>{" "}
-            to comment or rate.
-          </p>
-        </div>
-      ) : null}
-
       {joined ? (
         <div className="mb-6 border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
           You&apos;re connected with {preview.inviter_name}. Jump in below — or{" "}
@@ -350,7 +331,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       ) : null}
 
       {post ? (
-        <section className="space-y-4 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+        <section className="space-y-4">
           <div className="flex items-start gap-3">
             <Avatar
               name={post.author_name}
@@ -490,12 +471,61 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       )}
 
       {isGuest ? (
-        <p className="mt-8 text-center text-xs text-zinc-400">
-          Already on NewsWithFriends?{" "}
-          <Link href={signInHref} className="underline">
-            Sign in
-          </Link>
-        </p>
+        <>
+          <section className="mt-10 border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+              New here?
+            </p>
+            <h3 className="mt-1 font-serif text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              What is NewsWithFriends?
+            </h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+              It&apos;s a calmer way to read the news — with the people you
+              trust, not strangers or algorithms.
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+              <li className="flex gap-2">
+                <span aria-hidden="true">·</span>
+                <span>Share articles and your take with friends.</span>
+              </li>
+              <li className="flex gap-2">
+                <span aria-hidden="true">·</span>
+                <span>Discuss and rate stories together in one place.</span>
+              </li>
+              <li className="flex gap-2">
+                <span aria-hidden="true">·</span>
+                <span>See what people you trust are actually reading.</span>
+              </li>
+            </ul>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Link
+                href={signInHref}
+                className="bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                Create free account
+              </Link>
+              <a
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+              >
+                Explore the feed first
+              </a>
+            </div>
+            <p className="mt-3 text-xs text-zinc-400">
+              No password — just a magic link. Exploring opens in a new tab so
+              you don&apos;t lose {preview.inviter_name}&apos;s conversation.
+            </p>
+          </section>
+
+          <p className="mt-8 text-center text-xs text-zinc-400">
+            Already on NewsWithFriends?{" "}
+            <Link href={signInHref} className="underline">
+              Sign in
+            </Link>
+          </p>
+        </>
       ) : null}
     </main>
   );
