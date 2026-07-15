@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     scrape_concurrency: int = Field(default=3)
     scrape_http_timeout_seconds: float = Field(default=20.0)
 
+    # ScrapingBee: proxy/JS-render fallback for link-preview enrichment when a
+    # direct fetch is blocked (e.g. Economist 403, X/Twitter). Optional — when
+    # unset, enrichment only does a direct fetch.
+    scrapingbee_api_key: str | None = Field(default=None)
+    scrapingbee_timeout_seconds: float = Field(default=40.0)
+
     # --- Embeddings (OpenAI) ----------------------------------------------
     embeddings_api_key: str | None = Field(default=None)
     embeddings_model: str = Field(default="text-embedding-3-small")

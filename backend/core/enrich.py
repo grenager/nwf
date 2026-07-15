@@ -223,41 +223,92 @@ def parse_html_metadata(page_html: str) -> UrlMetadata:
     )
 
 
-async def fetch_url_metadata(url: str) -> UrlMetadata:
-    """Fetch a URL and parse its head metadata; never raises on failure."""
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return UrlMetadata()
-    settings = get_settings()
+_LINK_PREVIEW_HEADERS: dict[str, str] = {
+    # Identify as the canonical link-preview crawler. Publishers (e.g. NYT)
+    # whitelist this UA to serve OpenGraph tags for social embeds, whereas
+    # generic/bot UAs get a 403 that would drop us to a bare-slug title.
+    "User-Agent": (
+        "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+# Metadata worth keeping. Some sites (e.g. X/Twitter) block direct fetches but
+# yield rich cards through the proxy, so treat a title-less result as a miss
+# that should trigger the ScrapingBee fallback.
+def _worth_keeping(meta: UrlMetadata) -> bool:
+    return bool(meta.title or meta.description or meta.image_url)
+
+
+async def _fetch_direct(url: str, timeout_seconds: float) -> UrlMetadata | None:
+    """Direct fetch. Returns None when the fetch/parse failed (should retry)."""
     try:
         async with httpx.AsyncClient(
-            timeout=settings.scrape_http_timeout_seconds,
+            timeout=timeout_seconds,
             follow_redirects=True,
-            headers={
-                # Identify as the canonical link-preview crawler. Publishers
-                # (e.g. NYT) whitelist this UA to serve OpenGraph tags for
-                # social embeds, whereas generic/bot UAs get a 403 that would
-                # drop us to a bare-slug title with no image.
-                "User-Agent": (
-                    "facebookexternalhit/1.1 "
-                    "(+http://www.facebook.com/externalhit_uatext.php)"
-                ),
-                "Accept": (
-                    "text/html,application/xhtml+xml,application/xml;q=0.9,"
-                    "*/*;q=0.8"
-                ),
-                "Accept-Language": "en-US,en;q=0.9",
-            },
+            headers=_LINK_PREVIEW_HEADERS,
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            content_type = resp.headers.get("content-type", "")
-            if "html" not in content_type.lower():
+            if "html" not in resp.headers.get("content-type", "").lower():
                 return UrlMetadata()
             return parse_html_metadata(resp.text)
     except (httpx.HTTPError, ValueError) as exc:
         log.info("enrich.fetch_failed", url=url, error=str(exc))
+        return None
+
+
+async def _fetch_via_scrapingbee(url: str) -> UrlMetadata | None:
+    """Proxy/JS-render fallback via ScrapingBee. Returns None on failure."""
+    settings = get_settings()
+    api_key = settings.scrapingbee_api_key
+    if not api_key:
+        return None
+    params: dict[str, str] = {
+        "api_key": api_key,
+        "url": url,
+        # OG/Twitter-card tags live in the initial <head>, so skip JS rendering
+        # (~10x cheaper). Premium proxies are what get us past bot walls that
+        # 403/404 a direct fetch (e.g. Economist).
+        "render_js": "false",
+        "premium_proxy": "true",
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.scrapingbee_timeout_seconds,
+        ) as client:
+            resp = await client.get(
+                "https://app.scrapingbee.com/api/v1/", params=params
+            )
+            resp.raise_for_status()
+            return parse_html_metadata(resp.text)
+    except (httpx.HTTPError, ValueError) as exc:
+        log.info("enrich.scrapingbee_failed", url=url, error=str(exc))
+        return None
+
+
+async def fetch_url_metadata(url: str) -> UrlMetadata:
+    """Fetch a URL and parse its head metadata; never raises on failure.
+
+    Tries a cheap direct fetch first, then falls back to ScrapingBee (when
+    configured) if the site blocks us or returns no usable preview metadata.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return UrlMetadata()
+
+    settings = get_settings()
+    direct = await _fetch_direct(url, settings.scrape_http_timeout_seconds)
+    if direct is not None and _worth_keeping(direct):
+        return direct
+
+    proxied = await _fetch_via_scrapingbee(url)
+    if proxied is not None and _worth_keeping(proxied):
+        return proxied
+
+    # Neither yielded usable metadata; return whatever we have (possibly empty).
+    return direct or proxied or UrlMetadata()
 
 
 def registrable_host(url: str | None) -> str | None:
