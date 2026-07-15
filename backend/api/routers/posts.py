@@ -369,7 +369,8 @@ async def serialize_post(
         reply_count=len(replies),
         participant_count=participant_count,
         audience_label=audience_label(post.visibility, participant_count),
-        replies=replies,
+        # Guests get the count only; reply content is gated behind auth.
+        replies=replies if viewer_id is not None else [],
         attachments=attachment_outs,
         author_rating=author_rating,
         read=read,

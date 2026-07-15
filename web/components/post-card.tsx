@@ -16,6 +16,7 @@ import type {
   PostVisibility,
   UUID,
 } from "@/lib/types";
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 interface PostCardProps {
@@ -89,9 +90,10 @@ function PostThread({
   onDelete: () => void;
   onInvite: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
+  const isGuest: boolean = session === null;
   const [draft, setDraft] = useState<string>("");
   const [posting, setPosting] = useState<boolean>(false);
   const [attachUrl, setAttachUrl] = useState<string>("");
@@ -356,45 +358,61 @@ function PostThread({
 
         {preview ? <div className="space-y-3">{preview}</div> : null}
 
-        {post.replies.map((r) => (
-        <div key={r.id} className="flex items-start gap-2">
-          <Avatar name={r.author_name} imageUrl={r.author_image_url} />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                {r.author_name}
-              </span>
-              {r.author_rating != null ? (
-                <StarsDisplay value={r.author_rating} size="xs" />
-              ) : null}
-              <span className="text-zinc-400">
-                {relativeTime(r.created_at)}
-              </span>
-              {user && r.user_id === user.id ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void api.deleteComment(r.id).then(() => {
-                      onPostChange({
-                        ...post,
-                        replies: post.replies.filter((x) => x.id !== r.id),
-                        reply_count: Math.max(0, post.reply_count - 1),
-                      });
-                    });
-                  }}
-                  className="text-zinc-400 hover:text-red-600"
-                >
-                  Delete
-                </button>
-              ) : null}
-            </div>
-            <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-              {r.text}
+        {isGuest ? (
+          post.reply_count > 0 ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              {post.reply_count}{" "}
+              {post.reply_count === 1 ? "comment" : "comments"}.{" "}
+              <Link
+                href="/signin"
+                className="font-semibold text-brand-600 hover:underline dark:text-brand-400"
+              >
+                Sign in to join the conversation.
+              </Link>
             </p>
-          </div>
-        </div>
-      ))}
+          ) : null
+        ) : (
+          post.replies.map((r) => (
+            <div key={r.id} className="flex items-start gap-2">
+              <Avatar name={r.author_name} imageUrl={r.author_image_url} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                    {r.author_name}
+                  </span>
+                  {r.author_rating != null ? (
+                    <StarsDisplay value={r.author_rating} size="xs" />
+                  ) : null}
+                  <span className="text-zinc-400">
+                    {relativeTime(r.created_at)}
+                  </span>
+                  {user && r.user_id === user.id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void api.deleteComment(r.id).then(() => {
+                          onPostChange({
+                            ...post,
+                            replies: post.replies.filter((x) => x.id !== r.id),
+                            reply_count: Math.max(0, post.reply_count - 1),
+                          });
+                        });
+                      }}
+                      className="text-zinc-400 hover:text-red-600"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                </div>
+                <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
+                  {r.text}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
 
+      {isGuest ? null : (
       <div
         className="flex items-start gap-2"
         onBlur={(e) => {
@@ -470,6 +488,7 @@ function PostThread({
               ) : null}
             </div>
           </div>
+      )}
       </div>
     </div>
   );
