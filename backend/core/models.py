@@ -349,7 +349,12 @@ class StoryRating(Base):
 
 
 class Comment(Base):
-    """A reply under a post (story_id kept denormalized for legacy queries)."""
+    """A reply under a post (story_id kept denormalized for legacy queries).
+
+    One level of nesting: ``parent_comment_id`` points at a top-level comment
+    (itself having ``parent_comment_id IS NULL``). Deeper replies are flattened
+    to the root by the API before insert; a DB trigger enforces the constraint.
+    """
 
     __tablename__ = "comments"
 
@@ -362,6 +367,11 @@ class Comment(Base):
     post_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    parent_comment_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("comments.id", ondelete="CASCADE"),
         nullable=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -378,6 +388,63 @@ class Comment(Base):
     )
 
     post: Mapped[Post | None] = relationship(back_populates="comments")
+    parent: Mapped[Comment | None] = relationship(
+        remote_side="Comment.id",
+        back_populates="children",
+        foreign_keys=[parent_comment_id],
+    )
+    children: Mapped[list[Comment]] = relationship(
+        back_populates="parent",
+        foreign_keys=[parent_comment_id],
+    )
+
+
+class CommentReaction(Base):
+    """Fixed-set emoji reaction on a comment (one per user)."""
+
+    __tablename__ = "comment_reactions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    comment_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("comments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    reaction: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PostReaction(Base):
+    """Fixed-set emoji reaction on a post (one per user)."""
+
+    __tablename__ = "post_reactions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    reaction: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Connection(Base):
