@@ -5,12 +5,7 @@ import { StarPicker } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
-import type {
-  Post,
-  PostVisibility,
-  PreviewCard,
-  StoryKind,
-} from "@/lib/types";
+import type { Post, PostVisibility, PreviewCard } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -44,7 +39,6 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   const [url, setUrl] = useState<string>("");
   const [take, setTake] = useState<string>("");
   const [sharedText, setSharedText] = useState<string>("");
-  const [kind, setKind] = useState<StoryKind>("news");
   const [visibility, setVisibility] = useState<PostVisibility>("private");
   const [rating, setRating] = useState<number | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
@@ -78,14 +72,14 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
     const requestId: number = ++previewRequestId.current;
     setPreviewLoading(true);
     setPreviewError(null);
-    // Keep the previous preview visible while a re-fetch runs (e.g. kind
-    // toggle) so the panel doesn't flash empty.
+    // Keep the previous preview visible while a re-fetch runs so the panel
+    // doesn't flash empty.
     const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
           const card: PreviewCard = await api.previewUrl({
             url: trimmed,
-            kind,
+            kind: "news",
           });
           if (requestId !== previewRequestId.current) return;
           setPreview(card);
@@ -109,7 +103,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
     return () => {
       clearTimeout(timer);
     };
-  }, [url, kind]);
+  }, [url]);
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -122,7 +116,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
         url: trimmed,
         take: take.trim() || null,
         shared_text: sharedText.trim() || null,
-        kind,
+        kind: "news",
         visibility,
         canonical_url: preview.canonical_url,
         full_headline: preview.full_headline,
@@ -281,12 +275,6 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               Article text (optional)
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Behind a paywall? Paste the article text you can read so friends
-              can read it here too. We always link back to{" "}
-              {preview?.source_name ?? "the publisher"}. By pasting, you confirm
-              you have access to this content and choose to share it.
-            </span>
             <textarea
               value={sharedText}
               onChange={(e) => setSharedText(e.target.value)}
@@ -313,28 +301,6 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
                   {rating.toFixed(1)}
                 </span>
               ) : null}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Type
-            </span>
-            <div className="flex">
-              {(["news", "analysis"] as const).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  className={`flex-1 border px-3 py-2 text-sm font-medium capitalize transition ${
-                    kind === k
-                      ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  } ${k === "analysis" ? "-ml-px" : ""}`}
-                >
-                  {k}
-                </button>
-              ))}
             </div>
           </div>
 

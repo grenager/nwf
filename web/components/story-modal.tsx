@@ -224,7 +224,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   }
 
   const body: string = story
-    ? stripHtml(story.full_text ?? story.summary ?? "")
+    ? stripHtml(story.summary ?? "")
     : "";
 
   // Detect whether the clamped body actually spills past 5 lines so the

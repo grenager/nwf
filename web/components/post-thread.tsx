@@ -79,6 +79,9 @@ export function PostThread({
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [editing, setEditing] = useState<boolean>(false);
   const [editDraft, setEditDraft] = useState<string>(post.take ?? "");
+  const [editSharedDraft, setEditSharedDraft] = useState<string>(
+    post.shared_text ?? "",
+  );
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [reacting, setReacting] = useState<boolean>(false);
@@ -143,10 +146,14 @@ export function PostThread({
   }
 
   async function saveEdit(): Promise<void> {
-    const text = editDraft.trim();
+    const text: string = editDraft.trim();
+    const shared: string = editSharedDraft.trim();
     setSavingEdit(true);
     try {
-      const updated = await api.updatePost(post.id, { take: text || null });
+      const updated: Post = await api.updatePost(post.id, {
+        take: text || null,
+        shared_text: shared || null,
+      });
       onPostChange(updated);
       setEditing(false);
     } catch (err) {
@@ -296,6 +303,7 @@ export function PostThread({
                           type="button"
                           onClick={() => {
                             setEditDraft(post.take ?? "");
+                            setEditSharedDraft(post.shared_text ?? "");
                             setEditing(true);
                             setMenuOpen(false);
                           }}
@@ -328,13 +336,30 @@ export function PostThread({
           </div>
           {editing ? (
             <div className="mt-1 space-y-2">
-              <textarea
-                value={editDraft}
-                onChange={(e) => setEditDraft(e.target.value)}
-                rows={2}
-                autoFocus
-                className="w-full resize-none border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
-              />
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                  Your take
+                </span>
+                <textarea
+                  value={editDraft}
+                  onChange={(e) => setEditDraft(e.target.value)}
+                  rows={2}
+                  autoFocus
+                  className="w-full resize-none border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                  Article text
+                </span>
+                <textarea
+                  value={editSharedDraft}
+                  onChange={(e) => setEditSharedDraft(e.target.value)}
+                  rows={5}
+                  placeholder="Paste the article text here…"
+                  className="w-full resize-y border border-zinc-300 bg-white p-2 text-sm leading-relaxed outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </label>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -349,6 +374,7 @@ export function PostThread({
                   onClick={() => {
                     setEditing(false);
                     setEditDraft(post.take ?? "");
+                    setEditSharedDraft(post.shared_text ?? "");
                   }}
                   className="border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
                 >

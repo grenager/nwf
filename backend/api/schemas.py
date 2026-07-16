@@ -104,7 +104,6 @@ class StoryOut(ORMModel):
     source_image_url: str | None = None
     full_headline: str
     summary: str | None = None
-    full_text: str | None = None
     section: str | None = None
     type: str | None = None
     image_url: str | None = None

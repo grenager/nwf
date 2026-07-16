@@ -52,7 +52,6 @@ export interface Story {
   source_image_url: string | null;
   full_headline: string;
   summary: string | null;
-  full_text: string | null;
   section: string | null;
   type: string | null;
   image_url: string | null;
