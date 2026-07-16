@@ -85,7 +85,7 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
       <ArticleCard
         articleUrl={card.article_url}
         headline={card.full_headline}
-        summary={card.summary}
+        summary={post.shared_text?.trim() ? null : card.summary}
         imageUrl={card.image_url}
         sourceName={card.source_name}
         sourceImageUrl={card.source_image_url}

@@ -166,7 +166,6 @@ class Story(Base):
     )
     full_headline: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # OpenGraph/Substack-derived attribution (e.g. "Derek Thompson on Substack")
     # for stories not backed by a curated source we scrape directly.
     publisher: Mapped[str | None] = mapped_column(Text, nullable=True)

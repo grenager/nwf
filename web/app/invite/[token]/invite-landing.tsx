@@ -260,7 +260,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
           <ArticleCard
             articleUrl={articleUrl}
             headline={headline}
-            summary={summary}
+            summary={post?.shared_text?.trim() ? null : summary}
             imageUrl={imageUrl}
             sourceName={sourceName}
             imageHeightClassName="h-56 sm:h-64"

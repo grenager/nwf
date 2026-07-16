@@ -111,7 +111,7 @@ export function PostDetail({ postId, onDeleted }: PostDetailProps) {
       <ArticleCard
         articleUrl={post.article_url}
         headline={post.full_headline}
-        summary={post.summary}
+        summary={post.shared_text?.trim() ? null : post.summary}
         imageUrl={post.image_url}
         sourceName={post.source_name}
         sourceImageUrl={post.source_image_url}
