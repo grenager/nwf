@@ -166,7 +166,6 @@ class Story(Base):
     )
     full_headline: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # OpenGraph/Substack-derived attribution (e.g. "Derek Thompson on Substack")
     # for stories not backed by a curated source we scrape directly.
     publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -214,6 +213,9 @@ class Post(Base):
         nullable=False,
     )
     take: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Article text the author pasted from a page they can read (e.g. behind a
+    # paywall). Rendered as a teaser + a reader view; we always link back.
+    shared_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[PostVisibility] = mapped_column(
         Enum(PostVisibility, name="post_visibility", create_type=False),
         nullable=False,

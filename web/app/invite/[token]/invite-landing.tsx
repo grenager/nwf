@@ -1,24 +1,16 @@
 "use client";
 
+import { ArticleCard } from "@/components/article-card";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
+import { ReaderBody } from "@/components/reader-body";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { InvitePreview, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-function hostFromUrl(url: string): string {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host.startsWith("www.") ? host.slice(4) : host;
-  } catch {
-    return url;
-  }
-}
 
 function Avatar({
   name,
@@ -264,34 +256,28 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       </div>
 
       {articleUrl && headline ? (
-        <a
-          href={articleUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group mb-8 block overflow-hidden border border-zinc-200 dark:border-zinc-800"
-        >
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={imageUrl}
-              alt=""
-              className="h-56 w-full object-cover sm:h-64"
-            />
-          ) : null}
-          <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
-            <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-              {sourceName ?? hostFromUrl(articleUrl)}
-            </p>
-            <h2 className="mt-1 font-serif text-xl font-semibold leading-snug text-zinc-900 group-hover:underline dark:text-zinc-50">
-              {headline}
-            </h2>
-            {summary ? (
-              <p className="mt-2 line-clamp-3 text-sm text-zinc-500 dark:text-zinc-400">
-                {stripHtml(summary)}
-              </p>
-            ) : null}
-          </div>
-        </a>
+        <div className="mb-8">
+          <ArticleCard
+            articleUrl={articleUrl}
+            headline={headline}
+            summary={post?.shared_text?.trim() ? null : summary}
+            imageUrl={imageUrl}
+            sourceName={sourceName}
+            imageHeightClassName="h-56 sm:h-64"
+            summaryClampClassName="line-clamp-3"
+          />
+        </div>
+      ) : null}
+
+      {post?.shared_text && post.shared_text.trim() ? (
+        <div className="mb-8 border-l-2 border-zinc-200 pl-4 dark:border-zinc-800">
+          <ReaderBody
+            sharedText={post.shared_text}
+            articleUrl={post.article_url}
+            sourceName={sourceName}
+            authorName={post.author_name}
+          />
+        </div>
       ) : null}
 
       {showFriendPrompt ? (

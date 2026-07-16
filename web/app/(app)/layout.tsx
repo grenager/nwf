@@ -4,7 +4,13 @@ import { FriendsSidebar } from "@/components/friends-sidebar";
 import { Nav } from "@/components/nav";
 import type { ReactNode } from "react";
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default function AppLayout({
+  children,
+  modal,
+}: {
+  children: ReactNode;
+  modal: ReactNode;
+}) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white dark:bg-zinc-950">
       <Nav />
@@ -16,6 +22,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <FriendsSidebar />
         </aside>
       </div>
+      {modal}
     </div>
   );
 }

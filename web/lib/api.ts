@@ -160,6 +160,7 @@ export const api = {
     story_id?: UUID;
     url?: string;
     take?: string | null;
+    shared_text?: string | null;
     visibility?: PostVisibility;
     kind?: StoryKind;
     title?: string;
@@ -176,7 +177,11 @@ export const api = {
     }),
   updatePost: (
     id: UUID,
-    payload: { take?: string | null; visibility?: PostVisibility },
+    payload: {
+      take?: string | null;
+      shared_text?: string | null;
+      visibility?: PostVisibility;
+    },
   ): Promise<Post> =>
     request<Post>(`/posts/${id}`, {
       method: "PATCH",

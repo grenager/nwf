@@ -104,7 +104,6 @@ class StoryOut(ORMModel):
     source_image_url: str | None = None
     full_headline: str
     summary: str | None = None
-    full_text: str | None = None
     section: str | None = None
     type: str | None = None
     image_url: str | None = None
@@ -274,6 +273,9 @@ class PostCreate(BaseModel):
     story_id: uuid.UUID | None = None
     url: str | None = None
     take: str | None = Field(default=None, max_length=2_000)
+    # Article text the author pasted from a page they can read; shown as a
+    # teaser + reader view. The author chooses to share their own copy.
+    shared_text: str | None = Field(default=None, max_length=100_000)
     visibility: PostVisibility = PostVisibility.private
     kind: StoryKind = StoryKind.news
     title: str | None = None
@@ -308,9 +310,10 @@ class PreviewOut(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    """Edit a post's take and/or visibility (author only)."""
+    """Edit a post's take, shared reader text and/or visibility (author only)."""
 
     take: str | None = Field(default=None, max_length=2_000)
+    shared_text: str | None = Field(default=None, max_length=100_000)
     visibility: PostVisibility | None = None
 
 
@@ -321,6 +324,7 @@ class PostOut(ORMModel):
     author_name: str = "Friend"
     author_image_url: str | None = None
     take: str | None = None
+    shared_text: str | None = None
     visibility: PostVisibility
     last_activity_at: datetime
     created_at: datetime
