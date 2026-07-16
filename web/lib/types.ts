@@ -323,3 +323,17 @@ export interface InvitationAcceptResult {
   message: string;
   became_friend: boolean;
 }
+
+export interface AdminFriendRef {
+  user_id: UUID;
+  display_name: string;
+}
+
+export interface AdminUser {
+  id: UUID;
+  first: string | null;
+  last: string | null;
+  email: string | null;
+  last_active_at: string | null;
+  friends: AdminFriendRef[];
+}

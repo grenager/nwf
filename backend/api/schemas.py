@@ -560,3 +560,23 @@ class InvitationAcceptResult(BaseModel):
     post_id: uuid.UUID | None = None
     message: str
     became_friend: bool = False
+
+
+# --- Admin ----------------------------------------------------------------
+class AdminFriendRef(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+
+
+class AdminUserOut(BaseModel):
+    id: uuid.UUID
+    first: str | None = None
+    last: str | None = None
+    email: str | None = None
+    last_active_at: datetime | None = None
+    friends: list[AdminFriendRef] = Field(default_factory=list)
+
+
+class AdminFriendshipCreate(BaseModel):
+    user_a: uuid.UUID
+    user_b: uuid.UUID

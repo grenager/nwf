@@ -2,6 +2,7 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type {
+  AdminUser,
   Attachment,
   Comment,
   Connection,
@@ -314,4 +315,13 @@ export const api = {
         ),
       },
     ),
+
+  // --- admin ---
+  getAdminUsers: (): Promise<AdminUser[]> =>
+    request<AdminUser[]>("/admin/users"),
+  createFriendship: (userA: UUID, userB: UUID): Promise<Connection> =>
+    request<Connection>("/admin/friendships", {
+      method: "POST",
+      body: JSON.stringify({ user_a: userA, user_b: userB }),
+    }),
 };

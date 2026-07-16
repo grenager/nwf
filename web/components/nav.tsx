@@ -62,7 +62,9 @@ export function Nav() {
     setMenuOpen(false);
   }, [pathname]);
 
-  const links = LINKS;
+  const links: { href: string; label: string }[] = profile?.is_admin
+    ? [...LINKS, { href: "/admin", label: "Admin" }]
+    : LINKS;
   const displayName: string =
     [profile?.first, profile?.last].filter(Boolean).join(" ") ||
     user?.email ||
