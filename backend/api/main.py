@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from api.routers import (
+    admin,
     attachments,
     comments,
     connections,
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(connections.router)
     app.include_router(invitations.router)
     app.include_router(profiles.router)
+    app.include_router(admin.router)
     return app
 
 

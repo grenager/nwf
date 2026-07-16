@@ -2,6 +2,7 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type {
+  AdminUser,
   Attachment,
   Comment,
   Connection,
@@ -314,4 +315,29 @@ export const api = {
         ),
       },
     ),
+
+  // --- admin ---
+  getAdminUsers: (): Promise<AdminUser[]> =>
+    request<AdminUser[]>("/admin/users"),
+  createAdminUser: (payload: {
+    email: string;
+    first?: string | null;
+    last?: string | null;
+  }): Promise<AdminUser> =>
+    request<AdminUser>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createFriendship: (userA: UUID, userB: UUID): Promise<Connection> =>
+    request<Connection>("/admin/friendships", {
+      method: "POST",
+      body: JSON.stringify({ user_a: userA, user_b: userB }),
+    }),
+  deleteFriendship: (userA: UUID, userB: UUID): Promise<void> =>
+    request<void>(
+      `/admin/friendships?user_a=${encodeURIComponent(userA)}&user_b=${encodeURIComponent(userB)}`,
+      { method: "DELETE" },
+    ),
+  deleteAdminUser: (userId: UUID): Promise<void> =>
+    request<void>(`/admin/users/${userId}`, { method: "DELETE" }),
 };

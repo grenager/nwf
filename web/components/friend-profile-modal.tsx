@@ -12,6 +12,8 @@ interface FriendProfileModalProps {
   friendId: UUID;
   onClose: () => void;
   onSignOut?: () => void;
+  /** Called after a successful profile save (e.g. refresh an admin list). */
+  onUpdated?: () => void;
 }
 
 interface EditForm {
@@ -44,6 +46,7 @@ export function FriendProfileModal({
   friendId,
   onClose,
   onSignOut,
+  onUpdated,
 }: FriendProfileModalProps) {
   const { notify } = useToast();
   const [profile, setProfile] = useState<FriendProfile | null>(null);
@@ -110,6 +113,7 @@ export function FriendProfileModal({
       notify("Profile updated", "success");
       setEditing(false);
       await load();
+      onUpdated?.();
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Save failed", "error");
     } finally {
