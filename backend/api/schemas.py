@@ -580,3 +580,9 @@ class AdminUserOut(BaseModel):
 class AdminFriendshipCreate(BaseModel):
     user_a: uuid.UUID
     user_b: uuid.UUID
+
+
+class AdminUserCreate(BaseModel):
+    email: str
+    first: str | None = None
+    last: str | None = None

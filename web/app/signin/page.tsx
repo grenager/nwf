@@ -25,9 +25,10 @@ function SignInForm() {
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    const trimmedEmail: string = email.trim();
     const trimmedFirst: string = first.trim();
     const trimmedLast: string = last.trim();
-    if (!trimmedFirst || !trimmedLast || !email || busy) return;
+    if (!trimmedEmail || busy) return;
     setBusy(true);
     try {
       const supabase = getSupabaseBrowserClient();
@@ -35,11 +36,14 @@ function SignInForm() {
         typeof window !== "undefined"
           ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
           : "";
+      const meta: Record<string, string> = {};
+      if (trimmedFirst) meta.first = trimmedFirst;
+      if (trimmedLast) meta.last = trimmedLast;
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: trimmedEmail,
         options: {
           emailRedirectTo: redirectTo,
-          data: { first: trimmedFirst, last: trimmedLast },
+          ...(Object.keys(meta).length > 0 ? { data: meta } : {}),
         },
       });
       if (error) throw error;
@@ -59,41 +63,21 @@ function SignInForm() {
       </Link>
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h1 className="text-xl font-bold">
-          {isInvite ? "Join your friend's conversation" : "Create your free account"}
+          {isInvite ? "Join your friend's conversation" : "Sign in"}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           {isInvite
             ? "We'll email you a magic link so you can sign in and accept the invitation — no password needed."
-            : "We'll email you a magic link to verify your address — no password needed."}
+            : "Enter your email for a magic link. New accounts can add a name; existing accounts just need email."}
         </p>
 
         {sent ? (
           <div className="mt-6 border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
             Check <strong>{email}</strong> for your sign-in link. Click it to
-            verify your email and finish setting up your account.
+            verify your email and finish signing in.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="text"
-                required
-                value={first}
-                onChange={(e) => setFirst(e.target.value)}
-                placeholder="First name"
-                autoComplete="given-name"
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
-              />
-              <input
-                type="text"
-                required
-                value={last}
-                onChange={(e) => setLast(e.target.value)}
-                placeholder="Last name"
-                autoComplete="family-name"
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
             <input
               type="email"
               required
@@ -103,6 +87,24 @@ function SignInForm() {
               autoComplete="email"
               className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
             />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={first}
+                onChange={(e) => setFirst(e.target.value)}
+                placeholder="First name (optional)"
+                autoComplete="given-name"
+                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={last}
+                onChange={(e) => setLast(e.target.value)}
+                placeholder="Last name (optional)"
+                autoComplete="family-name"
+                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </div>
             <button
               type="submit"
               disabled={busy}
@@ -114,7 +116,7 @@ function SignInForm() {
         )}
       </div>
       <p className="mt-4 text-center text-sm text-slate-500">
-        Already have an account? Use the same form — we&apos;ll send you a link.
+        Pre-created accounts: sign in with the same email to claim them.
       </p>
     </main>
   );

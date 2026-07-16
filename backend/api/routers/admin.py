@@ -6,13 +6,21 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.deps import AdminUser, SessionDep
+from api.deps import AdminUser, SessionDep, SettingsDep
 from api.friends import display_name
-from api.schemas import AdminFriendRef, AdminFriendshipCreate, AdminUserOut, ConnectionOut
+from api.schemas import (
+    AdminFriendRef,
+    AdminFriendshipCreate,
+    AdminUserCreate,
+    AdminUserOut,
+    ConnectionOut,
+)
 from core.models import (
     Comment,
     Connection,
@@ -22,6 +30,7 @@ from core.models import (
     StoryRating,
     StoryStatus,
 )
+from core.supabase_admin import AuthUserCreateError, create_auth_user, delete_auth_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -197,3 +206,125 @@ async def create_friendship(
     )
     await session.refresh(connection)
     return connection
+
+
+@router.delete("/friendships", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_friendship(
+    session: SessionDep,
+    _admin: AdminUser,
+    user_a: uuid.UUID,
+    user_b: uuid.UUID,
+) -> None:
+    """Remove the connection between two users (either orientation)."""
+    if user_a == user_b:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "cannot unfriend a user from themselves"
+        )
+
+    existing = await _find_connection(session, user_a, user_b)
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "friendship not found")
+    await session.delete(existing)
+    await session.flush()
+
+
+@router.post(
+    "/users",
+    response_model=AdminUserOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_user(
+    payload: AdminUserCreate,
+    session: SessionDep,
+    _admin: AdminUser,
+    settings: SettingsDep,
+) -> AdminUserOut:
+    """Pre-create a full account claimable later via magic-link sign-in."""
+    email: str = payload.email.strip().lower()
+    if "@" not in email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid email")
+
+    first: str | None = payload.first.strip() if payload.first else None
+    last: str | None = payload.last.strip() if payload.last else None
+    if first == "":
+        first = None
+    if last == "":
+        last = None
+
+    try:
+        user_id: uuid.UUID = await create_auth_user(
+            email, first=first, last=last, settings=settings
+        )
+    except AuthUserCreateError as exc:
+        code: int = exc.status_code or 502
+        if code == 409 or "already" in str(exc).lower():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "a user with that email already exists"
+            ) from exc
+        if code == 503:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)
+            ) from exc
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST if code in (400, 422) else status.HTTP_502_BAD_GATEWAY,
+            str(exc),
+        ) from exc
+
+    # Trigger creates the profile from Auth's insert; wait briefly if needed.
+    profile: Profile | None = None
+    for _ in range(10):
+        session.expire_all()
+        profile = await session.scalar(
+            select(Profile).where(Profile.id == user_id)
+        )
+        if profile is not None:
+            break
+        await asyncio.sleep(0.05)
+    if profile is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "user created in auth but profile is missing",
+        )
+    if first is not None:
+        profile.first = first
+    if last is not None:
+        profile.last = last
+    await session.flush()
+    await session.refresh(profile)
+
+    return AdminUserOut(
+        id=profile.id,
+        first=profile.first,
+        last=profile.last,
+        email=email,
+        last_active_at=None,
+        friends=[],
+    )
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: uuid.UUID,
+    session: SessionDep,
+    admin: AdminUser,
+    settings: SettingsDep,
+) -> None:
+    """Permanently delete a user (auth + cascaded profile/app data)."""
+    if user_id == admin.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "cannot delete your own account"
+        )
+
+    profile: Profile | None = await session.get(Profile, user_id)
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+
+    ok: bool = await delete_auth_user(user_id, settings=settings)
+    if not ok:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "user delete requires SUPABASE_SERVICE_ROLE_KEY",
+        )
+
+    # Auth delete cascades to profiles; drop any cached ORM state.
+    session.expire_all()
