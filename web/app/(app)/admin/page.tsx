@@ -7,14 +7,7 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import type { AdminFriendRef, AdminUser, UUID } from "@/lib/types";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function displayName(user: AdminUser): string {
   if (user.first && user.last) return `${user.first} ${user.last}`;
@@ -60,8 +53,8 @@ function AddFriendControl({
 }) {
   const [open, setOpen] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
-  const containerRef: RefObject<HTMLDivElement | null> = useRef(null);
-  const inputRef: RefObject<HTMLInputElement | null> = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
