@@ -26,6 +26,7 @@ class ProfileOut(ORMModel):
     is_admin: bool
     dense_mode: bool
     dark_mode: bool
+    digest_opt_out: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -37,6 +38,7 @@ class PreferencesUpdate(BaseModel):
     image_url: str | None = None
     dense_mode: bool | None = None
     dark_mode: bool | None = None
+    digest_opt_out: bool | None = None
 
 
 # --- Sources --------------------------------------------------------------

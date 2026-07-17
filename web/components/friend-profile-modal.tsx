@@ -4,7 +4,7 @@ import { StarsDisplay } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
-import type { FriendActivityItem, FriendProfile, UUID } from "@/lib/types";
+import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -50,6 +50,8 @@ export function FriendProfileModal({
 }: FriendProfileModalProps) {
   const { notify } = useToast();
   const [profile, setProfile] = useState<FriendProfile | null>(null);
+  const [me, setMe] = useState<Profile | null>(null);
+  const [savingDigest, setSavingDigest] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [editing, setEditing] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -90,6 +92,51 @@ export function FriendProfileModal({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const mine: Profile = await api.getMe();
+        if (!cancelled) setMe(mine);
+      } catch {
+        // Not signed in / unavailable — the toggle just won't render.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isSelf: boolean = me != null && me.id === friendId;
+
+  async function toggleDigest(): Promise<void> {
+    if (!me) return;
+    const next: boolean = !me.digest_opt_out;
+    setSavingDigest(true);
+    // Optimistic update; revert on failure.
+    setMe({ ...me, digest_opt_out: next });
+    try {
+      const updated: Profile = await api.updatePreferences({
+        digest_opt_out: next,
+      });
+      setMe(updated);
+      notify(
+        next
+          ? "Daily digest emails turned off"
+          : "Daily digest emails turned on",
+        "success",
+      );
+    } catch (err) {
+      setMe({ ...me, digest_opt_out: !next });
+      notify(
+        err instanceof ApiError ? err.message : "Could not update preference",
+        "error",
+      );
+    } finally {
+      setSavingDigest(false);
+    }
+  }
 
   function startEdit(): void {
     if (!profile) return;
@@ -238,6 +285,44 @@ export function FriendProfileModal({
               <Stat label="Rated" value={profile.ratings} />
               <Stat label="Comments" value={profile.comments} />
             </div>
+
+            {isSelf && me ? (
+              <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Email notifications
+                </h3>
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Daily digest
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      A once-daily email with new posts and activity from your
+                      friends.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!me.digest_opt_out}
+                    aria-label="Toggle daily digest emails"
+                    disabled={savingDigest}
+                    onClick={() => void toggleDigest()}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-[9999px] transition-colors disabled:opacity-60 ${
+                      me.digest_opt_out
+                        ? "bg-slate-300 dark:bg-slate-700"
+                        : "bg-emerald-500"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-[9999px] bg-white shadow transition-transform ${
+                        me.digest_opt_out ? "translate-x-0.5" : "translate-x-[22px]"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-6">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
