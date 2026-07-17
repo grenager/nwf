@@ -1,0 +1,1 @@
+"""Daily activity digest emails."""

@@ -14,6 +14,7 @@ from api.routers import (
     attachments,
     comments,
     connections,
+    email_prefs,
     feed,
     health,
     invitations,
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(invitations.router)
     app.include_router(profiles.router)
     app.include_router(admin.router)
+    app.include_router(email_prefs.router)
     return app
 
 

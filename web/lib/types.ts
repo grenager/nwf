@@ -11,6 +11,7 @@ export interface Profile {
   is_admin: boolean;
   dense_mode: boolean;
   dark_mode: boolean;
+  digest_opt_out: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +23,7 @@ export interface PreferencesUpdate {
   image_url?: string | null;
   dense_mode?: boolean | null;
   dark_mode?: boolean | null;
+  digest_opt_out?: boolean | null;
 }
 
 export type StoryKind = "news" | "analysis";

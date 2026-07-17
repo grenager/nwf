@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, SessionDep
 from api.friends import accepted_friend_ids, display_name
@@ -25,6 +26,9 @@ from api.schemas import (
     InviteResult,
     RecommendedFriendOut,
 )
+from core.config import get_settings
+from core.email import FriendNoticeEmailContent, send_friend_notice_email
+from core.logging import get_logger
 from core.models import (
     Comment,
     Connection,
@@ -37,11 +41,71 @@ from core.models import (
     StoryStatus,
 )
 
+log = get_logger("connections")
+
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 # No presence system exists; treat "online" as any engagement within this window.
 _ONLINE_WINDOW = timedelta(minutes=5)
 _RECOMMENDED_LIMIT = 12
+
+
+async def _email_for_user(
+    session: AsyncSession, user_id: uuid.UUID
+) -> str | None:
+    """Look up auth.users.email for a profile id."""
+    try:
+        row = (
+            await session.execute(
+                text("select email from auth.users where id = :id"),
+                {"id": user_id},
+            )
+        ).first()
+    except SQLAlchemyError:
+        return None
+    if row is None or not row[0]:
+        return None
+    return str(row[0]).strip().lower()
+
+
+async def _notify_friend_event(
+    session: AsyncSession,
+    *,
+    recipient_id: uuid.UUID,
+    actor: Profile | None,
+    kind: str,
+) -> None:
+    """Best-effort immediate email; never raises to the caller."""
+    email: str | None = await _email_for_user(session, recipient_id)
+    if not email:
+        log.info(
+            "connections.friend_email.skip",
+            reason="no_email",
+            kind=kind,
+            recipient_id=str(recipient_id),
+        )
+        return
+    settings = get_settings()
+    actor_name: str = display_name(actor) if actor is not None else "Someone"
+    action_path: str = "/friends"
+    try:
+        await send_friend_notice_email(
+            FriendNoticeEmailContent(
+                to_email=email,
+                actor_name=actor_name,
+                actor_image_url=actor.image_url if actor is not None else None,
+                action_url=settings.app_url(action_path),
+                kind=kind,
+            ),
+            settings=settings,
+        )
+    except Exception as exc:  # never fail the API on email issues
+        log.warning(
+            "connections.friend_email.error",
+            kind=kind,
+            recipient_id=str(recipient_id),
+            error=str(exc),
+        )
 
 
 async def _find_between(
@@ -497,6 +561,7 @@ async def invite_by_email(
     if target_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "that email is your own account")
 
+    actor = await session.get(Profile, user.id)
     existing = await _find_between(session, user.id, target_id)
     if existing is not None:
         if (
@@ -505,6 +570,9 @@ async def invite_by_email(
         ):
             existing.status = ConnectionStatus.accepted
             await session.flush()
+            await _notify_friend_event(
+                session, recipient_id=existing.first_id, actor=actor, kind="accepted"
+            )
             return InviteResult(
                 status="connected",
                 user_id=target_id,
@@ -528,6 +596,9 @@ async def invite_by_email(
         )
     )
     await session.flush()
+    await _notify_friend_event(
+        session, recipient_id=target_id, actor=actor, kind="request"
+    )
     return InviteResult(
         status="requested", user_id=target_id, message="Friend request sent."
     )
@@ -540,6 +611,7 @@ async def create_connection(
     if payload.target_user_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot connect to yourself")
 
+    actor = await session.get(Profile, user.id)
     existing = await _find_between(session, user.id, payload.target_user_id)
     if existing is not None:
         # If the other party requested first, treat this as acceptance.
@@ -550,6 +622,9 @@ async def create_connection(
             existing.status = ConnectionStatus.accepted
             await session.flush()
             await session.refresh(existing)
+            await _notify_friend_event(
+                session, recipient_id=existing.first_id, actor=actor, kind="accepted"
+            )
         return existing
 
     connection = Connection(
@@ -560,6 +635,12 @@ async def create_connection(
     session.add(connection)
     await session.flush()
     await session.refresh(connection)
+    await _notify_friend_event(
+        session,
+        recipient_id=payload.target_user_id,
+        actor=actor,
+        kind="request",
+    )
     return connection
 
 
@@ -573,9 +654,23 @@ async def update_connection(
     connection = await _find_between(session, user.id, target_user_id)
     if connection is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "connection not found")
+    previous: ConnectionStatus = connection.status
     connection.status = payload.status
     await session.flush()
     await session.refresh(connection)
+    if (
+        previous == ConnectionStatus.pending
+        and payload.status == ConnectionStatus.accepted
+    ):
+        actor = await session.get(Profile, user.id)
+        other_id: uuid.UUID = (
+            connection.first_id
+            if connection.second_id == user.id
+            else connection.second_id
+        )
+        await _notify_friend_event(
+            session, recipient_id=other_id, actor=actor, kind="accepted"
+        )
     return connection
 
 

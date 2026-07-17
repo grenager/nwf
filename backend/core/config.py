@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     supabase_service_role_key: str | None = Field(default=None)
 
     # --- App / email ------------------------------------------------------
-    # Public origin of the Next.js app (invite landing + auth callback).
+    # Public origin of the Next.js app (invite landing + auth callback +
+    # digest deep links). Production: https://www.newswithfriends.org
     app_base_url: str = Field(default="http://localhost:3000")
     # Resend API key for transactional invite emails. Optional in local
     # dev — emails are skipped (use copy-link / Inbucket instead).
@@ -46,6 +47,21 @@ class Settings(BaseSettings):
     email_from: str = Field(
         default="NewsWithFriends <noreply@newswithfriends.org>"
     )
+
+    # --- Daily digest -----------------------------------------------------
+    digest_enabled: bool = Field(default=True)
+    # Hour of day in America/Los_Angeles to send digests (0-23).
+    digest_send_hour_pt: int = Field(default=8)
+    # Max age of activity considered when building a digest.
+    digest_lookback_days: int = Field(default=2)
+    digest_concurrency: int = Field(default=5)
+    digest_max_lines: int = Field(default=6)
+
+    def app_url(self, path: str) -> str:
+        """Absolute URL on the public web app (e.g. /post/{id})."""
+        base: str = self.app_base_url.rstrip("/")
+        normalized: str = path if path.startswith("/") else f"/{path}"
+        return f"{base}{normalized}"
 
     # --- API --------------------------------------------------------------
     cors_origins: list[str] = Field(default=["http://localhost:3000"])

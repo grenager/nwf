@@ -93,6 +93,16 @@ class Profile(Base):
     last_opened_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    digest_opt_out: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_digest_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    unsubscribe_token: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        nullable=False,
+        server_default=func.gen_random_uuid(),
+        unique=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
