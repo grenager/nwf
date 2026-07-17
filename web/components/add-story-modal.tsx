@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuthGate } from "@/components/auth-gate";
+import { MentionInput } from "@/components/mention-input";
 import { StarPicker } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -262,12 +263,11 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               One-line take (optional)
             </span>
-            <textarea
+            <MentionInput
               value={take}
-              onChange={(e) => setTake(e.target.value)}
+              onChange={setTake}
               rows={2}
-              placeholder="What stood out?"
-              className="resize-none border border-slate-300 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-800"
+              placeholder="What stood out? Use @ to mention a friend"
             />
           </label>
 
