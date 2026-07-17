@@ -3,6 +3,7 @@
 import { ArticleCard } from "@/components/article-card";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
+import { MentionText } from "@/components/mention-text";
 import { ReaderBody } from "@/components/reader-body";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
@@ -337,9 +338,10 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                 </span>
               </div>
               {post.take ? (
-                <p className="mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-                  {post.take}
-                </p>
+                <MentionText
+                  text={post.take}
+                  className="mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+                />
               ) : (
                 <p className="mt-0.5 text-sm italic text-zinc-400">shared this</p>
               )}
@@ -361,9 +363,10 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                     {relativeTime(r.created_at)}
                   </span>
                 </div>
-                <p className="whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-                  {r.text}
-                </p>
+                <MentionText
+                  text={r.text}
+                  className="block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+                />
               </div>
             </div>
           ))}

@@ -1,6 +1,8 @@
 "use client";
 
 import { applyReactionToggle } from "@/components/reaction-bar";
+import { MentionInput } from "@/components/mention-input";
+import { MentionText } from "@/components/mention-text";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
@@ -340,12 +342,12 @@ export function PostThread({
                 <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                   Your take
                 </span>
-                <textarea
+                <MentionInput
                   value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
+                  onChange={setEditDraft}
                   rows={2}
                   autoFocus
-                  className="w-full resize-none border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                  placeholder="Your take…"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -383,9 +385,10 @@ export function PostThread({
               </div>
             </div>
           ) : post.take ? (
-            <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-              {post.take}
-            </p>
+            <MentionText
+              text={post.take}
+              className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+            />
           ) : (
             <p className="-mt-0.5 text-sm italic leading-snug text-zinc-400">
               shared this
@@ -523,24 +526,28 @@ export function PostThread({
                 </div>
               ) : null}
               <div className="flex gap-2">
-                <input
-                  ref={composerRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                <div
+                  className="min-w-0 flex-1"
                   onFocus={() => setComposerActive(true)}
-                  placeholder={
-                    replyTo
-                      ? `Reply to ${replyTo.author_name}…`
-                      : "Reply…"
-                  }
-                  className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void reply();
+                >
+                  <MentionInput
+                    inputRef={composerRef}
+                    value={draft}
+                    onChange={setDraft}
+                    singleLine
+                    placeholder={
+                      replyTo
+                        ? `Reply to ${replyTo.author_name}…`
+                        : "Reply…"
                     }
-                  }}
-                />
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void reply();
+                      }
+                    }}
+                  />
+                </div>
                 {showComposerActions ? (
                   <>
                     <button
@@ -622,9 +629,10 @@ function CommentRow({
             {relativeTime(comment.created_at)}
           </span>
         </div>
-        <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-          {comment.text}
-        </p>
+        <MentionText
+          text={comment.text}
+          className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+        />
         <div className="mt-0.5 flex items-center gap-3 text-xs">
           <button
             type="button"

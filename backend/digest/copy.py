@@ -50,6 +50,12 @@ def phrase_friend_post(
     return bits[0]
 
 
+def phrase_mentioned(names: list[str]) -> str:
+    """e.g. 'Teg mentioned you' or 'Teg and Jim mentioned you'."""
+    subject: str = name_list(names)
+    return f"{subject} mentioned you"
+
+
 def phrase_comments_on_your_post(names: list[str]) -> str:
     """e.g. 'Teg, Jim, and 4 others commented on your post'."""
     subject: str = name_list(names)

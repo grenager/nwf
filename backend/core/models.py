@@ -244,6 +244,37 @@ class Post(Base):
     story: Mapped[Story] = relationship(back_populates="posts")
     comments: Mapped[list[Comment]] = relationship(back_populates="post")
     attachments: Mapped[list[Attachment]] = relationship(back_populates="post")
+    mentions: Mapped[list[PostMention]] = relationship(
+        back_populates="post", cascade="all, delete-orphan"
+    )
+
+
+class PostMention(Base):
+    """A friend @mentioned in a post's take; grants access + digest hooks."""
+
+    __tablename__ = "post_mentions"
+    __table_args__ = (
+        UniqueConstraint(
+            "post_id", "mentioned_user_id", name="post_mentions_post_id_mentioned_user_id_key"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mentioned_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    post: Mapped[Post] = relationship(back_populates="mentions")
 
 
 class PostParticipant(Base):
@@ -409,6 +440,39 @@ class Comment(Base):
         back_populates="parent",
         foreign_keys=[parent_comment_id],
     )
+    mentions: Mapped[list[CommentMention]] = relationship(
+        back_populates="comment", cascade="all, delete-orphan"
+    )
+
+
+class CommentMention(Base):
+    """A friend @mentioned in a comment body; grants access + digest hooks."""
+
+    __tablename__ = "comment_mentions"
+    __table_args__ = (
+        UniqueConstraint(
+            "comment_id",
+            "mentioned_user_id",
+            name="comment_mentions_comment_id_mentioned_user_id_key",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    comment_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("comments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mentioned_user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    comment: Mapped[Comment] = relationship(back_populates="mentions")
 
 
 class CommentReaction(Base):
