@@ -12,16 +12,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.friends import accepted_friend_ids
-from core.models import Comment, Post, PostReaction, Profile, Source, Story
+from core.models import (
+    Comment,
+    CommentMention,
+    Post,
+    PostMention,
+    PostReaction,
+    Profile,
+    Source,
+    Story,
+)
 from digest.copy import (
     first_name,
     phrase_comments_on_your_post,
     phrase_friend_post,
+    phrase_mentioned,
     phrase_reactions_on_your_post,
     phrase_reply_to_comment,
 )
 
 # Lower number = higher priority in the email.
+PRIORITY_MENTION = 0
 PRIORITY_REPLY = 1
 PRIORITY_COMMENT_ON_YOURS = 2
 PRIORITY_REACTION_ON_YOURS = 3
@@ -115,6 +126,57 @@ async def build_user_digest(
 
     lines: list[DigestLine] = []
     actor_ids: set[uuid.UUID] = set()
+
+    # --- Mentions of the viewer (highest priority) ------------------------
+    mention_actors_by_post: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    mention_post_by_id: dict[uuid.UUID, Post] = {}
+
+    mentioned_in_posts: list[Post] = list(
+        (
+            await session.scalars(
+                select(Post)
+                .join(PostMention, PostMention.post_id == Post.id)
+                .where(
+                    PostMention.mentioned_user_id == viewer_id,
+                    PostMention.created_at > since,
+                )
+                .options(selectinload(Post.story).selectinload(Story.source))
+                .order_by(PostMention.created_at.desc())
+            )
+        ).all()
+    )
+    for post in mentioned_in_posts:
+        if post.author_id == viewer_id:
+            continue
+        mention_actors_by_post[post.id].append(post.author_id)
+        mention_post_by_id[post.id] = post
+        actor_ids.add(post.author_id)
+
+    mentioned_in_comments: list[Comment] = list(
+        (
+            await session.scalars(
+                select(Comment)
+                .join(CommentMention, CommentMention.comment_id == Comment.id)
+                .where(
+                    CommentMention.mentioned_user_id == viewer_id,
+                    CommentMention.created_at > since,
+                )
+                .options(
+                    selectinload(Comment.post)
+                    .selectinload(Post.story)
+                    .selectinload(Story.source)
+                )
+                .order_by(CommentMention.created_at.desc())
+            )
+        ).all()
+    )
+    for comment in mentioned_in_comments:
+        if comment.post_id is None or comment.user_id == viewer_id:
+            continue
+        mention_actors_by_post[comment.post_id].append(comment.user_id)
+        if comment.post is not None:
+            mention_post_by_id.setdefault(comment.post_id, comment.post)
+        actor_ids.add(comment.user_id)
 
     # --- Replies to the viewer's comments ---------------------------------
     my_comment_ids: list[uuid.UUID] = list(
@@ -261,6 +323,24 @@ async def build_user_digest(
     def _name(uid: uuid.UUID) -> str:
         actor: Profile | None = profiles.get(uid)
         return first_name(actor.first if actor is not None else None)
+
+    for post_id, mention_actors in mention_actors_by_post.items():
+        mention_names: list[str] = [_name(uid) for uid in mention_actors]
+        mention_post: Post | None = mention_post_by_id.get(post_id)
+        headline, image, source_label = _story_meta(
+            mention_post.story if mention_post is not None else None
+        )
+        lines.append(
+            DigestLine(
+                text=phrase_mentioned(mention_names),
+                post_id=post_id,
+                priority=PRIORITY_MENTION,
+                headline=headline,
+                image_url=image,
+                source_label=source_label,
+                actor_image_urls=_avatar_urls(profiles, mention_actors),
+            )
+        )
 
     for post_id, reply_list in reply_by_post.items():
         actor_ids_ordered: list[uuid.UUID] = [r.user_id for r in reply_list]

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, OptionalUser, SessionDep
@@ -50,10 +50,12 @@ from core.enrich import (
     hosts_match,
     registrable_host,
 )
+from core.mentions import resolve_mentioned_friend_ids
 from core.models import (
     Attachment,
     Comment,
     Post,
+    PostMention,
     PostParticipant,
     Profile,
     Source,
@@ -234,6 +236,27 @@ async def _add_participant(
         )
     )
     await session.execute(stmt)
+
+
+async def _sync_post_mentions(session: SessionDep, post: Post) -> None:
+    """Replace a post's mention rows from its take; grant mentioned friends access.
+
+    Only accepted friends of the author are recorded (self and non-friends are
+    ignored). Each mentioned friend becomes a participant so they can see the
+    post even when it is private.
+    """
+    friends = await accepted_friend_ids(session, post.author_id)
+    mentioned: list[uuid.UUID] = resolve_mentioned_friend_ids(
+        post.take, allowed_ids=friends, exclude_id=post.author_id
+    )
+    await session.execute(
+        delete(PostMention).where(PostMention.post_id == post.id)
+    )
+    for mentioned_id in mentioned:
+        session.add(
+            PostMention(post_id=post.id, mentioned_user_id=mentioned_id)
+        )
+        await _add_participant(session, post.id, mentioned_id)
 
 
 def _comment_out(
@@ -546,6 +569,7 @@ async def create_post(
     session.add(post)
     await session.flush()
     await _add_participant(session, post.id, user.id)
+    await _sync_post_mentions(session, post)
 
     # Writing a take also logs the story as read.
     read_stmt = (
@@ -630,6 +654,7 @@ async def update_post(
         )
         if status_row is not None:
             status_row.take = new_take
+        await _sync_post_mentions(session, post)
     if "shared_text" in fields:
         post.shared_text = (payload.shared_text or "").strip() or None
     if "visibility" in fields and payload.visibility is not None:
