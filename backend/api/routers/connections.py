@@ -33,6 +33,7 @@ from core.models import (
     Comment,
     Connection,
     ConnectionStatus,
+    NotificationKind,
     Post,
     Profile,
     Source,
@@ -40,6 +41,7 @@ from core.models import (
     StoryRating,
     StoryStatus,
 )
+from core.notifications import create_notification
 
 log = get_logger("connections")
 
@@ -75,7 +77,28 @@ async def _notify_friend_event(
     actor: Profile | None,
     kind: str,
 ) -> None:
-    """Best-effort immediate email; never raises to the caller."""
+    """In-app alert + best-effort immediate email; never raises to the caller."""
+    if actor is not None:
+        alert_kind = (
+            NotificationKind.friend_accepted
+            if kind == "accepted"
+            else NotificationKind.friend_request
+        )
+        try:
+            await create_notification(
+                session,
+                recipient_id=recipient_id,
+                actor_id=actor.id,
+                kind=alert_kind,
+            )
+        except Exception as exc:  # never fail the API on alert issues
+            log.warning(
+                "connections.friend_alert.error",
+                kind=kind,
+                recipient_id=str(recipient_id),
+                error=str(exc),
+            )
+
     email: str | None = await _email_for_user(session, recipient_id)
     if not email:
         log.info(

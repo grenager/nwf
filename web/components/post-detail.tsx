@@ -152,6 +152,7 @@ export function PostDetail({ postId, onDeleted }: PostDetailProps) {
         onPostChange={setPost}
         onDelete={() => onDeleted?.()}
         onInvite={() => setInviteOpen(true)}
+        markSeenOnMount
       />
       {inviteOpen ? (
         <SharePostModal

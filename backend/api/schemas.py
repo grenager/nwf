@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from core.models import ConnectionStatus, PostVisibility, StoryKind
+from core.models import ConnectionStatus, NotificationKind, PostVisibility, StoryKind
 
 
 class ORMModel(BaseModel):
@@ -360,6 +360,9 @@ class PostOut(ORMModel):
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     readers: list[FriendMiniOut] = Field(default_factory=list)
     unread_replies_for_viewer: bool = False
+    # Replies after the viewer's per-thread read cursor (excludes own).
+    unread_reply_count: int = 0
+    last_seen_at: datetime | None = None
 
 
 class FeedCardOut(BaseModel):
@@ -383,6 +386,7 @@ class FeedCardOut(BaseModel):
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     posts: list[PostOut] = Field(default_factory=list)
     score: float = 0.0
+    unread_reply_count: int = 0
 
 
 class FeedOut(BaseModel):
@@ -588,3 +592,56 @@ class AdminUserCreate(BaseModel):
     email: str
     first: str | None = None
     last: str | None = None
+
+
+# --- Conversations --------------------------------------------------------
+class ConversationOut(BaseModel):
+    """A thread the viewer participates in, sorted by latest reply activity."""
+
+    post_id: uuid.UUID
+    story_id: uuid.UUID
+    full_headline: str
+    article_url: str
+    source_name: str | None = None
+    source_image_url: str | None = None
+    image_url: str | None = None
+    author_id: uuid.UUID
+    author_name: str
+    author_image_url: str | None = None
+    reply_count: int = 0
+    unread_count: int = 0
+    last_seen_at: datetime | None = None
+    latest_reply_at: datetime
+    latest_reply_text: str | None = None
+    latest_reply_author_name: str | None = None
+    latest_reply_author_image_url: str | None = None
+
+
+class ConversationList(BaseModel):
+    items: list[ConversationOut]
+    threads_with_unread: int = 0
+
+
+# --- Notifications (Alerts) -----------------------------------------------
+class NotificationOut(BaseModel):
+    id: uuid.UUID
+    kind: NotificationKind
+    actor_id: uuid.UUID
+    actor_name: str
+    actor_image_url: str | None = None
+    post_id: uuid.UUID | None = None
+    comment_id: uuid.UUID | None = None
+    story_id: uuid.UUID | None = None
+    full_headline: str | None = None
+    comment_snippet: str | None = None
+    read_at: datetime | None = None
+    created_at: datetime
+
+
+class NotificationList(BaseModel):
+    items: list[NotificationOut]
+    unread_count: int = 0
+
+
+class NotificationsReadRequest(BaseModel):
+    notification_ids: list[uuid.UUID] | None = None

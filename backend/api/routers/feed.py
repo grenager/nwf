@@ -1,4 +1,4 @@
-"""Unified feed: ranked visible posts grouped by story.
+"""Unified feed: chronological visible posts (newest-posted first).
 
 The feed endpoint is read-heavy and latency-critical, so it deliberately avoids
 the per-post ``serialize_post`` helper (which fires ~10 queries each). Instead it
@@ -8,7 +8,6 @@ and assembles the ``PostOut`` payloads in memory.
 
 from __future__ import annotations
 
-import math
 import uuid
 from datetime import UTC, datetime
 
@@ -46,30 +45,18 @@ from core.models import (
     Comment,
     Post,
     PostParticipant,
+    PostRead,
     PostVisibility,
     Profile,
     Source,
     Story,
-    StoryKind,
     StoryStatus,
 )
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
-_NEWS_HALFLIFE_HOURS: float = 48.0
-_ANALYSIS_HALFLIFE_HOURS: float = 14.0 * 24.0
-
 # Guests get the same public payload; let the CDN/edge serve repeat loads.
 _GUEST_CACHE_CONTROL: str = "public, s-maxage=30, stale-while-revalidate=300"
-
-
-def _decay(kind: StoryKind, age_hours: float) -> float:
-    half = (
-        _NEWS_HALFLIFE_HOURS
-        if kind == StoryKind.news
-        else _ANALYSIS_HALFLIFE_HOURS
-    )
-    return math.exp(-age_hours / half)
 
 
 async def _touch_last_opened(
@@ -107,6 +94,55 @@ async def _participants_by_post(
     return out
 
 
+async def _unread_reply_counts(
+    session: SessionDep,
+    viewer_id: uuid.UUID,
+    post_ids: list[uuid.UUID],
+    *,
+    participant_post_ids: set[uuid.UUID],
+) -> tuple[dict[uuid.UUID, int], dict[uuid.UUID, datetime]]:
+    """Per-post unread reply counts and last_seen_at for the viewer.
+
+    Only computed for threads the viewer authored or participates in.
+    Unread = comments by someone else after the viewer's ``post_reads`` cursor.
+    Posts with no cursor treat every non-own reply as unread.
+    """
+    if not post_ids:
+        return {}, {}
+    tracked: list[uuid.UUID] = [
+        pid for pid in post_ids if pid in participant_post_ids
+    ]
+    if not tracked:
+        return {}, {}
+    seen_rows = (
+        await session.execute(
+            select(PostRead.post_id, PostRead.last_seen_at).where(
+                PostRead.user_id == viewer_id,
+                PostRead.post_id.in_(tracked),
+            )
+        )
+    ).all()
+    last_seen: dict[uuid.UUID, datetime] = {
+        post_id: seen_at for post_id, seen_at in seen_rows
+    }
+    reply_rows = (
+        await session.execute(
+            select(Comment.post_id, Comment.created_at).where(
+                Comment.post_id.in_(tracked),
+                Comment.user_id != viewer_id,
+            )
+        )
+    ).all()
+    counts: dict[uuid.UUID, int] = {pid: 0 for pid in tracked}
+    for post_id, created_at in reply_rows:
+        if post_id is None:
+            continue
+        cursor = last_seen.get(post_id)
+        if cursor is None or created_at > cursor:
+            counts[post_id] = counts.get(post_id, 0) + 1
+    return counts, last_seen
+
+
 async def _build_post_outs(
     session: SessionDep,
     posts: list[Post],
@@ -119,7 +155,8 @@ async def _build_post_outs(
     status_by_story: dict[uuid.UUID, StoryStatus],
     activity: dict[uuid.UUID, StoryActivity],
     friend_profiles: dict[uuid.UUID, Profile],
-    unread_post_ids: set[uuid.UUID],
+    unread_reply_counts: dict[uuid.UUID, int],
+    last_seen_by_post: dict[uuid.UUID, datetime],
 ) -> dict[uuid.UUID, PostOut]:
     """Serialize a batch of posts into PostOut, using batched queries.
 
@@ -296,6 +333,7 @@ async def _build_post_outs(
             my_post_reaction = None
 
         author = author_profiles.get(post.author_id)
+        unread_n = unread_reply_counts.get(post.id, 0)
         out_by_post[post.id] = PostOut(
             id=post.id,
             story_id=post.story_id,
@@ -331,7 +369,9 @@ async def _build_post_outs(
             my_take=my_take,
             engagement=engagement,
             readers=readers,
-            unread_replies_for_viewer=post.id in unread_post_ids,
+            unread_replies_for_viewer=unread_n > 0,
+            unread_reply_count=unread_n,
+            last_seen_at=last_seen_by_post.get(post.id),
         )
 
     return out_by_post
@@ -378,7 +418,7 @@ async def get_feed(
     response: Response,
     limit: int = Query(default=40, le=100, ge=1),
 ) -> FeedOut:
-    """Single ranked feed of visible posts, grouped one card per story."""
+    """Chronological feed of visible posts, newest-posted first."""
     settings = get_settings()
     viewer_id: uuid.UUID | None = user.id if user is not None else None
     new_since: datetime | None = None
@@ -395,7 +435,7 @@ async def get_feed(
         session,
         viewer_id,
         friend_ids=friends if viewer_id is not None else None,
-        limit=limit * 3,
+        limit=limit,
         since_days=settings.inbox_candidate_days,
     )
 
@@ -413,12 +453,11 @@ async def get_feed(
     )
     posts_by_id: dict[uuid.UUID, Post] = {p.id: p for p in posts}
 
-    # Preserve activity order from post_ids
+    # Preserve created_at order from post_ids (newest first).
     ordered_posts: list[Post] = [
         posts_by_id[pid] for pid in post_ids if pid in posts_by_id
     ]
 
-    now = datetime.now(UTC)
     story_ids = list({p.story_id for p in ordered_posts})
     stories: dict[uuid.UUID, Story] = {
         s.id: s
@@ -442,6 +481,8 @@ async def get_feed(
     status_by_story: dict[uuid.UUID, StoryStatus] = {}
     activity: dict[uuid.UUID, StoryActivity] = {}
     profiles: dict[uuid.UUID, Profile] = {}
+    unread_reply_counts: dict[uuid.UUID, int] = {}
+    last_seen_by_post: dict[uuid.UUID, datetime] = {}
     if viewer_id is not None and story_ids:
         status_rows = (
             await session.scalars(
@@ -458,58 +499,23 @@ async def get_feed(
         profiles = await friend_profiles_map(
             session, viewer_id, friend_ids=friends
         )
-
-    # Which posts have unread replies for the viewer (any reply by a non-viewer
-    # on a post where the viewer is a participant).
-    unread_post_ids: set[uuid.UUID] = set()
-    if viewer_id is not None:
-        participant_post_ids = {
+        participant_post_ids: set[uuid.UUID] = {
             pid
             for pid, users in participants_by_post.items()
             if viewer_id in users
+        } | {
+            p.id for p in ordered_posts if p.author_id == viewer_id
         }
-        if participant_post_ids:
-            reply_rows = (
-                await session.execute(
-                    select(Comment.post_id, Comment.user_id).where(
-                        Comment.post_id.in_(participant_post_ids),
-                        Comment.user_id != viewer_id,
-                    )
-                )
-            ).all()
-            for pid, _uid in reply_rows:
-                if pid is not None:
-                    unread_post_ids.add(pid)
-
-    # Score each post then take the top `limit`.
-    scored: list[tuple[float, Post, bool]] = []
-    for post in ordered_posts:
-        story = stories.get(post.story_id)
-        if story is None:
-            continue
-        age_hours = max(
-            (now - post.last_activity_at).total_seconds() / 3600.0, 0.0
+        unread_reply_counts, last_seen_by_post = await _unread_reply_counts(
+            session,
+            viewer_id,
+            [p.id for p in ordered_posts],
+            participant_post_ids=participant_post_ids,
         )
-        recency = _decay(story.kind, age_hours)
-        unread_boost = 10.0 if post.id in unread_post_ids else 0.0
-        friend_boost = 0.0
-        if viewer_id is not None:
-            participants = participants_by_post.get(post.id, [])
-            friend_set = set(friends)
-            friend_participants = sum(
-                1 for p in participants if p in friend_set
-            )
-            friend_boost = min(friend_participants, 5) * 0.5
-        score = recency + unread_boost + friend_boost
-        scored.append((score, post, post.id in unread_post_ids))
-
-    scored.sort(key=lambda t: t[0], reverse=True)
-    top = scored[:limit]
-    top_posts: list[Post] = [post for _, post, _ in top]
 
     post_outs = await _build_post_outs(
         session,
-        top_posts,
+        ordered_posts,
         viewer_id=viewer_id,
         friends=friends,
         stories=stories,
@@ -518,14 +524,14 @@ async def get_feed(
         status_by_story=status_by_story,
         activity=activity,
         friend_profiles=profiles,
-        unread_post_ids=unread_post_ids,
+        unread_reply_counts=unread_reply_counts,
+        last_seen_by_post=last_seen_by_post,
     )
 
     # One card per post. We intentionally do NOT merge multiple posts about the
     # same article: if two people share the same link, they show as two posts.
     cards: list[FeedCardOut] = []
-    unread_count = 0
-    for score, post, is_unread in top:
+    for post in ordered_posts:
         story = stories.get(post.story_id)
         if story is None:
             continue
@@ -534,9 +540,6 @@ async def get_feed(
             continue
         sid = post.story_id
         source = sources.get(story.source_id) if story.source_id else None
-        if is_unread:
-            unread_count += 1
-        out.unread_replies_for_viewer = is_unread
 
         status_row = status_by_story.get(sid)
         read = bool(status_row.read) if status_row else False
@@ -585,36 +588,15 @@ async def get_feed(
                 my_take=my_take,
                 engagement=engagement,
                 posts=[out],
-                score=score,
+                score=0.0,
+                unread_reply_count=out.unread_reply_count,
             )
         )
 
-    # Caught-up boundary: unread / resurrected / recently-active cards first,
-    # then the rest. A card is "fresh" when any of its posts saw activity since
-    # the viewer previously opened the feed — this keeps your own just-shared
-    # post (and new friend activity) above the line even though sharing marks
-    # the story read. Guests (new_since is None) treat unread purely by state.
-    def _is_fresh(card: FeedCardOut) -> bool:
-        if new_since is None:
-            return False
-        return any(post.last_activity_at > new_since for post in card.posts)
-
-    unread_cards: list[FeedCardOut] = []
-    read_cards: list[FeedCardOut] = []
-    for c in cards:
-        fresh = (
-            any(p.unread_replies_for_viewer for p in c.posts)
-            or not c.read
-            or _is_fresh(c)
-        )
-        (unread_cards if fresh else read_cards).append(c)
-    ordered = unread_cards + read_cards
-    caught_up_after = len(unread_cards)
-
     return FeedOut(
-        items=ordered,
-        caught_up_after=caught_up_after,
-        unread_count=unread_count if viewer_id is not None else len(ordered),
+        items=cards,
+        caught_up_after=0,
+        unread_count=sum(1 for c in cards if c.unread_reply_count > 0),
         aggregate_readers=0,
         aggregate_private_conversations=0,
         new_since=new_since,

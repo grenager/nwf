@@ -7,6 +7,7 @@ import type {
   Comment,
   Connection,
   ConnectionStatus,
+  ConversationList,
   FeedPayload,
   FriendProfile,
   FriendRequests,
@@ -15,6 +16,7 @@ import type {
   InvitationCreateResult,
   InvitePreview,
   InviteResult,
+  NotificationList,
   Post,
   PostVisibility,
   PreferencesUpdate,
@@ -149,6 +151,19 @@ export const api = {
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
   getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
+  getConversations: (): Promise<ConversationList> =>
+    request<ConversationList>("/conversations"),
+  markThreadSeen: (postId: UUID): Promise<void> =>
+    request<void>(`/conversations/${postId}/seen`, { method: "POST" }),
+  getNotifications: (): Promise<NotificationList> =>
+    request<NotificationList>("/notifications"),
+  markNotificationsRead: (ids?: UUID[]): Promise<NotificationList> =>
+    request<NotificationList>("/notifications/read", {
+      method: "POST",
+      body: JSON.stringify({
+        notification_ids: ids ?? null,
+      }),
+    }),
   previewUrl: (payload: {
     url: string;
     kind?: StoryKind;

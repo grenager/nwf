@@ -71,6 +71,16 @@ class PostVisibility(enum.StrEnum):
     public = "public"
 
 
+class NotificationKind(enum.StrEnum):
+    """Directed alerts; conversation replies live in Convos, not here."""
+
+    mention = "mention"
+    post_reaction = "post_reaction"
+    comment_reaction = "comment_reaction"
+    friend_request = "friend_request"
+    friend_accepted = "friend_accepted"
+
+
 def _uuid_col(primary_key: bool = False) -> Mapped[uuid.UUID]:
     return mapped_column(
         PgUUID(as_uuid=True),
@@ -293,6 +303,69 @@ class PostParticipant(Base):
         primary_key=True,
     )
     joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PostRead(Base):
+    """Per-thread read cursor: when the viewer last looked at a post's replies."""
+
+    __tablename__ = "post_reads"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Notification(Base):
+    """Directed alert for a recipient (mention, reaction, friend event)."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
+    recipient_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[NotificationKind] = mapped_column(
+        Enum(NotificationKind, name="notification_kind", create_type=False),
+        nullable=False,
+    )
+    post_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    comment_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("comments.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    story_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 

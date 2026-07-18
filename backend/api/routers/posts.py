@@ -54,9 +54,11 @@ from core.mentions import resolve_mentioned_friend_ids
 from core.models import (
     Attachment,
     Comment,
+    NotificationKind,
     Post,
     PostMention,
     PostParticipant,
+    PostRead,
     Profile,
     Source,
     SourceKind,
@@ -64,6 +66,7 @@ from core.models import (
     StoryKind,
     StoryStatus,
 )
+from core.notifications import create_notification, delete_reaction_notification
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -249,6 +252,15 @@ async def _sync_post_mentions(session: SessionDep, post: Post) -> None:
     mentioned: list[uuid.UUID] = resolve_mentioned_friend_ids(
         post.take, allowed_ids=friends, exclude_id=post.author_id
     )
+    previous_ids: set[uuid.UUID] = set(
+        (
+            await session.scalars(
+                select(PostMention.mentioned_user_id).where(
+                    PostMention.post_id == post.id
+                )
+            )
+        ).all()
+    )
     await session.execute(
         delete(PostMention).where(PostMention.post_id == post.id)
     )
@@ -257,6 +269,16 @@ async def _sync_post_mentions(session: SessionDep, post: Post) -> None:
             PostMention(post_id=post.id, mentioned_user_id=mentioned_id)
         )
         await _add_participant(session, post.id, mentioned_id)
+        # Only alert newly mentioned friends (edits shouldn't re-ping).
+        if mentioned_id not in previous_ids:
+            await create_notification(
+                session,
+                recipient_id=mentioned_id,
+                actor_id=post.author_id,
+                kind=NotificationKind.mention,
+                post_id=post.id,
+                story_id=post.story_id,
+            )
 
 
 def _comment_out(
@@ -398,11 +420,24 @@ async def serialize_post(
             commented=commented_n,
             readers=readers,
         )
-        # Unread replies: any reply after the viewer's last_opened on this post
-        # simplification — any reply from someone else counts as unread until
-        # the viewer has interacted; feed.py applies a stricter rule.
-        if viewer_id in participants or post.author_id == viewer_id:
-            unread_replies = any(r.user_id != viewer_id for r in replies)
+
+    # Per-thread read cursor → unread reply count (only for threads you're in).
+    unread_reply_count = 0
+    last_seen_at: datetime | None = None
+    if viewer_id is not None and (
+        viewer_id in participants or post.author_id == viewer_id
+    ):
+        cursor = await session.get(
+            PostRead, {"user_id": viewer_id, "post_id": post.id}
+        )
+        if cursor is not None:
+            last_seen_at = cursor.last_seen_at
+        for reply in replies:
+            if reply.user_id == viewer_id:
+                continue
+            if last_seen_at is None or reply.created_at > last_seen_at:
+                unread_reply_count += 1
+        unread_replies = unread_reply_count > 0
 
     # Per-person ratings (author + each commenter) plus a visible aggregate.
     rater_ids: set[uuid.UUID] = (
@@ -466,6 +501,8 @@ async def serialize_post(
         engagement=engagement,
         readers=readers,
         unread_replies_for_viewer=unread_replies,
+        unread_reply_count=unread_reply_count,
+        last_seen_at=last_seen_at,
     )
 
 
@@ -695,6 +732,14 @@ async def set_post_reaction(
         post_id=post.id,
         reaction=payload.reaction,
     )
+    await create_notification(
+        session,
+        recipient_id=post.author_id,
+        actor_id=user.id,
+        kind=NotificationKind.post_reaction,
+        post_id=post.id,
+        story_id=post.story_id,
+    )
     await session.flush()
     return await serialize_post(session, post, viewer_id=user.id)
 
@@ -709,5 +754,12 @@ async def clear_post_reaction(
     if not await can_see_post(session, user.id, post):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
     await delete_post_reaction(session, user_id=user.id, post_id=post.id)
+    await delete_reaction_notification(
+        session,
+        recipient_id=post.author_id,
+        actor_id=user.id,
+        kind=NotificationKind.post_reaction,
+        post_id=post.id,
+    )
     await session.flush()
     return await serialize_post(session, post, viewer_id=user.id)
