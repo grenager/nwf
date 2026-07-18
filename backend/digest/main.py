@@ -6,6 +6,7 @@ that emails each opted-in user a summary of new friend activity.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import signal
 import uuid
@@ -49,8 +50,17 @@ async def _process_user(
     profile: Profile,
     email: str,
     settings: Settings,
+    dry_run: bool = False,
+    since_hours: int | None = None,
 ) -> str:
-    """Build + send one digest. Returns a status label."""
+    """Build + send one digest. Returns a status label.
+
+    When ``dry_run`` is set, the digest is built and logged but no email is
+    sent and the ``last_digest_sent_at`` watermark is left untouched.
+
+    When ``since_hours`` is set, the per-user watermark and the lookback cap are
+    both ignored and activity is gathered from ``now - since_hours`` instead.
+    """
     factory = get_sessionmaker()
     async with factory() as session:
         merged: Profile | None = await session.get(Profile, profile.id)
@@ -58,12 +68,15 @@ async def _process_user(
             return "skipped_opt_out"
 
         now: datetime = datetime.now(UTC)
-        since: datetime = merged.last_digest_sent_at or (
-            now - timedelta(hours=24)
-        )
-        lookback_floor: datetime = now - timedelta(days=settings.digest_lookback_days)
-        if since < lookback_floor:
-            since = lookback_floor
+        if since_hours is not None:
+            since: datetime = now - timedelta(hours=since_hours)
+        else:
+            since = merged.last_digest_sent_at or (now - timedelta(hours=24))
+            lookback_floor: datetime = now - timedelta(
+                days=settings.digest_lookback_days
+            )
+            if since < lookback_floor:
+                since = lookback_floor
 
         digest: UserDigest | None = await build_user_digest(
             session,
@@ -73,10 +86,21 @@ async def _process_user(
             max_lines=settings.digest_max_lines,
         )
         if digest is None:
+            if dry_run:
+                return "skipped_empty"
             # Still advance watermark so quiet days don't accumulate forever.
             merged.last_digest_sent_at = now
             await session.commit()
             return "skipped_empty"
+
+        if dry_run:
+            log.info(
+                "digest.dry_run_user",
+                user_id=str(merged.id),
+                email=email,
+                lines=len(digest.lines),
+            )
+            return "would_send"
 
         content = digest_email_from_user_digest(
             to_email=email,
@@ -106,7 +130,10 @@ async def _process_user(
         return "send_failed"
 
 
-async def run_digest_cycle() -> None:
+async def run_digest_cycle(
+    dry_run: bool = False,
+    since_hours: int | None = None,
+) -> None:
     """Send digests to every eligible user with bounded concurrency."""
     settings = get_settings()
     if not settings.digest_enabled:
@@ -136,7 +163,13 @@ async def run_digest_cycle() -> None:
             return "skipped_no_email"
         async with semaphore:
             try:
-                return await _process_user(profile, email, settings)
+                return await _process_user(
+                    profile,
+                    email,
+                    settings,
+                    dry_run=dry_run,
+                    since_hours=since_hours,
+                )
             except Exception as exc:
                 log.error(
                     "digest.user_failed",
@@ -145,7 +178,12 @@ async def run_digest_cycle() -> None:
                 )
                 return "error"
 
-    log.info("digest.cycle_start", users=len(profiles))
+    log.info(
+        "digest.cycle_start",
+        users=len(profiles),
+        dry_run=dry_run,
+        since_hours=since_hours,
+    )
     results: list[str] = await asyncio.gather(*(_run_one(p) for p in profiles))
     counts: dict[str, int] = {}
     for status in results:
@@ -188,8 +226,60 @@ async def _main() -> None:
     await dispose_engine()
 
 
+async def _run_once(dry_run: bool, since_hours: int | None) -> None:
+    """Run a single digest cycle immediately, then clean up."""
+    settings = get_settings()
+    log.info(
+        "digest.run_now",
+        dry_run=dry_run,
+        since_hours=since_hours,
+        enabled=settings.digest_enabled,
+        app_base_url=settings.app_base_url,
+    )
+    try:
+        await run_digest_cycle(dry_run=dry_run, since_hours=since_hours)
+    finally:
+        await dispose_engine()
+
+
 def run() -> None:
-    """Console-script entrypoint (`nwf-digest`)."""
+    """Console-script entrypoint (`nwf-digest`).
+
+    With no arguments, starts the long-lived cron scheduler. Pass ``--run-now``
+    to execute a single cycle immediately and exit (useful for manual/prod
+    testing), optionally combined with ``--dry-run`` to skip sending.
+    """
+    parser = argparse.ArgumentParser(prog="nwf-digest")
+    parser.add_argument(
+        "--run-now",
+        action="store_true",
+        help="Run one digest cycle immediately and exit instead of scheduling.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --run-now, build and log digests without sending or "
+        "advancing the send watermark.",
+    )
+    parser.add_argument(
+        "--since-hours",
+        type=int,
+        default=None,
+        metavar="N",
+        help="With --run-now, ignore each user's watermark and gather activity "
+        "from the last N hours instead.",
+    )
+    args = parser.parse_args()
+
+    if args.run_now:
+        if args.since_hours is not None and args.since_hours <= 0:
+            parser.error("--since-hours must be a positive integer")
+        asyncio.run(_run_once(dry_run=args.dry_run, since_hours=args.since_hours))
+        return
+    if args.dry_run:
+        parser.error("--dry-run requires --run-now")
+    if args.since_hours is not None:
+        parser.error("--since-hours requires --run-now")
     asyncio.run(_main())
 
 
