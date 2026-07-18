@@ -7,7 +7,7 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
 
@@ -182,15 +182,16 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
     );
   }
 
-  const dividerBeforeIndex: number = useMemo(() => {
-    if (data.new_since === null) return -1;
+  let dividerBeforeIndex: number = -1;
+  if (data.new_since !== null) {
     const newSinceMs: number = Date.parse(data.new_since);
-    if (Number.isNaN(newSinceMs)) return -1;
-    return data.items.findIndex((card) => {
-      const createdMs: number = Date.parse(card.posts[0]?.created_at ?? "");
-      return !Number.isNaN(createdMs) && createdMs <= newSinceMs;
-    });
-  }, [data]);
+    if (!Number.isNaN(newSinceMs)) {
+      dividerBeforeIndex = data.items.findIndex((card) => {
+        const createdMs: number = Date.parse(card.posts[0]?.created_at ?? "");
+        return !Number.isNaN(createdMs) && createdMs <= newSinceMs;
+      });
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
