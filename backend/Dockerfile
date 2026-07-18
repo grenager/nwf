@@ -1,4 +1,4 @@
-# Backend image: runs either the API (default) or the scraper worker.
+# Backend image: runs the API (default), the scraper worker, or the digest worker.
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
@@ -14,11 +14,13 @@ COPY pyproject.toml ./
 COPY core ./core
 COPY api ./api
 COPY scraper ./scraper
+COPY digest ./digest
 
 RUN uv pip install --system -e .
 
 EXPOSE 8000
 
-# Default command runs the API. Override CMD for the scraper worker:
+# Default command runs the API. Override CMD for the worker services:
 #   docker run ... nwf-scraper
+#   docker run ... nwf-digest
 CMD ["nwf-api"]
