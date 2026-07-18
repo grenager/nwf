@@ -14,6 +14,19 @@ from core.logging import get_logger
 log = get_logger("email")
 
 
+def _resend_error_detail(exc: httpx.HTTPError) -> tuple[int | None, str]:
+    """Extract (status_code, body) from a failed Resend request.
+
+    ``raise_for_status`` only yields the status line; Resend returns the actual
+    rejection reason (e.g. unverified domain, invalid ``from``) in the JSON body,
+    so surface it for diagnosis.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        response: httpx.Response = exc.response
+        return response.status_code, response.text[:1000]
+    return None, str(exc)
+
+
 @dataclass(frozen=True)
 class InviteEmailContent:
     """Payload for a branded invitation email."""
@@ -164,9 +177,12 @@ async def send_invite_email(
             )
             resp.raise_for_status()
     except httpx.HTTPError as exc:
+        status, body = _resend_error_detail(exc)
         log.warning(
             "email.invite.failed",
             error=str(exc),
+            status=status,
+            body=body,
             to=content.to_email,
         )
         return False
@@ -446,9 +462,12 @@ async def send_digest_email(
             )
             resp.raise_for_status()
     except httpx.HTTPError as exc:
+        status, body = _resend_error_detail(exc)
         log.warning(
             "email.digest.failed",
             error=str(exc),
+            status=status,
+            body=body,
             to=content.to_email,
         )
         return False
@@ -563,9 +582,12 @@ async def send_friend_notice_email(
             )
             resp.raise_for_status()
     except httpx.HTTPError as exc:
+        status, body = _resend_error_detail(exc)
         log.warning(
             "email.friend_notice.failed",
             error=str(exc),
+            status=status,
+            body=body,
             kind=content.kind,
             to=content.to_email,
         )
