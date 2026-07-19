@@ -3,6 +3,8 @@
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { EngagementSummary } from "@/components/engagement-summary";
+import { MentionInput } from "@/components/mention-input";
+import { MentionText } from "@/components/mention-text";
 import { SourceLogo } from "@/components/source-logo";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -412,9 +414,10 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                                   </button>
                                 ) : null}
                               </div>
-                              <p className="mt-0.5 whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
-                                {c.text}
-                              </p>
+                              <MentionText
+                                text={c.text}
+                                className="mt-0.5 block whitespace-pre-line text-sm text-slate-700 dark:text-slate-300"
+                              />
                             </div>
                           </div>
                         ))
@@ -422,13 +425,12 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
                     </div>
 
                     <div className="mt-5">
-                      <textarea
-                        ref={commentRef}
+                      <MentionInput
+                        inputRef={commentRef}
                         value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        placeholder="Add a comment for your friends…"
+                        onChange={setDraft}
+                        placeholder="Add a comment for your friends… use @ to mention"
                         rows={3}
-                        className="w-full resize-none border border-slate-300 bg-white p-3 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
                       <div className="mt-2 flex justify-end">
                         <button

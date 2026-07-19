@@ -1,6 +1,8 @@
 "use client";
 
 import { applyReactionToggle } from "@/components/reaction-bar";
+import { MentionInput } from "@/components/mention-input";
+import { MentionText } from "@/components/mention-text";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
@@ -9,7 +11,7 @@ import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import type { Comment, Post, Profile, PostVisibility, UUID } from "@/lib/types";
 import Link from "next/link";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 function profileName(me: Profile | null): string {
   if (!me) return "You";
@@ -56,6 +58,7 @@ export function PostThread({
   onPostChange,
   onDelete,
   onInvite,
+  markSeenOnMount = false,
 }: {
   post: Post;
   me: Profile | null;
@@ -66,6 +69,8 @@ export function PostThread({
   onPostChange: (post: Post) => void;
   onDelete: () => void;
   onInvite: () => void;
+  /** Stamp the read cursor only when the thread is actually opened (detail page). */
+  markSeenOnMount?: boolean;
 }) {
   const { user, session } = useAuth();
   const { requireAuth } = useAuthGate();
@@ -85,9 +90,32 @@ export function PostThread({
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [reacting, setReacting] = useState<boolean>(false);
+  const [seenBoundary, setSeenBoundary] = useState<string | null>(
+    post.last_seen_at ?? null,
+  );
   const composerRef = useRef<HTMLInputElement | null>(null);
+  const markedSeenRef = useRef<boolean>(false);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
+
+  // Stamp the per-thread read cursor when the signed-in viewer opens this thread
+  // (detail page only — not every feed card mount).
+  useEffect(() => {
+    if (!markSeenOnMount || !user || markedSeenRef.current) return;
+    markedSeenRef.current = true;
+    const previous: string | null = post.last_seen_at ?? null;
+    setSeenBoundary(previous);
+    void api.markThreadSeen(post.id).then(() => {
+      onPostChange({
+        ...post,
+        last_seen_at: new Date().toISOString(),
+        unread_reply_count: 0,
+        unread_replies_for_viewer: false,
+      });
+    }).catch(() => undefined);
+    // Only stamp once per mount for this post.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markSeenOnMount, user?.id, post.id]);
 
   const { tops, childrenByParent } = useMemo(() => {
     const topsLocal: Comment[] = [];
@@ -103,6 +131,34 @@ export function PostThread({
     }
     return { tops: topsLocal, childrenByParent: kids };
   }, [post.replies]);
+
+  const firstUnreadTopId: UUID | null = useMemo(() => {
+    if (!user) return null;
+    // No prior cursor and nothing flagged unread — skip the divider.
+    if (seenBoundary === null && post.unread_reply_count <= 0) return null;
+    const boundaryMs: number | null =
+      seenBoundary !== null ? Date.parse(seenBoundary) : null;
+    for (const top of tops) {
+      const topIsUnread: boolean =
+        top.user_id !== user.id &&
+        (boundaryMs === null || Date.parse(top.created_at) > boundaryMs);
+      if (topIsUnread) return top.id;
+      const kids: Comment[] = childrenByParent.get(top.id) ?? [];
+      for (const child of kids) {
+        const childUnread: boolean =
+          child.user_id !== user.id &&
+          (boundaryMs === null || Date.parse(child.created_at) > boundaryMs);
+        if (childUnread) return top.id;
+      }
+    }
+    return null;
+  }, [
+    user,
+    seenBoundary,
+    post.unread_reply_count,
+    tops,
+    childrenByParent,
+  ]);
 
   function startReplyTo(comment: Comment): void {
     setReplyTo(comment);
@@ -340,12 +396,12 @@ export function PostThread({
                 <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                   Your take
                 </span>
-                <textarea
+                <MentionInput
                   value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
+                  onChange={setEditDraft}
                   rows={2}
                   autoFocus
-                  className="w-full resize-none border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                  placeholder="Your take…"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -383,9 +439,10 @@ export function PostThread({
               </div>
             </div>
           ) : post.take ? (
-            <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-              {post.take}
-            </p>
+            <MentionText
+              text={post.take}
+              className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+            />
           ) : (
             <p className="-mt-0.5 text-sm italic leading-snug text-zinc-400">
               shared this
@@ -429,57 +486,68 @@ export function PostThread({
           tops.map((r) => {
             const kids: Comment[] = childrenByParent.get(r.id) ?? [];
             return (
-              <div key={r.id} className="space-y-2">
-                <CommentRow
-                  comment={r}
-                  userId={user?.id ?? null}
-                  reacting={reacting}
-                  onReply={() => startReplyTo(r)}
-                  onLike={() => void toggleCommentLike(r)}
-                  onDelete={() => {
-                    void api.deleteComment(r.id).then(() => {
-                      const childIds = new Set(
-                        (childrenByParent.get(r.id) ?? []).map((c) => c.id),
-                      );
-                      onPostChange({
-                        ...post,
-                        replies: post.replies.filter(
-                          (x) => x.id !== r.id && !childIds.has(x.id),
-                        ),
-                        reply_count: Math.max(
-                          0,
-                          post.reply_count - 1 - childIds.size,
-                        ),
-                      });
-                    });
-                  }}
-                />
-                {kids.length > 0 ? (
-                  <div className="ml-6 space-y-2 border-l border-zinc-200 pl-3 dark:border-zinc-700">
-                    {kids.map((child) => (
-                      <CommentRow
-                        key={child.id}
-                        comment={child}
-                        userId={user?.id ?? null}
-                        reacting={reacting}
-                        onReply={() => startReplyTo(child)}
-                        onLike={() => void toggleCommentLike(child)}
-                        onDelete={() => {
-                          void api.deleteComment(child.id).then(() => {
-                            onPostChange({
-                              ...post,
-                              replies: post.replies.filter(
-                                (x) => x.id !== child.id,
-                              ),
-                              reply_count: Math.max(0, post.reply_count - 1),
-                            });
-                          });
-                        }}
-                      />
-                    ))}
+              <Fragment key={r.id}>
+                {firstUnreadTopId === r.id ? (
+                  <div className="my-2 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-brand-200 dark:bg-brand-900" />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
+                      New replies
+                    </span>
+                    <div className="h-px flex-1 bg-brand-200 dark:bg-brand-900" />
                   </div>
                 ) : null}
-              </div>
+                <div className="space-y-2">
+                  <CommentRow
+                    comment={r}
+                    userId={user?.id ?? null}
+                    reacting={reacting}
+                    onReply={() => startReplyTo(r)}
+                    onLike={() => void toggleCommentLike(r)}
+                    onDelete={() => {
+                      void api.deleteComment(r.id).then(() => {
+                        const childIds = new Set(
+                          (childrenByParent.get(r.id) ?? []).map((c) => c.id),
+                        );
+                        onPostChange({
+                          ...post,
+                          replies: post.replies.filter(
+                            (x) => x.id !== r.id && !childIds.has(x.id),
+                          ),
+                          reply_count: Math.max(
+                            0,
+                            post.reply_count - 1 - childIds.size,
+                          ),
+                        });
+                      });
+                    }}
+                  />
+                  {kids.length > 0 ? (
+                    <div className="ml-6 space-y-2 border-l border-zinc-200 pl-3 dark:border-zinc-700">
+                      {kids.map((child) => (
+                        <CommentRow
+                          key={child.id}
+                          comment={child}
+                          userId={user?.id ?? null}
+                          reacting={reacting}
+                          onReply={() => startReplyTo(child)}
+                          onLike={() => void toggleCommentLike(child)}
+                          onDelete={() => {
+                            void api.deleteComment(child.id).then(() => {
+                              onPostChange({
+                                ...post,
+                                replies: post.replies.filter(
+                                  (x) => x.id !== child.id,
+                                ),
+                                reply_count: Math.max(0, post.reply_count - 1),
+                              });
+                            });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </Fragment>
             );
           })
         )}
@@ -523,24 +591,28 @@ export function PostThread({
                 </div>
               ) : null}
               <div className="flex gap-2">
-                <input
-                  ref={composerRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                <div
+                  className="min-w-0 flex-1"
                   onFocus={() => setComposerActive(true)}
-                  placeholder={
-                    replyTo
-                      ? `Reply to ${replyTo.author_name}…`
-                      : "Reply…"
-                  }
-                  className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void reply();
+                >
+                  <MentionInput
+                    inputRef={composerRef}
+                    value={draft}
+                    onChange={setDraft}
+                    singleLine
+                    placeholder={
+                      replyTo
+                        ? `Reply to ${replyTo.author_name}…`
+                        : "Reply…"
                     }
-                  }}
-                />
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void reply();
+                      }
+                    }}
+                  />
+                </div>
                 {showComposerActions ? (
                   <>
                     <button
@@ -622,9 +694,10 @@ function CommentRow({
             {relativeTime(comment.created_at)}
           </span>
         </div>
-        <p className="-mt-0.5 whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300">
-          {comment.text}
-        </p>
+        <MentionText
+          text={comment.text}
+          className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+        />
         <div className="mt-0.5 flex items-center gap-3 text-xs">
           <button
             type="button"

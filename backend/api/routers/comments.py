@@ -11,11 +11,12 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import Row, select
+from sqlalchemy import Row, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
 from api.friends import (
+    accepted_friend_ids,
     can_see_post,
     display_name,
     ratings_for_users_by_story,
@@ -32,7 +33,16 @@ from api.schemas import (
     ReactionSet,
     ReactionSummary,
 )
-from core.models import Comment, Post, PostParticipant, Profile
+from core.mentions import resolve_mentioned_friend_ids
+from core.models import (
+    Comment,
+    CommentMention,
+    NotificationKind,
+    Post,
+    PostParticipant,
+    Profile,
+)
+from core.notifications import create_notification, delete_reaction_notification
 
 router = APIRouter(prefix="/comments", tags=["comments"])
 
@@ -106,6 +116,51 @@ async def _add_participant(
         )
     )
     await session.execute(stmt)
+
+
+async def _sync_comment_mentions(
+    session: SessionDep, comment: Comment
+) -> None:
+    """Replace a comment's mention rows; grant mentioned friends post access.
+
+    Only accepted friends of the commenter are recorded. Each mentioned friend
+    becomes a post participant so they can see the private thread.
+    """
+    friends = await accepted_friend_ids(session, comment.user_id)
+    mentioned: list[uuid.UUID] = resolve_mentioned_friend_ids(
+        comment.text, allowed_ids=friends, exclude_id=comment.user_id
+    )
+    previous_ids: set[uuid.UUID] = set(
+        (
+            await session.scalars(
+                select(CommentMention.mentioned_user_id).where(
+                    CommentMention.comment_id == comment.id
+                )
+            )
+        ).all()
+    )
+    await session.execute(
+        delete(CommentMention).where(CommentMention.comment_id == comment.id)
+    )
+    for mentioned_id in mentioned:
+        session.add(
+            CommentMention(
+                comment_id=comment.id, mentioned_user_id=mentioned_id
+            )
+        )
+        if comment.post_id is not None:
+            await _add_participant(session, comment.post_id, mentioned_id)
+        # Only alert newly mentioned friends (edits shouldn't re-ping).
+        if mentioned_id not in previous_ids:
+            await create_notification(
+                session,
+                recipient_id=mentioned_id,
+                actor_id=comment.user_id,
+                kind=NotificationKind.mention,
+                post_id=comment.post_id,
+                comment_id=comment.id,
+                story_id=comment.story_id,
+            )
 
 
 async def _resolve_parent_id(
@@ -217,6 +272,7 @@ async def create_comment(
     session.add(comment)
     await session.flush()
     await _add_participant(session, post.id, user.id)
+    await _sync_comment_mentions(session, comment)
     post.last_activity_at = datetime.now(UTC)
     await session.refresh(comment)
     author = await session.get(Profile, user.id)
@@ -260,6 +316,7 @@ async def update_comment(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
     comment.text = payload.text
     await session.flush()
+    await _sync_comment_mentions(session, comment)
     await session.refresh(comment)
     author = await session.get(Profile, comment.user_id)
     rating = await _single_rating(session, comment.user_id, comment.story_id)
@@ -304,6 +361,15 @@ async def set_comment_reaction(
         comment_id=comment.id,
         reaction=payload.reaction,
     )
+    await create_notification(
+        session,
+        recipient_id=comment.user_id,
+        actor_id=user.id,
+        kind=NotificationKind.comment_reaction,
+        post_id=comment.post_id,
+        comment_id=comment.id,
+        story_id=comment.story_id,
+    )
     await session.flush()
     author = await session.get(Profile, comment.user_id)
     rating = await _single_rating(session, comment.user_id, comment.story_id)
@@ -329,6 +395,13 @@ async def clear_comment_reaction(
 
     await delete_comment_reaction(
         session, user_id=user.id, comment_id=comment.id
+    )
+    await delete_reaction_notification(
+        session,
+        recipient_id=comment.user_id,
+        actor_id=user.id,
+        kind=NotificationKind.comment_reaction,
+        comment_id=comment.id,
     )
     await session.flush()
     author = await session.get(Profile, comment.user_id)

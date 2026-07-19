@@ -109,7 +109,8 @@ async def _count_build_queries(n: int, *, viewer_id: uuid.UUID | None) -> int:
         status_by_story={},
         activity={},
         friend_profiles={},
-        unread_post_ids=set(),
+        unread_reply_counts={},
+        last_seen_by_post={},
     )
     assert len(outs) == n
     return session.total_queries

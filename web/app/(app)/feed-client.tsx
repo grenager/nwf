@@ -7,7 +7,7 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
 
@@ -15,6 +15,16 @@ interface FeedClientProps {
   // Server-rendered public feed, so guests (and the first paint for everyone)
   // have content without waiting on a client-side round-trip.
   initialGuestData: FeedPayload | null;
+}
+
+function formatNewSince(iso: string): string {
+  const date: Date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "your last visit";
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function FeedClient({ initialGuestData }: FeedClientProps) {
@@ -90,35 +100,33 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
         rating_count: post.rating_count,
         my_take: post.take,
         engagement: post.engagement,
-        posts: [post],
+        posts: [
+          {
+            ...post,
+            unread_reply_count: post.unread_reply_count ?? 0,
+            last_seen_at: post.last_seen_at ?? null,
+          },
+        ],
         score: Number.MAX_SAFE_INTEGER,
+        unread_reply_count: 0,
       };
       setData((prev) => {
         if (!prev) {
           return {
             items: [card],
-            caught_up_after: 1,
+            caught_up_after: 0,
             unread_count: 0,
             aggregate_readers: 0,
             aggregate_private_conversations: 0,
             new_since: null,
           };
         }
-        const existingIndex: number = prev.items.findIndex(
-          (c) => c.card_id === card.card_id,
+        const withoutDup: FeedCard[] = prev.items.filter(
+          (c) => c.card_id !== card.card_id,
         );
-        const withoutDup: FeedCard[] =
-          existingIndex === -1
-            ? prev.items
-            : prev.items.filter((c) => c.card_id !== card.card_id);
-        let caughtUp: number = prev.caught_up_after;
-        if (existingIndex !== -1 && existingIndex < prev.caught_up_after) {
-          caughtUp = Math.max(0, caughtUp - 1);
-        }
         return {
           ...prev,
           items: [card, ...withoutDup],
-          caught_up_after: caughtUp + 1,
         };
       });
     }
@@ -147,19 +155,11 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
   function onCardChange(updated: FeedCard): void {
     setData((prev) => {
       if (!prev) return prev;
-      const index: number = prev.items.findIndex(
-        (c) => c.card_id === updated.card_id,
-      );
       // A card with no posts left (last post deleted) is dropped entirely.
-      const removed: boolean = updated.posts.length === 0;
       const items: FeedCard[] = prev.items
         .map((c) => (c.card_id === updated.card_id ? updated : c))
         .filter((c) => c.posts.length > 0);
-      const caughtUp: number =
-        removed && index !== -1 && index < prev.caught_up_after
-          ? Math.max(0, prev.caught_up_after - 1)
-          : prev.caught_up_after;
-      return { ...prev, items, caught_up_after: caughtUp };
+      return { ...prev, items };
     });
   }
 
@@ -182,8 +182,16 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
     );
   }
 
-  const inbox = data.items.slice(0, data.caught_up_after);
-  const archive = data.items.slice(data.caught_up_after);
+  let dividerBeforeIndex: number = -1;
+  if (data.new_since !== null) {
+    const newSinceMs: number = Date.parse(data.new_since);
+    if (!Number.isNaN(newSinceMs)) {
+      dividerBeforeIndex = data.items.findIndex((card) => {
+        const createdMs: number = Date.parse(card.posts[0]?.created_at ?? "");
+        return !Number.isNaN(createdMs) && createdMs <= newSinceMs;
+      });
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
@@ -217,38 +225,27 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
       ) : null}
 
       <div className="divide-y divide-zinc-200 [&>article:first-child]:pt-1 dark:divide-zinc-800">
-        {inbox.map((card) => (
-          <PostCard
-            key={card.card_id}
-            card={card}
-            me={me}
-            onCardChange={onCardChange}
-          />
-        ))}
-      </div>
-
-      {data.caught_up_after > 0 && archive.length >= 0 ? (
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-            You&apos;re all caught up
-          </span>
-          <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-        </div>
-      ) : null}
-
-      {archive.length > 0 ? (
-        <div className="divide-y divide-zinc-200 opacity-80 dark:divide-zinc-800">
-          {archive.map((card) => (
+        {data.items.map((card, index) => (
+          <Fragment key={card.card_id}>
+            {index === dividerBeforeIndex &&
+            dividerBeforeIndex > 0 &&
+            data.new_since !== null ? (
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                  New since {formatNewSince(data.new_since)}
+                </span>
+                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+              </div>
+            ) : null}
             <PostCard
-              key={card.card_id}
               card={card}
               me={me}
               onCardChange={onCardChange}
             />
-          ))}
-        </div>
-      ) : null}
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }

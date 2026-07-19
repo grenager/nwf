@@ -131,8 +131,24 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
     </>
   );
 
+  const unreadN: number =
+    card.unread_reply_count > 0
+      ? card.unread_reply_count
+      : (post.unread_reply_count ?? 0);
+
   return (
     <article className="py-7">
+      {unreadN > 0 ? (
+        <div className="mb-2">
+          <Link
+            href={`/post/${post.id}?focus=unread`}
+            scroll={false}
+            className="inline-flex items-center rounded-[9999px] bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 dark:bg-brand-950 dark:text-brand-300 dark:hover:bg-brand-900"
+          >
+            {unreadN} new {unreadN === 1 ? "reply" : "replies"}
+          </Link>
+        </div>
+      ) : null}
       <PostThread
         post={post}
         me={me}

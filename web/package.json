@@ -18,12 +18,14 @@
     "@supabase/supabase-js": "^2.45.4",
     "next": "^15.0.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-mentions": "^4.4.10"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/react-mentions": "^4.4.1",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.0.3",

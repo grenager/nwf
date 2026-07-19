@@ -14,11 +14,13 @@ from api.routers import (
     attachments,
     comments,
     connections,
+    conversations,
     email_prefs,
     feed,
     health,
     invitations,
     me,
+    notifications,
     posts,
     profiles,
     sources,
@@ -63,6 +65,8 @@ def create_app() -> FastAPI:
     app.include_router(stories.router)
     app.include_router(posts.router)
     app.include_router(feed.router)
+    app.include_router(conversations.router)
+    app.include_router(notifications.router)
     app.include_router(attachments.router)
     app.include_router(me.router)
     app.include_router(comments.router)

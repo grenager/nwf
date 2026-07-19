@@ -384,10 +384,11 @@ async def visible_post_ids_for_viewer(
     limit: int = 100,
     since_days: int = 14,
 ) -> list[uuid.UUID]:
-    """Candidate post ids the viewer may see, newest activity first.
+    """Candidate post ids the viewer may see, newest-posted first.
 
     Guests see only public posts. Authenticated users see public posts plus
     private posts where they are a participant or a friend of any participant.
+    Sorted by ``created_at`` so a new reply does not bump a post to the top.
     """
     from datetime import UTC, datetime, timedelta
 
@@ -398,9 +399,9 @@ async def visible_post_ids_for_viewer(
             select(Post.id)
             .where(
                 Post.visibility == PostVisibility.public,
-                Post.last_activity_at >= since,
+                Post.created_at >= since,
             )
-            .order_by(Post.last_activity_at.desc())
+            .order_by(Post.created_at.desc())
             .limit(limit)
         )
         return list(rows.all())
@@ -416,15 +417,15 @@ async def visible_post_ids_for_viewer(
         select(Post.id)
         .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
         .where(
-            Post.last_activity_at >= since,
+            Post.created_at >= since,
             or_(
                 Post.visibility == PostVisibility.public,
                 Post.author_id == viewer_id,
                 PostParticipant.user_id.in_(participant_filter),
             ),
         )
-        .group_by(Post.id, Post.last_activity_at)
-        .order_by(Post.last_activity_at.desc())
+        .group_by(Post.id, Post.created_at)
+        .order_by(Post.created_at.desc())
         .limit(limit)
     )
     return list((await session.scalars(stmt)).all())

@@ -156,6 +156,8 @@ export interface Post {
   engagement: FriendEngagement;
   readers: FriendMini[];
   unread_replies_for_viewer: boolean;
+  unread_reply_count: number;
+  last_seen_at: string | null;
 }
 
 /** Live link preview returned by ``POST /posts/preview``. */
@@ -190,6 +192,7 @@ export interface FeedCard {
   engagement: FriendEngagement;
   posts: Post[];
   score: number;
+  unread_reply_count: number;
 }
 
 export interface FeedPayload {
@@ -199,6 +202,58 @@ export interface FeedPayload {
   aggregate_readers: number;
   aggregate_private_conversations: number;
   new_since: string | null;
+}
+
+export interface ConversationItem {
+  post_id: UUID;
+  story_id: UUID;
+  full_headline: string;
+  article_url: string;
+  source_name: string | null;
+  source_image_url: string | null;
+  image_url: string | null;
+  author_id: UUID;
+  author_name: string;
+  author_image_url: string | null;
+  reply_count: number;
+  unread_count: number;
+  last_seen_at: string | null;
+  latest_reply_at: string;
+  latest_reply_text: string | null;
+  latest_reply_author_name: string | null;
+  latest_reply_author_image_url: string | null;
+}
+
+export interface ConversationList {
+  items: ConversationItem[];
+  threads_with_unread: number;
+}
+
+export type NotificationKind =
+  | "mention"
+  | "post_reaction"
+  | "comment_reaction"
+  | "friend_request"
+  | "friend_accepted";
+
+export interface NotificationItem {
+  id: UUID;
+  kind: NotificationKind;
+  actor_id: UUID;
+  actor_name: string;
+  actor_image_url: string | null;
+  post_id: UUID | null;
+  comment_id: UUID | null;
+  story_id: UUID | null;
+  full_headline: string | null;
+  comment_snippet: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationList {
+  items: NotificationItem[];
+  unread_count: number;
 }
 
 export type ConnectionStatus = "pending" | "accepted" | "blocked";
