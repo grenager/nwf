@@ -42,6 +42,27 @@ function Avatar({
   );
 }
 
+function InviteHeader() {
+  return (
+    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+      <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
+        <Link
+          href="/"
+          className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+        >
+          NewsWithFriends
+        </Link>
+        <Link
+          href="/"
+          className="text-sm font-medium text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          Home
+        </Link>
+      </div>
+    </header>
+  );
+}
+
 interface InviteLandingClientProps {
   token: string;
 }
@@ -205,26 +226,32 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6">
-        <p className="text-sm text-zinc-500">Loading invitation…</p>
-      </main>
+      <>
+        <InviteHeader />
+        <main className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6">
+          <p className="text-sm text-zinc-500">Loading invitation…</p>
+        </main>
+      </>
     );
   }
 
   if (error || !preview) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6">
-        <h1 className="font-serif text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Invitation unavailable
-        </h1>
-        <p className="mt-2 text-sm text-zinc-500">{error ?? "Not found"}</p>
-        <Link
-          href="/signin"
-          className="mt-6 text-sm font-semibold text-zinc-900 underline dark:text-zinc-100"
-        >
-          Sign in
-        </Link>
-      </main>
+      <>
+        <InviteHeader />
+        <main className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6">
+          <h1 className="font-serif text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+            Invitation unavailable
+          </h1>
+          <p className="mt-2 text-sm text-zinc-500">{error ?? "Not found"}</p>
+          <Link
+            href="/signin"
+            className="mt-6 text-sm font-semibold text-zinc-900 underline dark:text-zinc-100"
+          >
+            Sign in
+          </Link>
+        </main>
+      </>
     );
   }
 
@@ -241,7 +268,9 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const summary: string | null = post?.summary ?? null;
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-4 py-6 sm:px-6">
+    <>
+      <InviteHeader />
+      <main className="mx-auto min-h-dvh max-w-2xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] pt-6 sm:px-6">
       <div className="mb-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
           Shared with you
@@ -433,7 +462,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                         : "Reply…"
                   }
                   readOnly={isGuest || !canParticipate}
-                  className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                  className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-base outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 sm:text-sm"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -516,6 +545,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
           </p>
         </>
       ) : null}
-    </main>
+      </main>
+    </>
   );
 }
