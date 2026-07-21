@@ -67,9 +67,10 @@ export function FriendProfileModal({
   }, []);
 
   useEffect(() => {
-    if (isPage || !onClose) return;
+    if (isPage || onClose == null) return;
+    const close: () => void = onClose;
     function onKey(e: KeyboardEvent): void {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close();
     }
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
