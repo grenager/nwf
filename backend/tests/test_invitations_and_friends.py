@@ -9,7 +9,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
-from api.routers.invitations import _share_message, accept_invitation_for_user
+from api.routers.invitations import (
+    _DEFAULT_SHARE_PREFIX,
+    _share_message,
+    accept_invitation_for_user,
+)
 from core.email import InviteEmailContent, _html_body, _plain_text, send_invite_email
 from core.models import Invitation, InvitationStatus
 from core.supabase_admin import generate_magic_link
@@ -34,11 +38,23 @@ def test_share_message_includes_prefix_note_and_link() -> None:
         personal="Thought of you",
         invite_url="https://nwf.example/invite/abc",
     )
-    assert msg.startswith(
-        "I'm loving NewsWithFriends, and I wanted to discuss this article "
-        "with you there:"
+    assert msg.startswith("Thought of you")
+    assert _DEFAULT_SHARE_PREFIX not in msg
+    assert msg.rstrip().endswith("https://nwf.example/invite/abc")
+
+
+def test_share_message_falls_back_to_default_prefix() -> None:
+    msg = _share_message(
+        inviter_name="Ada",
+        headline="Quiet week in AI",
+        take=None,
+        personal=None,
+        invite_url="https://nwf.example/invite/abc",
     )
-    assert "Thought of you" in msg
+    assert msg.startswith(
+        "I'm using NewsWithFriends to discuss articles privately with friends. "
+        "I'd like to invite you to my private discussion about this article."
+    )
     assert msg.rstrip().endswith("https://nwf.example/invite/abc")
 
 

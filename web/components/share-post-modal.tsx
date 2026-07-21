@@ -4,11 +4,11 @@ import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { InvitationCreateResult, UUID } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
-const SHARE_TEXT =
-  "I'm loving NewsWithFriends, and I wanted to discuss this article with you there:";
+const DEFAULT_SHARE_NOTE =
+  "I'm using NewsWithFriends to discuss articles privately with friends. I'd like to invite you to my private discussion about this article.";
 
 interface SharePostModalProps {
   postId: UUID;
@@ -31,6 +31,10 @@ function canUseWebShare(): boolean {
   );
 }
 
+function composeShareMessage(note: string, inviteUrl: string): string {
+  return `${note.trim()}\n${inviteUrl}`;
+}
+
 export function SharePostModal({
   postId,
   headline,
@@ -43,13 +47,16 @@ export function SharePostModal({
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const [becomeFriend, setBecomeFriend] = useState<boolean>(true);
+  const [shareNote, setShareNote] = useState<string>(DEFAULT_SHARE_NOTE);
   const [sharing, setSharing] = useState<boolean>(false);
   const [result, setResult] = useState<InvitationCreateResult | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [showEmail, setShowEmail] = useState<boolean>(false);
   const [email, setEmail] = useState<string>("");
-  const [emailMessage, setEmailMessage] = useState<string>("");
   const [sendingEmail, setSendingEmail] = useState<boolean>(false);
+
+  const trimmedNote: string = shareNote.trim();
+  const canShare: boolean = trimmedNote.length > 0;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -67,13 +74,14 @@ export function SharePostModal({
     return api.createInvitation({
       post_id: postId,
       become_friend: becomeFriend,
+      message: trimmedNote,
       email: null,
     });
   }
 
   async function share(): Promise<void> {
     if (!requireAuth("share this conversation")) return;
-    if (sharing) return;
+    if (!canShare || sharing) return;
     setSharing(true);
     setCopied(false);
     try {
@@ -85,11 +93,13 @@ export function SharePostModal({
         return;
       }
 
+      const text: string = composeShareMessage(trimmedNote, url);
+
       if (canUseWebShare()) {
         try {
           await navigator.share({
             title: headline,
-            text: SHARE_TEXT,
+            text: trimmedNote,
             url,
           });
           notify("Shared", "success");
@@ -103,7 +113,7 @@ export function SharePostModal({
         }
       }
 
-      await navigator.clipboard.writeText(created.share_message || url);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       notify("Message copied — paste it anywhere", "success");
     } catch (err) {
@@ -117,10 +127,10 @@ export function SharePostModal({
   }
 
   async function copyAgain(): Promise<void> {
-    if (!result?.share_message && !result?.invite_url) return;
+    if (!result?.invite_url || !canShare) return;
     try {
       await navigator.clipboard.writeText(
-        result.share_message || result.invite_url || "",
+        composeShareMessage(trimmedNote, result.invite_url),
       );
       setCopied(true);
       notify("Copied", "success");
@@ -129,17 +139,17 @@ export function SharePostModal({
     }
   }
 
-  async function sendEmail(e: React.FormEvent): Promise<void> {
+  async function sendEmail(e: FormEvent): Promise<void> {
     e.preventDefault();
     if (!requireAuth("invite friends")) return;
     const trimmed: string = email.trim();
-    if (!trimmed || sendingEmail) return;
+    if (!trimmed || !canShare || sendingEmail) return;
     setSendingEmail(true);
     try {
       const created = await api.createInvitation({
         email: trimmed,
         post_id: postId,
-        message: emailMessage.trim() || null,
+        message: trimmedNote,
         become_friend: becomeFriend,
       });
       notify(created.message, "success");
@@ -147,7 +157,6 @@ export function SharePostModal({
         setResult(created);
       }
       setEmail("");
-      setEmailMessage("");
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Failed to send invite",
@@ -213,9 +222,19 @@ export function SharePostModal({
           </div>
         </div>
 
-        <div className="mb-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-          “{SHARE_TEXT}”
-        </div>
+        <label className="mb-4 block">
+          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            What do you want to say?
+          </span>
+          <textarea
+            value={shareNote}
+            onChange={(e) => setShareNote(e.target.value)}
+            required
+            rows={3}
+            placeholder="Add a short note for your friend…"
+            className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
+          />
+        </label>
 
         <label className="mb-5 flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300">
           <input
@@ -232,7 +251,7 @@ export function SharePostModal({
         <button
           type="button"
           onClick={() => void share()}
-          disabled={sharing}
+          disabled={sharing || !canShare}
           className="w-full bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
           {sharing
@@ -248,7 +267,8 @@ export function SharePostModal({
             <button
               type="button"
               onClick={() => void copyAgain()}
-              className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400"
+              disabled={!canShare}
+              className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 disabled:opacity-40 dark:text-emerald-400"
             >
               {copied ? "Copied!" : "Copy again"}
             </button>
@@ -269,17 +289,12 @@ export function SharePostModal({
                 placeholder="friend@email.com"
                 className="w-full border-b border-zinc-300 bg-transparent px-0 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
               />
-              <textarea
-                value={emailMessage}
-                onChange={(e) => setEmailMessage(e.target.value)}
-                placeholder="Add a personal note (optional)"
-                rows={2}
-                className="w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-800 dark:focus:border-zinc-100"
-              />
               <div className="flex items-center gap-3">
                 <button
                   type="submit"
-                  disabled={sendingEmail || email.trim().length === 0}
+                  disabled={
+                    sendingEmail || email.trim().length === 0 || !canShare
+                  }
                   className="bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
                 >
                   {sendingEmail ? "Sending…" : "Send email"}
