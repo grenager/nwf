@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandMark } from "@/components/brand-mark";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -62,7 +63,10 @@ export default function UnsubscribePage() {
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-lg flex-col justify-center px-6 py-16">
-      <p className="font-serif text-2xl text-zinc-900">NewsWithFriends</p>
+      <p className="flex items-center gap-2 font-serif text-2xl text-zinc-900">
+        <BrandMark className="h-7 w-7 text-brand-600" />
+        NewsWithFriends
+      </p>
       <h1 className="mt-6 font-serif text-3xl text-zinc-900">
         {status === "loading"
           ? "Unsubscribing…"

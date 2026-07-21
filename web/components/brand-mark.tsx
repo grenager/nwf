@@ -1,0 +1,54 @@
+import Link from "next/link";
+import type { ReactElement } from "react";
+
+/**
+ * Coffee-mug logomark (Font Awesome Free mug-hot).
+ * https://fontawesome.com/license/free
+ */
+export function BrandMark({
+  className = "h-6 w-6",
+  title,
+}: {
+  className?: string;
+  /** When omitted, the mark is decorative (aria-hidden). */
+  title?: string;
+}): ReactElement {
+  const labeled: boolean = title != null && title.length > 0;
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 640 640"
+      className={`shrink-0 fill-current ${className}`}
+      aria-hidden={labeled ? undefined : true}
+      role={labeled ? "img" : undefined}
+    >
+      {labeled ? <title>{title}</title> : null}
+      {/* Mug shifted up 96 so the cup body is centered on the canvas midline. */}
+      <g transform="translate(0, -96)">
+        <path d="M128 256C110.3 256 96 270.3 96 288L96 480C96 533 139 576 192 576L384 576C425.8 576 461.4 549.3 474.5 512L480 512C550.7 512 608 454.7 608 384C608 313.3 550.7 256 480 256L128 256zM480 448L480 320C515.3 320 544 348.7 544 384C544 419.3 515.3 448 480 448z" />
+        {/* Steam scaled to 70% height, anchored at its base (y=208). */}
+        <g transform="translate(0, 62.4) scale(1, 0.7)">
+          <path d="M184 48C170.7 48 160 58.7 160 72C160 110.9 183.4 131.4 199.1 145.1L200.2 146.1C216.5 160.4 224 167.9 224 184C224 197.3 234.7 208 248 208C261.3 208 272 197.3 272 184C272 145.1 248.6 124.6 232.9 110.9L231.8 109.9C215.5 95.7 208 88.1 208 72C208 58.7 197.3 48 184 48zM320 72C320 58.7 309.3 48 296 48C282.7 48 272 58.7 272 72C272 110.9 295.4 131.4 311.1 145.1L312.2 146.1C328.5 160.4 336 167.9 336 184C336 197.3 346.7 208 360 208C373.3 208 384 197.3 384 184C384 145.1 360.6 124.6 344.9 110.9L343.8 109.9C327.5 95.7 320 88.1 320 72z" />
+        </g>
+      </g>
+      {/* Saucer: flush with the handle's right edge, centered on the cup body. */}
+      <rect x="0" y="522" width="576" height="64" rx="32" />
+    </svg>
+  );
+}
+
+/** Home link with logomark + wordmark. */
+export function BrandLink({
+  className = "font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50",
+  markClassName = "h-6 w-6",
+}: {
+  className?: string;
+  markClassName?: string;
+}): ReactElement {
+  return (
+    <Link href="/" className={`inline-flex items-center gap-2 ${className}`}>
+      <BrandMark className={markClassName} />
+      <span>NewsWithFriends</span>
+    </Link>
+  );
+}

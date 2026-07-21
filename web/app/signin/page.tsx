@@ -1,8 +1,8 @@
 "use client";
 
+import { BrandLink } from "@/components/brand-mark";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -58,9 +58,10 @@ function SignInForm() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <Link href="/" className="mb-8 text-center text-2xl font-bold text-brand-600">
-        NewsWithFriends
-      </Link>
+      <BrandLink
+        className="mb-8 justify-center text-2xl font-bold text-brand-600"
+        markClassName="h-7 w-7"
+      />
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h1 className="text-xl font-bold">
           {isInvite ? "Join your friend's conversation" : "Sign in"}
