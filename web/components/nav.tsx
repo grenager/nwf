@@ -4,12 +4,10 @@ import { AddStoryModal } from "@/components/add-story-modal";
 import { BrandLink } from "@/components/brand-mark";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
-import { FriendProfileModal } from "@/components/friend-profile-modal";
-import { useToast } from "@/components/toast";
 import { api } from "@/lib/api";
 import type { Profile } from "@/lib/types";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 const BADGE_POLL_MS: number = 60_000;
@@ -212,12 +210,9 @@ function IconMe({
 
 export function Nav() {
   const pathname: string = usePathname();
-  const router = useRouter();
-  const { session, user, signOut } = useAuth();
+  const { session, user } = useAuth();
   const { requireAuth } = useAuthGate();
-  const { notify } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [profileOpen, setProfileOpen] = useState<boolean>(false);
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [incomingCount, setIncomingCount] = useState<number>(0);
   const [convosUnread, setConvosUnread] = useState<number>(0);
@@ -284,20 +279,9 @@ export function Nav() {
     "You";
   const avatarInitial: string = (displayName.charAt(0) || "?").toUpperCase();
 
-  async function handleSignOut(): Promise<void> {
-    await signOut();
-    notify("Signed out", "info");
-    router.push("/");
-  }
-
   function openAddStory(): void {
     if (!requireAuth("add stories")) return;
     setAddOpen(true);
-  }
-
-  function openProfile(): void {
-    if (!requireAuth("edit your profile")) return;
-    setProfileOpen(true);
   }
 
   function linkClass(active: boolean): string {
@@ -374,8 +358,8 @@ export function Nav() {
                     <path d="m14 14 4 4" strokeLinecap="round" />
                   </svg>
                 </Link>
-                <button
-                  onClick={openProfile}
+                <Link
+                  href="/profile"
                   aria-label="Open your profile"
                   title={displayName}
                   className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[9999px] border border-slate-300 bg-slate-100 text-sm font-semibold text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
@@ -390,7 +374,7 @@ export function Nav() {
                   ) : (
                     avatarInitial
                   )}
-                </button>
+                </Link>
               </>
             )}
           </div>
@@ -514,10 +498,13 @@ export function Nav() {
               Sign in
             </Link>
           ) : (
-            <button
-              type="button"
-              onClick={openProfile}
-              className="flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium text-zinc-500"
+            <Link
+              href="/profile"
+              className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
+                tabActive("/profile")
+                  ? "font-semibold text-zinc-900 dark:text-zinc-50"
+                  : "font-medium text-zinc-500"
+              }`}
             >
               <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-[9999px] bg-zinc-200 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                 {profile?.image_url ? (
@@ -532,7 +519,7 @@ export function Nav() {
                 )}
               </span>
               Me
-            </button>
+            </Link>
           )}
         </div>
       </nav>
@@ -544,17 +531,6 @@ export function Nav() {
             window.dispatchEvent(
               new CustomEvent("nwf:post-created", { detail: post }),
             );
-          }}
-        />
-      ) : null}
-
-      {profileOpen && profile ? (
-        <FriendProfileModal
-          friendId={profile.id}
-          onClose={() => setProfileOpen(false)}
-          onSignOut={() => {
-            setProfileOpen(false);
-            void handleSignOut();
           }}
         />
       ) : null}
