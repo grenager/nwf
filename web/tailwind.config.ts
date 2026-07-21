@@ -33,13 +33,13 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // "brand" remapped to a neutral grayscale ramp (near-black accents).
+        // Warm coffee-brown accent: newsy + friendly, echoes the mug logomark.
         brand: {
-          50: "#f5f5f5",
-          100: "#e5e5e5",
-          500: "#404040",
-          600: "#171717",
-          700: "#000000",
+          50: "#f7f3ef",
+          100: "#ece1d6",
+          500: "#8a6a4f",
+          600: "#6f4e37",
+          700: "#5a3e2b",
         },
       },
       fontFamily: {

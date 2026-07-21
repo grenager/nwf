@@ -2,6 +2,7 @@
 
 import { ArticleCard } from "@/components/article-card";
 import { useAuth } from "@/components/auth-provider";
+import { BrandLink } from "@/components/brand-mark";
 import { useAuthGate } from "@/components/auth-gate";
 import { MentionText } from "@/components/mention-text";
 import { ReaderBody } from "@/components/reader-body";
@@ -46,12 +47,7 @@ function InviteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link
-          href="/"
-          className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
-        >
-          NewsWithFriends
-        </Link>
+        <BrandLink markClassName="h-6 w-6 text-brand-600" />
         <Link
           href="/"
           className="text-sm font-medium text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"

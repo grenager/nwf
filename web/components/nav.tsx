@@ -1,6 +1,7 @@
 "use client";
 
 import { AddStoryModal } from "@/components/add-story-modal";
+import { BrandLink } from "@/components/brand-mark";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
@@ -323,12 +324,7 @@ export function Nav() {
     <>
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <Link
-            href="/"
-            className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
-          >
-            NewsWithFriends
-          </Link>
+          <BrandLink markClassName="h-6 w-6 text-brand-600" />
 
           <nav className="hidden items-center gap-1 sm:flex">
             {links.map((link) => (
