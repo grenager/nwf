@@ -61,6 +61,14 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* Reply composer: grow with content, cap at ~6 lines, then scroll.
+   !important beats react-mentions' inline overflow:hidden on multiLine. */
+.nwf-mentions--grow .nwf-mentions__input,
+.nwf-mentions--grow .nwf-mentions__highlighter {
+  max-height: 9rem;
+  overflow-y: auto !important;
+}
+
 .nwf-mentions--singleLine .nwf-mentions__input,
 .nwf-mentions--singleLine .nwf-mentions__highlighter {
   padding: 0.375rem 0.875rem;

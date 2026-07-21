@@ -67,11 +67,15 @@ interface InviteLandingClientProps {
   token: string;
 }
 
+/** Cap reply textarea growth at ~6 lines (1.375rem line-height × 6 ≈ 9rem). */
+const REPLY_MAX_HEIGHT_PX: number = 144;
+
 export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const { session, user } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const autoAcceptStarted = useRef<boolean>(false);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [post, setPost] = useState<Post | null>(null);
@@ -204,6 +208,9 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         reply_count: post.reply_count + 1,
       });
       setDraft("");
+      if (composerRef.current !== null) {
+        composerRef.current.style.height = "auto";
+      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to reply", "error");
     } finally {
@@ -436,10 +443,17 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                   />
                 )}
               </div>
-              <div className="flex gap-2">
-                <input
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={composerRef}
+                  rows={1}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => {
+                    const el: HTMLTextAreaElement = e.target;
+                    setDraft(el.value);
+                    el.style.height = "auto";
+                    el.style.height = `${Math.min(el.scrollHeight, REPLY_MAX_HEIGHT_PX)}px`;
+                  }}
                   onFocus={() => {
                     if (!requireAuth("reply")) return;
                   }}
@@ -462,7 +476,8 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                         : "Reply…"
                   }
                   readOnly={isGuest || !canParticipate}
-                  className="min-w-0 flex-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-base outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 sm:text-sm"
+                  className="min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-zinc-300 bg-white px-3 py-1.5 text-base outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 sm:text-sm"
+                  style={{ maxHeight: REPLY_MAX_HEIGHT_PX }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

@@ -93,7 +93,7 @@ export function PostThread({
   const [seenBoundary, setSeenBoundary] = useState<string | null>(
     post.last_seen_at ?? null,
   );
-  const composerRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const markedSeenRef = useRef<boolean>(false);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
@@ -590,16 +590,16 @@ export function PostThread({
                   </button>
                 </div>
               ) : null}
-              <div className="flex gap-2">
+              <div className="flex items-end gap-2">
                 <div
-                  className="min-w-0 flex-1"
+                  className="nwf-mentions--grow min-w-0 flex-1"
                   onFocus={() => setComposerActive(true)}
                 >
                   <MentionInput
                     inputRef={composerRef}
                     value={draft}
                     onChange={setDraft}
-                    singleLine
+                    rows={1}
                     placeholder={
                       replyTo
                         ? `Reply to ${replyTo.author_name}…`
