@@ -192,6 +192,6 @@ async def notify_comment_activity(
 
 # Re-export for callers / tests
 __all__ = [
-    "notify_friends_of_new_post",
     "notify_comment_activity",
+    "notify_friends_of_new_post",
 ]
