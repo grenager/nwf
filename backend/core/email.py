@@ -1,4 +1,4 @@
-"""Transactional email via Resend (invite + digest emails)."""
+"""Transactional email via Resend (invite + digest + activity emails)."""
 
 from __future__ import annotations
 
@@ -573,6 +573,223 @@ async def send_friend_notice_email(
 
     log.info(
         "email.friend_notice.sent",
+        kind=content.kind,
+        to=content.to_email,
+    )
+    return True
+
+
+# --- Instant activity (new post / comment / reply) ------------------------
+
+
+@dataclass(frozen=True)
+class ActivityEmailContent:
+    """Immediate email for a friend post, comment, or reply."""
+
+    to_email: str
+    recipient_first: str | None
+    actor_name: str
+    actor_image_url: str | None
+    kind: str  # "new_post" | "comment" | "reply"
+    headline: str | None
+    source_label: str | None
+    story_image_url: str | None
+    excerpt: str | None
+    action_url: str
+    unsubscribe_url: str
+
+
+def _activity_subject(content: ActivityEmailContent) -> str:
+    if content.kind == "comment":
+        return f"{content.actor_name} commented on your article"
+    if content.kind == "reply":
+        return f"{content.actor_name} responded to your comment"
+    return f"{content.actor_name} posted a new article"
+
+
+def _activity_lead(content: ActivityEmailContent) -> tuple[str, str]:
+    """Return (plain lead sentence, CTA button label)."""
+    if content.kind == "comment":
+        return (
+            f"{content.actor_name} commented on your article on NewsWithFriends.",
+            "View conversation",
+        )
+    if content.kind == "reply":
+        return (
+            f"{content.actor_name} responded to your comment on NewsWithFriends.",
+            "View conversation",
+        )
+    return (
+        f"{content.actor_name} posted a new article on NewsWithFriends.",
+        "View article",
+    )
+
+
+def _activity_plain(content: ActivityEmailContent) -> str:
+    lead, cta = _activity_lead(content)
+    lines: list[str] = [lead, ""]
+    if content.headline:
+        lines.append(content.headline)
+        if content.source_label:
+            lines.append(f"via {content.source_label}")
+        lines.append("")
+    if content.excerpt:
+        lines.append(f'{content.actor_name}: "{content.excerpt}"')
+        lines.append("")
+    lines.append(f"{cta}: {content.action_url}")
+    lines.append("")
+    lines.append(f"Unsubscribe: {content.unsubscribe_url}")
+    return "\n".join(lines)
+
+
+def _activity_article_card_html(content: ActivityEmailContent) -> str:
+    """Article tile matching digest styling."""
+    if not (content.headline or content.story_image_url):
+        return ""
+    image_block: str = ""
+    if content.story_image_url:
+        img: str = html.escape(content.story_image_url, quote=True)
+        image_block = (
+            f'<img src="{img}" alt="" width="100%" '
+            f'style="width:100%;max-height:180px;object-fit:cover;display:block;'
+            f'background:#f4f4f5;" />'
+        )
+    source_block: str = ""
+    if content.source_label:
+        source: str = html.escape(content.source_label)
+        source_block = (
+            f'<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+            f'sans-serif;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;'
+            f'color:#a1a1aa;margin:0 0 4px;">{source}</div>'
+        )
+    headline_block: str = ""
+    if content.headline:
+        headline: str = html.escape(content.headline)
+        headline_block = (
+            f'<div style="font-family:Georgia,serif;font-size:16px;font-weight:600;'
+            f'color:#18181b;line-height:1.3;">{headline}</div>'
+        )
+    return (
+        f'<div style="border:1px solid #e4e4e7;border-radius:8px;overflow:hidden;'
+        f'background:#fff;margin:0 0 16px;">'
+        f"{image_block}"
+        f'<div style="padding:12px 14px;">{source_block}{headline_block}</div>'
+        f"</div>"
+    )
+
+
+def _activity_html(content: ActivityEmailContent) -> str:
+    actor: str = html.escape(content.actor_name)
+    url: str = html.escape(content.action_url, quote=True)
+    unsub: str = html.escape(content.unsubscribe_url, quote=True)
+    _, button = _activity_lead(content)
+    if content.kind == "comment":
+        lead = (
+            f"<strong>{actor}</strong> commented on your article on NewsWithFriends."
+        )
+    elif content.kind == "reply":
+        lead = (
+            f"<strong>{actor}</strong> responded to your comment on NewsWithFriends."
+        )
+    else:
+        lead = f"<strong>{actor}</strong> posted a new article on NewsWithFriends."
+
+    avatar_block: str = ""
+    if content.actor_image_url:
+        img: str = html.escape(content.actor_image_url, quote=True)
+        avatar_block = (
+            f'<img src="{img}" alt="" width="56" height="56" '
+            f'style="width:56px;height:56px;border-radius:999px;object-fit:cover;'
+            f'display:block;margin:0 0 16px;background:#e4e4e7;" />'
+        )
+
+    excerpt_block: str = ""
+    if content.excerpt:
+        excerpt: str = html.escape(content.excerpt)
+        excerpt_block = (
+            f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+            f'sans-serif;font-size:15px;line-height:1.5;color:#3f3f46;margin:0 0 16px;'
+            f'padding:12px 14px;background:#fafafa;border-left:3px solid #18181b;">'
+            f'<strong>{actor}</strong>: “{excerpt}”</p>'
+        )
+
+    return (
+        '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
+        f"{avatar_block}"
+        f'<p style="font-family:Georgia,serif;font-size:18px;line-height:1.5;'
+        f'color:#18181b;margin:0 0 16px;">{lead}</p>'
+        f"{_activity_article_card_html(content)}"
+        f"{excerpt_block}"
+        f'<p style="margin:24px 0 8px;">'
+        f'<a href="{url}" style="display:inline-block;background:#18181b;'
+        f'color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+        f'sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;'
+        f'text-transform:uppercase;text-decoration:none;padding:12px 20px;'
+        f'border-radius:4px;">{html.escape(button)}</a></p>'
+        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+        f'sans-serif;font-size:12px;color:#a1a1aa;margin:16px 0 0;">'
+        f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
+        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+        f'sans-serif;font-size:12px;color:#a1a1aa;margin:20px 0 0;">'
+        f'<a href="{unsub}" style="color:#71717a;">Unsubscribe</a></p>'
+        "</div>"
+    )
+
+
+async def send_activity_email(
+    content: ActivityEmailContent,
+    *,
+    settings: Settings | None = None,
+) -> bool:
+    """Send an instant activity email via Resend. Returns True on success.
+
+    No-ops (returns False) when ``resend_api_key`` is unset.
+    """
+    cfg: Settings = settings or get_settings()
+    if not cfg.resend_api_key:
+        log.info(
+            "email.activity.skip",
+            reason="no_resend_api_key",
+            kind=content.kind,
+            to=content.to_email,
+        )
+        return False
+
+    payload: dict[str, object] = {
+        "from": cfg.email_from,
+        "to": [content.to_email],
+        "subject": _activity_subject(content),
+        "html": _activity_html(content),
+        "text": _activity_plain(content),
+        "headers": {
+            "List-Unsubscribe": f"<{content.unsubscribe_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+    }
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {cfg.resend_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        log.warning(
+            "email.activity.failed",
+            error=str(exc),
+            kind=content.kind,
+            to=content.to_email,
+        )
+        return False
+
+    log.info(
+        "email.activity.sent",
         kind=content.kind,
         to=content.to_email,
     )

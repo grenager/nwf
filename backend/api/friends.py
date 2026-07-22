@@ -7,7 +7,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import (
@@ -24,6 +25,72 @@ from core.models import (
 )
 
 CURATED_SOURCE_LIMIT: int = 40
+
+
+@dataclass(frozen=True)
+class ActivityEmailRecipient:
+    """A user eligible to receive an instant activity email."""
+
+    user_id: uuid.UUID
+    email: str
+    first: str | None
+    unsubscribe_token: uuid.UUID
+
+
+async def email_for_user(
+    session: AsyncSession, user_id: uuid.UUID
+) -> str | None:
+    """Look up auth.users.email for a profile id."""
+    try:
+        row = (
+            await session.execute(
+                text("select email from auth.users where id = :id"),
+                {"id": user_id},
+            )
+        ).first()
+    except SQLAlchemyError:
+        return None
+    if row is None or not row[0]:
+        return None
+    return str(row[0]).strip().lower()
+
+
+async def load_activity_email_recipients(
+    session: AsyncSession,
+    user_ids: Iterable[uuid.UUID],
+) -> list[ActivityEmailRecipient]:
+    """Load email + profile fields for users who can receive instant emails.
+
+    Skips ids with no email and profiles with ``instant_email_opt_out``.
+    """
+    ids: list[uuid.UUID] = list({uid for uid in user_ids})
+    if not ids:
+        return []
+
+    profiles = list(
+        (
+            await session.scalars(select(Profile).where(Profile.id.in_(ids)))
+        ).all()
+    )
+    by_id: dict[uuid.UUID, Profile] = {p.id: p for p in profiles}
+
+    recipients: list[ActivityEmailRecipient] = []
+    for user_id in ids:
+        profile = by_id.get(user_id)
+        if profile is None or profile.instant_email_opt_out:
+            continue
+        email = await email_for_user(session, user_id)
+        if not email:
+            continue
+        recipients.append(
+            ActivityEmailRecipient(
+                user_id=user_id,
+                email=email,
+                first=profile.first,
+                unsubscribe_token=profile.unsubscribe_token,
+            )
+        )
+    return recipients
 
 
 @dataclass

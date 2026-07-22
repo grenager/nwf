@@ -55,6 +55,7 @@ export function FriendProfileModal({
   const [profile, setProfile] = useState<FriendProfile | null>(null);
   const [me, setMe] = useState<Profile | null>(null);
   const [savingDigest, setSavingDigest] = useState<boolean>(false);
+  const [savingInstant, setSavingInstant] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [editing, setEditing] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -141,6 +142,33 @@ export function FriendProfileModal({
       );
     } finally {
       setSavingDigest(false);
+    }
+  }
+
+  async function toggleInstantEmails(): Promise<void> {
+    if (!me) return;
+    const next: boolean = !me.instant_email_opt_out;
+    setSavingInstant(true);
+    setMe({ ...me, instant_email_opt_out: next });
+    try {
+      const updated: Profile = await api.updatePreferences({
+        instant_email_opt_out: next,
+      });
+      setMe(updated);
+      notify(
+        next
+          ? "Instant activity emails turned off"
+          : "Instant activity emails turned on",
+        "success",
+      );
+    } catch (err) {
+      setMe({ ...me, instant_email_opt_out: !next });
+      notify(
+        err instanceof ApiError ? err.message : "Could not update preference",
+        "error",
+      );
+    } finally {
+      setSavingInstant(false);
     }
   }
 
@@ -319,6 +347,38 @@ export function FriendProfileModal({
                 <span
                   className={`inline-block h-5 w-5 transform rounded-[9999px] bg-white shadow transition-transform ${
                     me.digest_opt_out ? "translate-x-0.5" : "translate-x-[22px]"
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  Instant activity emails
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Get an email right away when a friend posts, comments on your
+                  article, or replies to you.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!me.instant_email_opt_out}
+                aria-label="Toggle instant activity emails"
+                disabled={savingInstant}
+                onClick={() => void toggleInstantEmails()}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-[9999px] transition-colors disabled:opacity-60 ${
+                  me.instant_email_opt_out
+                    ? "bg-slate-300 dark:bg-slate-700"
+                    : "bg-emerald-500"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-[9999px] bg-white shadow transition-transform ${
+                    me.instant_email_opt_out
+                      ? "translate-x-0.5"
+                      : "translate-x-[22px]"
                   }`}
                 />
               </button>
