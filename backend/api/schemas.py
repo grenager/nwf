@@ -27,6 +27,7 @@ class ProfileOut(ORMModel):
     dense_mode: bool
     dark_mode: bool
     digest_opt_out: bool = False
+    instant_email_opt_out: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -39,6 +40,7 @@ class PreferencesUpdate(BaseModel):
     dense_mode: bool | None = None
     dark_mode: bool | None = None
     digest_opt_out: bool | None = None
+    instant_email_opt_out: bool | None = None
 
 
 # --- Sources --------------------------------------------------------------

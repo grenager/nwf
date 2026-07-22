@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import Row, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from api.activity_mail import notify_comment_activity
 from api.deps import CurrentUser, SessionDep
 from api.friends import (
     accepted_friend_ids,
@@ -41,6 +42,7 @@ from core.models import (
     Post,
     PostParticipant,
     Profile,
+    Story,
 )
 from core.notifications import create_notification, delete_reaction_notification
 
@@ -276,6 +278,21 @@ async def create_comment(
     post.last_activity_at = datetime.now(UTC)
     await session.refresh(comment)
     author = await session.get(Profile, user.id)
+    story = await session.get(Story, post.story_id)
+    parent_author_id: uuid.UUID | None = None
+    if parent_id is not None:
+        parent = await session.get(Comment, parent_id)
+        if parent is not None:
+            parent_author_id = parent.user_id
+    if author is not None and story is not None:
+        await notify_comment_activity(
+            session,
+            post=post,
+            story=story,
+            comment_text=comment.text,
+            commenter=author,
+            parent_author_id=parent_author_id,
+        )
     rating = await _single_rating(session, user.id, comment.story_id)
     return _to_out(comment, author, rating)
 

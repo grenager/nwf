@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from api.activity_mail import notify_friends_of_new_post
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
     accepted_friend_ids,
@@ -630,6 +631,11 @@ async def create_post(
     )
     await session.execute(read_stmt)
     await session.refresh(post)
+    author = await session.get(Profile, user.id)
+    if author is not None:
+        await notify_friends_of_new_post(
+            session, post=post, story=story, author=author
+        )
     return await serialize_post(session, post, viewer_id=user.id)
 
 

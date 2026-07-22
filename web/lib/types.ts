@@ -12,6 +12,7 @@ export interface Profile {
   dense_mode: boolean;
   dark_mode: boolean;
   digest_opt_out: boolean;
+  instant_email_opt_out: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +25,7 @@ export interface PreferencesUpdate {
   dense_mode?: boolean | null;
   dark_mode?: boolean | null;
   digest_opt_out?: boolean | null;
+  instant_email_opt_out?: boolean | null;
 }
 
 export type StoryKind = "news" | "analysis";

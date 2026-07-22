@@ -171,7 +171,7 @@ start command to `nwf-api`); scraper and digest override their start commands to
 `SUPABASE_URL`, `SCRAPE_INTERVAL_SECONDS`, `SCRAPE_BATCH_SIZE`, `LOG_JSON=true`.
 - `nwf-digest` — root `backend`, start `nwf-digest`. Env: `DATABASE_URL`,
 `SUPABASE_URL`, `APP_BASE_URL=https://www.newswithfriends.org`,
-`RESEND_API_KEY`, `EMAIL_FROM`, `DIGEST_SEND_HOUR_PT=8`, `LOG_JSON=true`.
+`RESEND_API_KEY`, `EMAIL_FROM`, `DIGEST_SEND_HOUR_PT=4`, `LOG_JSON=true`.
 - `nwf-web` — root `web` (Nixpacks/`npm run build` → `npm run start`).
 Attach `newswithfriends.org` + `www`. Env:
   - `NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co`

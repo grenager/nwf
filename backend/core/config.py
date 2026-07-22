@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # --- Daily digest -----------------------------------------------------
     digest_enabled: bool = Field(default=True)
     # Hour of day in America/Los_Angeles to send digests (0-23).
-    digest_send_hour_pt: int = Field(default=8)
+    digest_send_hour_pt: int = Field(default=4)
     # Max age of activity considered when building a digest.
     digest_lookback_days: int = Field(default=2)
     digest_concurrency: int = Field(default=5)

@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, SessionDep
-from api.friends import accepted_friend_ids, display_name
+from api.friends import accepted_friend_ids, display_name, email_for_user
 from api.schemas import (
     ConnectionCreate,
     ConnectionOut,
@@ -52,24 +52,6 @@ _ONLINE_WINDOW = timedelta(minutes=5)
 _RECOMMENDED_LIMIT = 12
 
 
-async def _email_for_user(
-    session: AsyncSession, user_id: uuid.UUID
-) -> str | None:
-    """Look up auth.users.email for a profile id."""
-    try:
-        row = (
-            await session.execute(
-                text("select email from auth.users where id = :id"),
-                {"id": user_id},
-            )
-        ).first()
-    except SQLAlchemyError:
-        return None
-    if row is None or not row[0]:
-        return None
-    return str(row[0]).strip().lower()
-
-
 async def _notify_friend_event(
     session: AsyncSession,
     *,
@@ -99,7 +81,7 @@ async def _notify_friend_event(
                 error=str(exc),
             )
 
-    email: str | None = await _email_for_user(session, recipient_id)
+    email: str | None = await email_for_user(session, recipient_id)
     if not email:
         log.info(
             "connections.friend_email.skip",
