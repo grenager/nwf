@@ -29,7 +29,7 @@ export interface PreferencesUpdate {
 }
 
 export type StoryKind = "news" | "analysis";
-export type PostVisibility = "private" | "public";
+export type PostVisibility = "private";
 
 export interface FriendStar {
   user_id: UUID;

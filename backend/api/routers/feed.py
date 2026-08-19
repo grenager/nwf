@@ -439,16 +439,17 @@ async def get_feed(
     friends: list[uuid.UUID] = []
 
     if viewer_id is None:
-        # Public payload — let the edge cache serve repeat guest loads.
+        # Guests never see posts; serve an empty payload for edge caching.
         response.headers["Cache-Control"] = _GUEST_CACHE_CONTROL
-    else:
-        new_since = await _touch_last_opened(session, viewer_id)
-        friends = await accepted_friend_ids(session, viewer_id)
+        return await _empty_feed(session, new_since=None)
+
+    new_since = await _touch_last_opened(session, viewer_id)
+    friends = await accepted_friend_ids(session, viewer_id)
 
     post_ids = await visible_post_ids_for_viewer(
         session,
         viewer_id,
-        friend_ids=friends if viewer_id is not None else None,
+        friend_ids=friends,
         limit=limit,
         since_days=settings.inbox_candidate_days,
         # A quiet couple of weeks should not leave the feed nearly empty; reach

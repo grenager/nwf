@@ -301,7 +301,7 @@ class AttachmentCreate(BaseModel):
 
 
 class PostCreate(BaseModel):
-    """Share a story by id or URL, with optional take + visibility.
+    """Share a story by id or URL, with optional take.
 
     When the client has already resolved a link preview (``POST /posts/preview``),
     pass the metadata fields so create skips a second scrape.
@@ -313,7 +313,6 @@ class PostCreate(BaseModel):
     # Article text the author pasted from a page they can read; shown as a
     # teaser + reader view. The author chooses to share their own copy.
     shared_text: str | None = Field(default=None, max_length=100_000)
-    visibility: PostVisibility = PostVisibility.private
     kind: StoryKind = StoryKind.news
     title: str | None = None
     # Optional preview metadata — skips re-enrichment on create
@@ -347,11 +346,10 @@ class PreviewOut(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    """Edit a post's take, shared reader text and/or visibility (author only)."""
+    """Edit a post's take or shared reader text (author only)."""
 
     take: str | None = Field(default=None, max_length=2_000)
     shared_text: str | None = Field(default=None, max_length=100_000)
-    visibility: PostVisibility | None = None
 
 
 class PostOut(ORMModel):

@@ -15,7 +15,7 @@ import { draftScopeKey } from "@/lib/drafts";
 import { commentWasEdited } from "@/lib/comments";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
-import type { Comment, Post, Profile, PostVisibility, UUID } from "@/lib/types";
+import type { Comment, Post, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -34,15 +34,13 @@ function profileName(me: Profile | null): string {
 
 /**
  * Names the thread above the comment list so the audience model reads as
- * private-by-default rather than a public comment section. Public threads are
- * left unqualified: calling them out reads as a warning rather than a label.
+ * private-by-default rather than a public comment section.
  */
 function conversationTitle(post: Post, isAuthor: boolean): string {
-  const scope: string = post.visibility === "public" ? "" : "private ";
-  if (isAuthor) return `Your ${scope}conversation about this article`;
+  if (isAuthor) return "Your private conversation about this article";
   const firstName: string = post.author_name.trim().split(/\s+/)[0] ?? "";
   const owner: string = firstName === "" ? "This" : `${firstName}'s`;
-  return `${owner} ${scope}conversation about this article`;
+  return `${owner} private conversation about this article`;
 }
 
 export function PostThread({
@@ -291,21 +289,6 @@ export function PostThread({
     }
   }
 
-  async function toggleVisibility(): Promise<void> {
-    const next: PostVisibility =
-      post.visibility === "public" ? "private" : "public";
-    setMenuOpen(false);
-    try {
-      const updated = await api.updatePost(post.id, { visibility: next });
-      onPostChange(updated);
-    } catch (err) {
-      notify(
-        err instanceof ApiError ? err.message : "Failed to update visibility",
-        "error",
-      );
-    }
-  }
-
   function replaceComment(updated: Comment): void {
     onPostChange({
       ...post,
@@ -453,15 +436,6 @@ export function PostThread({
                           className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         >
                           Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void toggleVisibility()}
-                          className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                        >
-                          {post.visibility === "public"
-                            ? "Make private"
-                            : "Make public"}
                         </button>
                         <button
                           type="button"

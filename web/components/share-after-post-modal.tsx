@@ -51,9 +51,6 @@ function audienceNoun(audience: PostAudience): string {
 function headlineFor(audience: PostAudience | null, kind: PublishedKind): string {
   const noun: string = kind === "post" ? "post" : "comment";
   if (audience === null) return `Your ${noun} is live`;
-  if (audience.visibility === "public") {
-    return `Your ${noun} is public — anyone on NewsWithFriends can see it`;
-  }
   const count: number = audience.people.length;
   if (count === 0) {
     return `Only you can see your ${noun} so far`;

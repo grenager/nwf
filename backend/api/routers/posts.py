@@ -65,6 +65,7 @@ from core.models import (
     PostMention,
     PostParticipant,
     PostRead,
+    PostVisibility,
     Profile,
     Source,
     SourceKind,
@@ -606,7 +607,7 @@ async def create_post(
         author_id=user.id,
         take=(payload.take or "").strip() or None,
         shared_text=(payload.shared_text or "").strip() or None,
-        visibility=payload.visibility,
+        visibility=PostVisibility.private,
         last_activity_at=datetime.now(UTC),
     )
     session.add(post)
@@ -793,8 +794,6 @@ async def update_post(
         await _sync_post_mentions(session, post)
     if "shared_text" in fields:
         post.shared_text = (payload.shared_text or "").strip() or None
-    if "visibility" in fields and payload.visibility is not None:
-        post.visibility = payload.visibility
     post.updated_at = datetime.now(UTC)
     await session.flush()
     await session.refresh(post)

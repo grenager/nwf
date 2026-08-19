@@ -41,9 +41,6 @@ function groupPeople(
 }
 
 function summaryLine(audience: PostAudience): string {
-  if (audience.visibility === "public") {
-    return "This is a public conversation, so your comment can be seen by anyone on NewsWithFriends.";
-  }
   if (audience.viewer_is_author) {
     return "Your comment will be viewable by all of your friends.";
   }

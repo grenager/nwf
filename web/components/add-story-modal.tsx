@@ -2,17 +2,20 @@
 
 import { useAuthGate } from "@/components/auth-gate";
 import { MentionInput } from "@/components/mention-input";
+import { SourceLogo } from "@/components/source-logo";
 import { StarPicker } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
-import type { Post, PostVisibility, PreviewCard } from "@/lib/types";
+import type { Post, PreviewCard, Story } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface AddStoryModalProps {
   onClose: () => void;
   onAdded?: (post: Post) => void;
+  /** When set, skip URL entry and post from this existing story. */
+  story?: Story | null;
 }
 
 const PREVIEW_DEBOUNCE_MS: number = 500;
@@ -34,13 +37,13 @@ function hostFromUrl(url: string): string {
   }
 }
 
-export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
+export function AddStoryModal({ onClose, onAdded, story }: AddStoryModalProps) {
   const { notify } = useToast();
   const { requireAuth } = useAuthGate();
-  const [url, setUrl] = useState<string>("");
+  const fromStory: boolean = story !== null && story !== undefined;
+  const [url, setUrl] = useState<string>(story?.article_url ?? "");
   const [take, setTake] = useState<string>("");
   const [sharedText, setSharedText] = useState<string>("");
-  const [visibility, setVisibility] = useState<PostVisibility>("private");
   const [rating, setRating] = useState<number | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [preview, setPreview] = useState<PreviewCard | null>(null);
@@ -61,6 +64,8 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   }, [onClose]);
 
   useEffect(() => {
+    if (fromStory) return;
+
     const trimmed: string = url.trim();
     if (!trimmed || !isHttpUrl(trimmed)) {
       previewRequestId.current += 1;
@@ -73,8 +78,6 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
     const requestId: number = ++previewRequestId.current;
     setPreviewLoading(true);
     setPreviewError(null);
-    // Keep the previous preview visible while a re-fetch runs so the panel
-    // doesn't flash empty.
     const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
@@ -104,28 +107,36 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
     return () => {
       clearTimeout(timer);
     };
-  }, [url]);
+  }, [url, fromStory]);
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!requireAuth("post")) return;
-    const trimmed: string = url.trim();
-    if (!trimmed || preview === null || previewLoading) return;
     setSaving(true);
     try {
-      const post: Post = await api.createPost({
-        url: trimmed,
-        take: take.trim() || null,
-        shared_text: sharedText.trim() || null,
-        kind: "news",
-        visibility,
-        canonical_url: preview.canonical_url,
-        full_headline: preview.full_headline,
-        summary: preview.summary,
-        image_url: preview.image_url,
-        publisher: preview.publisher,
-        platform: preview.platform,
-      });
+      let post: Post;
+      if (fromStory && story) {
+        post = await api.createPost({
+          story_id: story.id,
+          take: take.trim() || null,
+          shared_text: sharedText.trim() || null,
+        });
+      } else {
+        const trimmed: string = url.trim();
+        if (!trimmed || preview === null || previewLoading) return;
+        post = await api.createPost({
+          url: trimmed,
+          take: take.trim() || null,
+          shared_text: sharedText.trim() || null,
+          kind: "news",
+          canonical_url: preview.canonical_url,
+          full_headline: preview.full_headline,
+          summary: preview.summary,
+          image_url: preview.image_url,
+          publisher: preview.publisher,
+          platform: preview.platform,
+        });
+      }
       if (rating !== null) {
         await api
           .setRating(post.story_id, rating)
@@ -146,10 +157,12 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
     }
   }
 
-  const canPost: boolean =
-    preview !== null && !previewLoading && !saving && !!url.trim();
+  const canPost: boolean = fromStory
+    ? !saving
+    : preview !== null && !previewLoading && !saving && !!url.trim();
   const showPreviewPanel: boolean =
-    previewLoading || preview !== null || previewError !== null;
+    !fromStory &&
+    (previewLoading || preview !== null || previewError !== null);
 
   return createPortal(
     <div
@@ -162,7 +175,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            Share an article
+            {fromStory ? "Start a private conversation" : "Share an article"}
           </h2>
           <button
             onClick={onClose}
@@ -174,20 +187,51 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
         </div>
 
         <form onSubmit={submit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Article URL
-            </span>
-            <input
-              type="url"
-              required
-              autoFocus
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/article"
-              className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-            />
-          </label>
+          {fromStory && story ? (
+            <div className="overflow-hidden border border-slate-200 dark:border-slate-700">
+              {story.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={story.image_url}
+                  alt=""
+                  className="h-36 w-full object-cover"
+                />
+              ) : null}
+              <div className="border-t border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  <SourceLogo
+                    src={story.source_image_url}
+                    name={story.source_name ?? hostFromUrl(story.article_url)}
+                    imgClassName="h-4 w-auto max-w-[120px] shrink-0 object-contain"
+                    fallbackClassName="truncate"
+                  />
+                </div>
+                <h3 className="mt-1 font-serif text-base font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-50">
+                  {story.full_headline}
+                </h3>
+                {story.summary ? (
+                  <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+                    {stripHtml(story.summary)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Article URL
+              </span>
+              <input
+                type="url"
+                required
+                autoFocus
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com/article"
+                className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+          )}
 
           {showPreviewPanel ? (
             <div className="overflow-hidden border border-slate-200 dark:border-slate-700">
@@ -304,19 +348,9 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <span className="font-semibold">Visible to:</span>
-            <select
-              value={visibility}
-              onChange={(e) =>
-                setVisibility(e.target.value as PostVisibility)
-              }
-              className="border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
-            >
-              <option value="private">friends</option>
-              <option value="public">public</option>
-            </select>
-          </label>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Only your friends will see this.
+          </p>
 
           <div className="flex justify-end gap-2">
             <button
