@@ -55,6 +55,18 @@ from core.models import (
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
+# Feed cards only show a teaser of pasted article text; detail fetches the full body.
+FEED_SHARED_TEXT_MAX_CHARS: int = 800
+
+
+def _feed_shared_text_teaser(text: str | None) -> tuple[str | None, bool]:
+    """Return (teaser, truncated?) for feed payloads."""
+    if text is None:
+        return None, False
+    if len(text) <= FEED_SHARED_TEXT_MAX_CHARS:
+        return text, False
+    return text[:FEED_SHARED_TEXT_MAX_CHARS], True
+
 # Guests get the same public payload; let the CDN/edge serve repeat loads.
 _GUEST_CACHE_CONTROL: str = "public, s-maxage=30, stale-while-revalidate=300"
 
@@ -334,6 +346,7 @@ async def _build_post_outs(
 
         author = author_profiles.get(post.author_id)
         unread_n = unread_reply_counts.get(post.id, 0)
+        shared_teaser, shared_truncated = _feed_shared_text_teaser(post.shared_text)
         out_by_post[post.id] = PostOut(
             id=post.id,
             story_id=post.story_id,
@@ -341,7 +354,8 @@ async def _build_post_outs(
             author_name=display_name(author) if author else "Friend",
             author_image_url=author.image_url if author else None,
             take=post.take,
-            shared_text=post.shared_text,
+            shared_text=shared_teaser,
+            shared_text_truncated=shared_truncated,
             visibility=post.visibility,
             last_activity_at=post.last_activity_at,
             created_at=post.created_at,

@@ -521,3 +521,44 @@ async def visible_post_ids_for_viewer(
         else None
     )
     return list((await session.scalars(query(wider))).all())
+
+
+async def primary_post_ids_by_story(
+    session: AsyncSession,
+    viewer_id: uuid.UUID,
+    story_ids: list[uuid.UUID],
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+) -> dict[uuid.UUID, uuid.UUID]:
+    """Most recent viewer-visible post id per story (for search → detail links)."""
+    if not story_ids:
+        return {}
+
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
+    participant_filter: list[uuid.UUID] = [viewer_id, *friends]
+    rows = (
+        await session.execute(
+            select(Post.id, Post.story_id, Post.created_at)
+            .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
+            .where(
+                Post.story_id.in_(story_ids),
+                or_(
+                    Post.visibility == PostVisibility.public,
+                    Post.author_id == viewer_id,
+                    PostParticipant.user_id.in_(participant_filter),
+                ),
+            )
+            .group_by(Post.id, Post.story_id, Post.created_at)
+            .order_by(Post.created_at.desc())
+        )
+    ).all()
+
+    result: dict[uuid.UUID, uuid.UUID] = {}
+    for post_id, story_id, _created_at in rows:
+        if story_id not in result:
+            result[story_id] = post_id
+    return result

@@ -15,8 +15,13 @@ from typing import Any
 
 import pytest
 
-from api.friends import visible_post_ids_for_viewer
-from api.routers.feed import _build_post_outs, _participants_by_post
+from api.friends import primary_post_ids_by_story, visible_post_ids_for_viewer
+from api.routers.feed import (
+    FEED_SHARED_TEXT_MAX_CHARS,
+    _build_post_outs,
+    _feed_shared_text_teaser,
+    _participants_by_post,
+)
 from core.models import Post, PostVisibility, Story, StoryKind
 
 
@@ -272,3 +277,75 @@ async def test_viewer_query_widens_without_refetching_friends() -> None:
     assert result == wide
     # Two candidate queries and no extra friend lookup.
     assert len(session.statements) == 2
+
+
+def test_feed_shared_text_teaser_short_text_unchanged() -> None:
+    text: str = "A short pasted excerpt."
+    teaser, truncated = _feed_shared_text_teaser(text)
+    assert teaser == text
+    assert truncated is False
+
+
+def test_feed_shared_text_teaser_long_text_truncated() -> None:
+    text: str = "x" * (FEED_SHARED_TEXT_MAX_CHARS + 50)
+    teaser, truncated = _feed_shared_text_teaser(text)
+    assert truncated is True
+    assert teaser is not None
+    assert len(teaser) == FEED_SHARED_TEXT_MAX_CHARS
+    assert teaser == text[:FEED_SHARED_TEXT_MAX_CHARS]
+
+
+class _ExecuteResult:
+    def __init__(self, rows: list[tuple[uuid.UUID, uuid.UUID, datetime]]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[tuple[uuid.UUID, uuid.UUID, datetime]]:
+        return self._rows
+
+
+class _ExecuteSession:
+    def __init__(self, rows: list[tuple[uuid.UUID, uuid.UUID, datetime]]) -> None:
+        self._rows = rows
+        self.execute_calls: int = 0
+
+    async def execute(self, *_args: Any, **_kwargs: Any) -> _ExecuteResult:
+        self.execute_calls += 1
+        return _ExecuteResult(self._rows)
+
+
+@pytest.mark.asyncio
+async def test_primary_post_ids_by_story_picks_most_recent_per_story() -> None:
+    viewer = uuid.uuid4()
+    story_a = uuid.uuid4()
+    story_b = uuid.uuid4()
+    newer_a = uuid.uuid4()
+    older_a = uuid.uuid4()
+    only_b = uuid.uuid4()
+    now = datetime.now(UTC)
+    session = _ExecuteSession(
+        [
+            (newer_a, story_a, now),
+            (older_a, story_a, now),
+            (only_b, story_b, now),
+        ]
+    )
+    result = await primary_post_ids_by_story(
+        session,  # type: ignore[arg-type]
+        viewer,
+        [story_a, story_b],
+        friend_ids=[],
+    )
+    assert result == {story_a: newer_a, story_b: only_b}
+    assert session.execute_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_primary_post_ids_by_story_empty_when_no_stories() -> None:
+    session = _ExecuteSession([])
+    result = await primary_post_ids_by_story(
+        session,  # type: ignore[arg-type]
+        uuid.uuid4(),
+        [],
+    )
+    assert result == {}
+    assert session.execute_calls == 0

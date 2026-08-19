@@ -8,13 +8,17 @@ import { createPortal } from "react-dom";
 
 interface PostDetailModalProps {
   postId: UUID;
+  focusUnread?: boolean;
 }
 
 /**
  * Modal shell for the intercepting `/post/[id]` route. Closing returns to the
  * feed via `router.back()`; a hard load of the same URL renders the full page.
  */
-export function PostDetailModal({ postId }: PostDetailModalProps) {
+export function PostDetailModal({
+  postId,
+  focusUnread = false,
+}: PostDetailModalProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -48,7 +52,11 @@ export function PostDetailModal({ postId }: PostDetailModalProps) {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-6">
-          <PostDetail postId={postId} onDeleted={() => router.back()} />
+          <PostDetail
+            postId={postId}
+            onDeleted={() => router.back()}
+            focusUnread={focusUnread}
+          />
         </div>
       </div>
     </div>,

@@ -70,6 +70,8 @@ export interface Story {
   dismissed: boolean;
   friend_stars?: FriendStar[];
   engagement: FriendEngagement;
+  /** Most recent viewer-visible post about this story, when one exists. */
+  post_id?: UUID | null;
 }
 
 export interface StoryList {
@@ -130,6 +132,8 @@ export interface Post {
   take: string | null;
   /** Article text the author pasted from the source page (reader view). */
   shared_text: string | null;
+  /** True when the feed payload omitted the tail of a long pasted body. */
+  shared_text_truncated?: boolean;
   visibility: PostVisibility;
   last_activity_at: string;
   created_at: string;

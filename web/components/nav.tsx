@@ -270,6 +270,15 @@ export function Nav() {
     void refreshBadges();
   }, [pathname, user?.id, refreshBadges]);
 
+  // Replying in the feed stamps the read cursor without a route change.
+  useEffect(() => {
+    function onThreadSeen(): void {
+      void refreshBadges();
+    }
+    window.addEventListener("nwf:thread-seen", onThreadSeen);
+    return () => window.removeEventListener("nwf:thread-seen", onThreadSeen);
+  }, [refreshBadges]);
+
   const links: { href: string; label: string }[] = profile?.is_admin
     ? [...DESKTOP_LINKS, { href: "/admin", label: "Admin" }]
     : DESKTOP_LINKS;

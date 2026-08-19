@@ -8,7 +8,8 @@ import { SourceLogo } from "@/components/source-logo";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Story, UUID } from "@/lib/types";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState, type ReactNode } from "react";
 
 interface StoryCardProps {
   story: Story;
@@ -37,6 +38,13 @@ export function StoryCard({
     if (story.read) setRead(true);
   }, [story.read]);
 
+  function handleMarkRead(): void {
+    if (read) return;
+    setRead(true);
+    void api.markRead(story.id, true).catch(() => undefined);
+    onChange?.({ ...story, read: true });
+  }
+
   function handleOpen(e: React.MouseEvent): void {
     if (onOpen) {
       e.preventDefault();
@@ -44,12 +52,32 @@ export function StoryCard({
       onOpen(story.id);
       return;
     }
-    if (!read) {
-      setRead(true);
-      void api.markRead(story.id, true).catch(() => undefined);
-      onChange?.({ ...story, read: true });
-    }
+    handleMarkRead();
   }
+
+  const headlineClassName: string =
+    "font-serif text-[1.05rem] font-semibold leading-snug tracking-tight text-zinc-900 hover:underline dark:text-zinc-50";
+
+  const headline: ReactNode = story.post_id ? (
+    <Link
+      href={`/post/${story.post_id}`}
+      scroll={false}
+      onClick={() => handleMarkRead()}
+      className={headlineClassName}
+    >
+      {story.full_headline}
+    </Link>
+  ) : (
+    <a
+      href={story.article_url}
+      target="_blank"
+      rel="noreferrer noopener"
+      onClick={handleOpen}
+      className={headlineClassName}
+    >
+      {story.full_headline}
+    </a>
+  );
 
   return (
     <article
@@ -82,15 +110,7 @@ export function StoryCard({
             />
           ) : null}
           <div className="min-w-0 flex-1">
-            <a
-              href={story.article_url}
-              target="_blank"
-              rel="noreferrer noopener"
-              onClick={handleOpen}
-              className="font-serif text-[1.05rem] font-semibold leading-snug tracking-tight text-zinc-900 hover:underline dark:text-zinc-50"
-            >
-              {story.full_headline}
-            </a>
+            {headline}
             {!dense && story.summary ? (
               <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400">
                 {stripHtml(story.summary).slice(0, 280)}
