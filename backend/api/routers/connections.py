@@ -81,6 +81,16 @@ async def _notify_friend_event(
                 error=str(exc),
             )
 
+    recipient: Profile | None = await session.get(Profile, recipient_id)
+    if recipient is None or recipient.instant_email_opt_out:
+        log.info(
+            "connections.friend_email.skip",
+            reason="opted_out" if recipient is not None else "no_profile",
+            kind=kind,
+            recipient_id=str(recipient_id),
+        )
+        return
+
     email: str | None = await email_for_user(session, recipient_id)
     if not email:
         log.info(
@@ -100,6 +110,9 @@ async def _notify_friend_event(
                 actor_name=actor_name,
                 actor_image_url=actor.image_url if actor is not None else None,
                 action_url=settings.app_url(action_path),
+                unsubscribe_url=settings.app_url(
+                    f"/unsubscribe/{recipient.unsubscribe_token}"
+                ),
                 kind=kind,
             ),
             settings=settings,

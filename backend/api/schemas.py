@@ -574,7 +574,7 @@ class InvitationCreate(BaseModel):
 
 
 class InvitationCreateResult(BaseModel):
-    status: str  # "connected" | "requested" | "invited"
+    status: str  # "connected" | "requested" | "invited" | "suppressed"
     user_id: uuid.UUID | None = None
     invitation_id: uuid.UUID | None = None
     invite_url: str | None = None

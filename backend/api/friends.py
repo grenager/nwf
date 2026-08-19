@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select, text
+from sqlalchemy import Select, bindparam, func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,9 @@ from core.models import (
     Comment,
     Connection,
     ConnectionStatus,
+    EmailSuppression,
+    Invitation,
+    InvitationStatus,
     Post,
     PostParticipant,
     PostVisibility,
@@ -28,6 +31,9 @@ from core.models import (
 
 CURATED_SOURCE_LIMIT: int = 40
 
+# Invitees never opted in, so nudge them at most once a day per invitation.
+PENDING_INVITE_EMAIL_THROTTLE: timedelta = timedelta(hours=24)
+
 
 @dataclass(frozen=True)
 class ActivityEmailRecipient:
@@ -36,6 +42,16 @@ class ActivityEmailRecipient:
     user_id: uuid.UUID
     email: str
     first: str | None
+    unsubscribe_token: uuid.UUID
+
+
+@dataclass(frozen=True)
+class PendingInviteRecipient:
+    """An invited address with no account yet, eligible for an activity nudge."""
+
+    invitation_id: uuid.UUID
+    email: str
+    invite_token: str
     unsubscribe_token: uuid.UUID
 
 
@@ -55,6 +71,132 @@ async def email_for_user(
     if row is None or not row[0]:
         return None
     return str(row[0]).strip().lower()
+
+
+async def suppressed_emails(
+    session: AsyncSession, emails: Iterable[str]
+) -> set[str]:
+    """Subset of ``emails`` (lowercased) that has opted out of all email."""
+    normalized: set[str] = {
+        email.strip().lower() for email in emails if email and email.strip()
+    }
+    if not normalized:
+        return set()
+    rows = list(
+        (
+            await session.scalars(
+                select(EmailSuppression.email).where(
+                    EmailSuppression.email.in_(normalized)
+                )
+            )
+        ).all()
+    )
+    return {str(row) for row in rows}
+
+
+async def is_email_suppressed(session: AsyncSession, email: str | None) -> bool:
+    """True when ``email`` has unsubscribed from everything."""
+    if not email:
+        return False
+    return bool(await suppressed_emails(session, [email]))
+
+
+async def emails_with_accounts(
+    session: AsyncSession, emails: Iterable[str]
+) -> set[str]:
+    """Subset of ``emails`` (lowercased) that already has an account."""
+    normalized: set[str] = {
+        email.strip().lower() for email in emails if email and email.strip()
+    }
+    if not normalized:
+        return set()
+    stmt = text(
+        "select lower(email) as email from auth.users where lower(email) in :emails"
+    ).bindparams(bindparam("emails", expanding=True))
+    try:
+        rows = (
+            await session.execute(stmt, {"emails": sorted(normalized)})
+        ).all()
+    except SQLAlchemyError:
+        # Without the lookup we cannot tell invitees from members, so treat
+        # everyone as a member: the member path already handles their email.
+        return normalized
+    return {str(row[0]) for row in rows if row[0]}
+
+
+async def load_pending_invite_recipients(
+    session: AsyncSession,
+    *,
+    inviter_id: uuid.UUID,
+    post_id: uuid.UUID | None = None,
+    now: datetime | None = None,
+) -> list[PendingInviteRecipient]:
+    """Load addresses ``inviter_id`` invited that have not signed up yet.
+
+    Only single-use email invitations qualify — reusable share links have no
+    recipient to notify. Expired, suppressed, already-registered, and recently
+    nudged addresses are skipped. When ``post_id`` is given, the result is
+    limited to invitations anchored to that post.
+    """
+    moment: datetime = now or datetime.now(UTC)
+    stmt = select(Invitation).where(
+        Invitation.inviter_id == inviter_id,
+        Invitation.status == InvitationStatus.pending,
+        Invitation.reusable.is_(False),
+        Invitation.invitee_email.is_not(None),
+        or_(
+            Invitation.expires_at.is_(None),
+            Invitation.expires_at > moment,
+        ),
+        or_(
+            Invitation.last_activity_email_at.is_(None),
+            Invitation.last_activity_email_at
+            < moment - PENDING_INVITE_EMAIL_THROTTLE,
+        ),
+    )
+    if post_id is not None:
+        stmt = stmt.where(Invitation.post_id == post_id)
+
+    invitations: list[Invitation] = list((await session.scalars(stmt)).all())
+    if not invitations:
+        return []
+
+    candidates: dict[str, Invitation] = {}
+    for invitation in invitations:
+        email: str = (invitation.invitee_email or "").strip().lower()
+        if email:
+            candidates.setdefault(email, invitation)
+
+    excluded: set[str] = await suppressed_emails(session, candidates)
+    excluded |= await emails_with_accounts(session, candidates)
+
+    return [
+        PendingInviteRecipient(
+            invitation_id=invitation.id,
+            email=email,
+            invite_token=invitation.token,
+            unsubscribe_token=invitation.unsubscribe_token,
+        )
+        for email, invitation in candidates.items()
+        if email not in excluded
+    ]
+
+
+async def pending_connection_ids(
+    session: AsyncSession, requester_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Users ``requester_id`` sent a still-unanswered friend request to."""
+    rows = list(
+        (
+            await session.scalars(
+                select(Connection.second_id).where(
+                    Connection.status == ConnectionStatus.pending,
+                    Connection.first_id == requester_id,
+                )
+            )
+        ).all()
+    )
+    return [row for row in rows if row != requester_id]
 
 
 async def load_activity_email_recipients(

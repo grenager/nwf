@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import CurrentUser, OptionalUser, SessionDep, SettingsDep
-from api.friends import display_name
+from api.friends import display_name, is_email_suppressed
 from api.routers.posts import serialize_post
 from api.schemas import (
     InvitationAcceptRequest,
@@ -472,6 +472,15 @@ async def create_invitation(
             message="Friend request sent.",
         )
 
+    # Someone who unsubscribed must not be re-invited by anyone.
+    if await is_email_suppressed(session, email):
+        return InvitationCreateResult(
+            status="suppressed",
+            share_message="That address has opted out of NewsWithFriends emails.",
+            message="That address has opted out of NewsWithFriends emails.",
+            email_sent=False,
+        )
+
     token = _new_token()
     invitation = Invitation(
         token=token,
@@ -499,6 +508,9 @@ async def create_invitation(
             to_email=email,
             inviter_name=inviter_name,
             invite_url=email_link,
+            unsubscribe_url=settings.app_url(
+                f"/unsubscribe/invite/{invitation.unsubscribe_token}"
+            ),
             message=personal,
             headline=story.full_headline if story else None,
             article_url=story.article_url if story else None,
