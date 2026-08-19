@@ -12,7 +12,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import CurrentUser, OptionalUser, SessionDep, SettingsDep
-from api.friends import display_name, is_email_suppressed
+from api.friends import (
+    display_name,
+    ensure_friend_capacity,
+    friend_slots_used,
+    is_email_suppressed,
+)
 from api.routers.posts import serialize_post
 from api.schemas import (
     InvitationAcceptRequest,
@@ -23,7 +28,7 @@ from api.schemas import (
     PostOut,
 )
 from core.attribution import resolve_attribution
-from core.config import Settings
+from core.config import Settings, get_settings
 from core.email import InviteEmailContent, send_invite_email
 from core.models import (
     Comment,
@@ -142,6 +147,13 @@ async def _record_redemption(
     return redemption
 
 
+async def _inviter_has_room(session: SessionDep, inviter_id: uuid.UUID) -> bool:
+    """Whether the inviter can still take on another friend."""
+    settings: Settings = get_settings()
+    used: int = await friend_slots_used(session, inviter_id)
+    return used < settings.max_friends
+
+
 async def accept_invitation_for_user(
     session: SessionDep,
     invitation: Invitation,
@@ -203,6 +215,22 @@ async def accept_invitation_for_user(
                 message="You can keep browsing. Add them as a friend to join.",
                 became_friend=False,
             )
+        await ensure_friend_capacity(session, user_id)
+        # Share links reserve no slot when minted, so the inviter may have
+        # filled up before redeemers arrive. Let them keep reading regardless.
+        if not await _inviter_has_room(session, invitation.inviter_id):
+            await _record_redemption(
+                session, invitation.id, user_id, became_friend=False
+            )
+            return InvitationAcceptResult(
+                status="view_only",
+                inviter_id=invitation.inviter_id,
+                post_id=invitation.post_id,
+                message=(
+                    "You can keep browsing — their friend list is full right now."
+                ),
+                became_friend=False,
+            )
         await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
         if invitation.post_id is not None:
             await _add_participant(session, invitation.post_id, user_id)
@@ -239,6 +267,9 @@ async def accept_invitation_for_user(
             became_friend=False,
         )
 
+    # The inviter's slot was reserved when they sent this invitation, so only
+    # the person accepting needs room.
+    await ensure_friend_capacity(session, user_id)
     await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
     if invitation.post_id is not None:
         await _add_participant(session, invitation.post_id, user_id)
@@ -436,6 +467,7 @@ async def create_invitation(
                 connection.status == ConnectionStatus.pending
                 and connection.second_id == user.id
             ):
+                await ensure_friend_capacity(session, user.id, settings=settings)
                 connection.status = ConnectionStatus.accepted
                 await session.flush()
                 return InvitationCreateResult(
@@ -457,6 +489,7 @@ async def create_invitation(
                 share_message="Friend request already pending.",
                 message="Friend request already pending.",
             )
+        await ensure_friend_capacity(session, user.id, settings=settings)
         session.add(
             Connection(
                 first_id=user.id,
@@ -471,6 +504,8 @@ async def create_invitation(
             share_message="Friend request sent.",
             message="Friend request sent.",
         )
+
+    await ensure_friend_capacity(session, user.id, settings=settings)
 
     # Someone who unsubscribed must not be re-invited by anyone.
     if await is_email_suppressed(session, email):

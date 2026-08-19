@@ -48,6 +48,17 @@ class Settings(BaseSettings):
         default="NewsWithFriends <noreply@newswithfriends.org>"
     )
 
+    # --- Friend graph -----------------------------------------------------
+    max_friends: int = Field(
+        default=50,
+        ge=1,
+        description=(
+            "Friend slots per account, counting accepted friends plus the "
+            "requests and invitations they have outstanding. Keeps anyone from "
+            "using invitations to send bulk email."
+        ),
+    )
+
     # --- Daily digest -----------------------------------------------------
     digest_enabled: bool = Field(default=True)
     # Hour of day in America/Los_Angeles to send digests (0-23).

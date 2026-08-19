@@ -490,6 +490,9 @@ class FriendsOverviewOut(BaseModel):
     friends: list[FriendSummaryOut]
     total: int
     online: int
+    # Friends plus outstanding requests/invitations, against the account cap.
+    slots_used: int = 0
+    friend_limit: int = 0
 
 
 class FriendActivityItem(BaseModel):

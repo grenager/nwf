@@ -53,6 +53,8 @@ export default function PeoplePage() {
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
   const [recommended, setRecommended] = useState<RecommendedFriend[]>([]);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [slotsUsed, setSlotsUsed] = useState<number>(0);
+  const [friendLimit, setFriendLimit] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [openId, setOpenId] = useState<UUID | null>(null);
 
@@ -79,6 +81,8 @@ export default function PeoplePage() {
       setOutgoing(requests.outgoing);
       setRecommended(recs);
       setFriends(overview.friends);
+      setSlotsUsed(overview.slots_used);
+      setFriendLimit(overview.friend_limit);
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Failed to load people",
@@ -186,9 +190,16 @@ export default function PeoplePage() {
       </div>
 
       <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-400">
-          Invite by email
-        </h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-400">
+            Invite by email
+          </h2>
+          {friendLimit > 0 ? (
+            <span className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+              {slotsUsed} of {friendLimit} used
+            </span>
+          ) : null}
+        </div>
         <form onSubmit={sendInvite} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             type="email"
