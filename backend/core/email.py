@@ -683,7 +683,7 @@ class ActivityEmailContent:
     recipient_first: str | None
     actor_name: str
     actor_image_url: str | None
-    kind: str  # "new_post" | "comment" | "reply"
+    kind: str  # "new_post" | "comment" | "reply" | "conversation"
     headline: str | None
     source_label: str | None
     story_image_url: str | None
@@ -693,6 +693,9 @@ class ActivityEmailContent:
     # Set for recipients who were invited but have not accepted yet, explaining
     # why the conversation is not open to them yet.
     pending_note: str | None = None
+    # Overrides the CTA label when the button leads somewhere other than the
+    # article itself (an invite landing page or the friend requests screen).
+    cta_label: str | None = None
 
 
 def _activity_subject(content: ActivityEmailContent) -> str:
@@ -700,25 +703,37 @@ def _activity_subject(content: ActivityEmailContent) -> str:
         return f"{content.actor_name} commented on your article"
     if content.kind == "reply":
         return f"{content.actor_name} responded to your comment"
+    if content.kind == "conversation":
+        return (
+            f"{content.actor_name} replied in a conversation you were invited to"
+        )
     return f"{content.actor_name} posted a new article"
 
 
 def _activity_lead(content: ActivityEmailContent) -> tuple[str, str]:
     """Return (plain lead sentence, CTA button label)."""
     if content.kind == "comment":
-        return (
+        lead, cta = (
             f"{content.actor_name} commented on your article on NewsWithFriends.",
             "View conversation",
         )
-    if content.kind == "reply":
-        return (
+    elif content.kind == "reply":
+        lead, cta = (
             f"{content.actor_name} responded to your comment on NewsWithFriends.",
             "View conversation",
         )
-    return (
-        f"{content.actor_name} posted a new article on NewsWithFriends.",
-        "View article",
-    )
+    elif content.kind == "conversation":
+        lead, cta = (
+            f"{content.actor_name} replied in a conversation you were invited "
+            f"to on NewsWithFriends.",
+            "View conversation",
+        )
+    else:
+        lead, cta = (
+            f"{content.actor_name} posted a new article on NewsWithFriends.",
+            "View article",
+        )
+    return lead, content.cta_label or cta
 
 
 def _activity_plain(content: ActivityEmailContent) -> str:
@@ -788,6 +803,11 @@ def _activity_html(content: ActivityEmailContent) -> str:
     elif content.kind == "reply":
         lead = (
             f"<strong>{actor}</strong> responded to your comment on NewsWithFriends."
+        )
+    elif content.kind == "conversation":
+        lead = (
+            f"<strong>{actor}</strong> replied in a conversation you were "
+            f"invited to on NewsWithFriends."
         )
     else:
         lead = f"<strong>{actor}</strong> posted a new article on NewsWithFriends."

@@ -8,11 +8,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from fastapi import HTTPException, status
 from sqlalchemy import Select, bindparam, func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas import StoryDiscussionOut
+from core.config import Settings, get_settings
 from core.models import (
     Comment,
     Connection,
@@ -127,20 +129,24 @@ async def emails_with_accounts(
 async def load_pending_invite_recipients(
     session: AsyncSession,
     *,
-    inviter_id: uuid.UUID,
+    inviter_id: uuid.UUID | None = None,
     post_id: uuid.UUID | None = None,
     now: datetime | None = None,
 ) -> list[PendingInviteRecipient]:
-    """Load addresses ``inviter_id`` invited that have not signed up yet.
+    """Load invited addresses that have not signed up yet.
 
-    Only single-use email invitations qualify — reusable share links have no
-    recipient to notify. Expired, suppressed, already-registered, and recently
-    nudged addresses are skipped. When ``post_id`` is given, the result is
-    limited to invitations anchored to that post.
+    Scope with ``inviter_id`` (everyone that person invited) and/or ``post_id``
+    (everyone invited to that conversation); at least one is required so this
+    can never fan out to every invitee in the database. Only single-use email
+    invitations qualify — reusable share links have no recipient to notify.
+    Expired, suppressed, already-registered, and recently nudged addresses are
+    skipped.
     """
+    if inviter_id is None and post_id is None:
+        raise ValueError("inviter_id or post_id is required")
+
     moment: datetime = now or datetime.now(UTC)
     stmt = select(Invitation).where(
-        Invitation.inviter_id == inviter_id,
         Invitation.status == InvitationStatus.pending,
         Invitation.reusable.is_(False),
         Invitation.invitee_email.is_not(None),
@@ -154,6 +160,8 @@ async def load_pending_invite_recipients(
             < moment - PENDING_INVITE_EMAIL_THROTTLE,
         ),
     )
+    if inviter_id is not None:
+        stmt = stmt.where(Invitation.inviter_id == inviter_id)
     if post_id is not None:
         stmt = stmt.where(Invitation.post_id == post_id)
 
@@ -351,6 +359,68 @@ async def discussion_activity_by_story(
         entry.avatar_urls.append(image_url)
 
     return out
+
+
+async def friend_slots_used(
+    session: AsyncSession, user_id: uuid.UUID, *, now: datetime | None = None
+) -> int:
+    """How many of a user's friend slots are taken.
+
+    Counts accepted friends, friend requests the user sent that are still
+    unanswered, and unexpired email invitations they sent. Outstanding requests
+    and invitations count so the limit constrains outbound email rather than
+    just the final friend list; incoming requests do not, so nobody else can
+    fill up your account.
+    """
+    moment: datetime = now or datetime.now(UTC)
+    connections: int | None = await session.scalar(
+        select(func.count())
+        .select_from(Connection)
+        .where(
+            or_(
+                Connection.status == ConnectionStatus.accepted,
+                (Connection.status == ConnectionStatus.pending)
+                & (Connection.first_id == user_id),
+            ),
+            or_(
+                Connection.first_id == user_id,
+                Connection.second_id == user_id,
+            ),
+        )
+    )
+    invitations: int | None = await session.scalar(
+        select(func.count())
+        .select_from(Invitation)
+        .where(
+            Invitation.inviter_id == user_id,
+            Invitation.status == InvitationStatus.pending,
+            Invitation.reusable.is_(False),
+            Invitation.invitee_email.is_not(None),
+            or_(
+                Invitation.expires_at.is_(None),
+                Invitation.expires_at > moment,
+            ),
+        )
+    )
+    return int(connections or 0) + int(invitations or 0)
+
+
+async def ensure_friend_capacity(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    settings: Settings | None = None,
+) -> None:
+    """Raise 409 when a user has no friend slot left."""
+    cfg: Settings = settings or get_settings()
+    used: int = await friend_slots_used(session, user_id)
+    if used < cfg.max_friends:
+        return
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"You've reached the {cfg.max_friends}-friend limit. Remove a friend "
+        f"or cancel a pending invite to make room.",
+    )
 
 
 async def accepted_friend_ids(session: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
