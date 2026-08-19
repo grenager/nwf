@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, or_, select, text
+from sqlalchemy import Select, func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -163,6 +163,74 @@ async def accepted_friend_ids(session: AsyncSession, user_id: uuid.UUID) -> list
         other = second_id if first_id == user_id else first_id
         friends.add(other)
     return list(friends)
+
+
+async def average_friend_count_for_active_users(session: AsyncSession) -> float:
+    """Mean accepted-friend count among users who have posted or commented.
+
+    Powers the "the average active user has N friends" nudge, so "active" is
+    deliberately engagement-based rather than every signed-up profile — a long
+    tail of empty accounts would drag the number toward zero and make the
+    comparison meaningless.
+    """
+    active = (
+        select(Post.author_id.label("user_id"))
+        .union(select(Comment.user_id.label("user_id")))
+        .subquery()
+    )
+    accepted_edges = (
+        select(Connection.first_id.label("user_id"))
+        .where(Connection.status == ConnectionStatus.accepted)
+        .union_all(
+            select(Connection.second_id.label("user_id")).where(
+                Connection.status == ConnectionStatus.accepted
+            )
+        )
+        .subquery()
+    )
+    per_user = (
+        select(
+            accepted_edges.c.user_id,
+            func.count().label("friend_count"),
+        )
+        .group_by(accepted_edges.c.user_id)
+        .subquery()
+    )
+    stmt = select(
+        func.coalesce(func.avg(func.coalesce(per_user.c.friend_count, 0)), 0.0)
+    ).select_from(
+        active.outerjoin(per_user, per_user.c.user_id == active.c.user_id)
+    )
+    average = await session.scalar(stmt)
+    return float(average) if average is not None else 0.0
+
+
+async def friend_ids_for_users(
+    session: AsyncSession, user_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, set[uuid.UUID]]:
+    """Map each given user id -> ids of their accepted friends, in one query."""
+    ids: list[uuid.UUID] = list({uid for uid in user_ids})
+    if not ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Connection.first_id, Connection.second_id).where(
+                Connection.status == ConnectionStatus.accepted,
+                or_(
+                    Connection.first_id.in_(ids),
+                    Connection.second_id.in_(ids),
+                ),
+            )
+        )
+    ).all()
+    wanted: set[uuid.UUID] = set(ids)
+    result: dict[uuid.UUID, set[uuid.UUID]] = {uid: set() for uid in ids}
+    for first_id, second_id in rows:
+        if first_id in wanted:
+            result[first_id].add(second_id)
+        if second_id in wanted:
+            result[second_id].add(first_id)
+    return result
 
 
 async def friend_stars_by_story(

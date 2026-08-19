@@ -367,6 +367,7 @@ async def create_invitation(
     raw_email: str | None = (payload.email or "").strip().lower() or None
     personal: str | None = (payload.message or "").strip() or None
     become_friend: bool = bool(payload.become_friend)
+    invitee_name: str | None = (payload.invitee_name or "").strip() or None
 
     post: Post | None = None
     story: Story | None = None
@@ -504,6 +505,7 @@ async def create_invitation(
             image_url=story.image_url if story else None,
             publisher=publisher,
             take=take,
+            recipient_name=invitee_name,
         ),
         settings=settings,
     )

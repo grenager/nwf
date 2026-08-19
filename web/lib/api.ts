@@ -18,6 +18,7 @@ import type {
   InviteResult,
   NotificationList,
   Post,
+  PostAudience,
   PostVisibility,
   PreferencesUpdate,
   PreviewCard,
@@ -151,6 +152,8 @@ export const api = {
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
   getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
+  getPostAudience: (id: UUID): Promise<PostAudience> =>
+    request<PostAudience>(`/posts/${id}/audience`),
   getConversations: (): Promise<ConversationList> =>
     request<ConversationList>("/conversations"),
   markThreadSeen: (postId: UUID): Promise<void> =>
@@ -229,6 +232,11 @@ export const api = {
     }),
   deleteComment: (id: UUID): Promise<void> =>
     request<void>(`/comments/${id}`, { method: "DELETE" }),
+  updateComment: (id: UUID, text: string): Promise<Comment> =>
+    request<Comment>(`/comments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ text }),
+    }),
   reactToComment: (id: UUID, reaction: ReactionKind): Promise<Comment> =>
     request<Comment>(`/comments/${id}/reactions`, {
       method: "PUT",
@@ -308,6 +316,7 @@ export const api = {
     post_id?: UUID | null;
     message?: string | null;
     become_friend?: boolean;
+    invitee_name?: string | null;
   }): Promise<InvitationCreateResult> =>
     request<InvitationCreateResult>("/invitations", {
       method: "POST",

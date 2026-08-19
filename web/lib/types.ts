@@ -166,6 +166,35 @@ export interface Post {
   last_seen_at: string | null;
 }
 
+/** How someone in a thread's audience gained access to it. */
+export type AudienceRelation =
+  | "author"
+  | "your_friend"
+  | "author_friend"
+  | "participant"
+  | "friend_of_participant";
+
+export interface AudienceMember {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  relation: AudienceRelation;
+}
+
+/** Who can already read a thread (``GET /posts/{id}/audience``). */
+export interface PostAudience {
+  post_id: UUID;
+  visibility: PostVisibility;
+  viewer_is_author: boolean;
+  author_id: UUID;
+  author_name: string;
+  people: AudienceMember[];
+  your_friend_count: number;
+  author_friend_count: number;
+  /** Mean friend count among users who post or comment. */
+  average_friend_count: number;
+}
+
 /** Live link preview returned by ``POST /posts/preview``. */
 export interface PreviewCard {
   canonical_url: string;

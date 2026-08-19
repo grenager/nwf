@@ -79,6 +79,27 @@ def test_invite_email_html_and_plain() -> None:
     assert "The Outlet" in html
 
 
+def test_invite_email_greets_recipient_by_first_name() -> None:
+    content = InviteEmailContent(
+        to_email="teg@example.com",
+        inviter_name="Ada Lovelace",
+        invite_url="https://nwf.example/invite/tok",
+        recipient_name="Teg Grenager",
+    )
+    assert _plain_text(content).startswith("Hi Teg,")
+    assert "Hi Teg," in _html_body(content)
+
+
+def test_invite_email_omits_greeting_without_recipient_name() -> None:
+    content = InviteEmailContent(
+        to_email="teg@example.com",
+        inviter_name="Ada Lovelace",
+        invite_url="https://nwf.example/invite/tok",
+    )
+    assert not _plain_text(content).startswith("Hi ")
+    assert "Hi " not in _html_body(content)
+
+
 @pytest.mark.asyncio
 async def test_send_invite_email_noop_without_api_key() -> None:
     settings = MagicMock()

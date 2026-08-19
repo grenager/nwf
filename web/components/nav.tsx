@@ -4,8 +4,9 @@ import { AddStoryModal } from "@/components/add-story-modal";
 import { BrandLink } from "@/components/brand-mark";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
+import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { api } from "@/lib/api";
-import type { Profile } from "@/lib/types";
+import type { Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -214,6 +215,7 @@ export function Nav() {
   const { requireAuth } = useAuthGate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [addOpen, setAddOpen] = useState<boolean>(false);
+  const [sharePostId, setSharePostId] = useState<UUID | null>(null);
   const [incomingCount, setIncomingCount] = useState<number>(0);
   const [convosUnread, setConvosUnread] = useState<number>(0);
   const [alertsUnread, setAlertsUnread] = useState<number>(0);
@@ -540,7 +542,16 @@ export function Nav() {
             window.dispatchEvent(
               new CustomEvent("nwf:post-created", { detail: post }),
             );
+            setSharePostId(post.id);
           }}
+        />
+      ) : null}
+
+      {sharePostId !== null ? (
+        <ShareAfterPostModal
+          postId={sharePostId}
+          kind="post"
+          onClose={() => setSharePostId(null)}
         />
       ) : null}
     </>

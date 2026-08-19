@@ -16,9 +16,11 @@ from api.friends import (
     accepted_friend_ids,
     aggregate_engagement,
     audience_label,
+    average_friend_count_for_active_users,
     can_see_post,
     display_name,
     friend_activity_by_story,
+    friend_ids_for_users,
     friend_profiles_map,
     post_participant_ids,
     ratings_for_users_by_story,
@@ -32,9 +34,12 @@ from api.reactions import (
 )
 from api.schemas import (
     AttachmentOut,
+    AudienceMemberOut,
+    AudienceRelation,
     CommentOut,
     FriendEngagementOut,
     FriendMiniOut,
+    PostAudienceOut,
     PostCreate,
     PostOut,
     PostUpdate,
@@ -672,6 +677,94 @@ async def get_post(
     if not await can_see_post(session, viewer_id, post):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
     return await serialize_post(session, post, viewer_id=viewer_id)
+
+
+_RELATION_ORDER: dict[AudienceRelation, int] = {
+    "author": 0,
+    "your_friend": 1,
+    "author_friend": 2,
+    "participant": 3,
+    "friend_of_participant": 4,
+}
+
+
+@router.get("/{post_id}/audience", response_model=PostAudienceOut)
+async def get_post_audience(
+    post_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> PostAudienceOut:
+    """Everyone who can already read this thread, grouped by how they got access.
+
+    Mirrors ``can_see_post``: participants plus friends of any participant. The
+    viewer is omitted from ``people`` since their own access is implicit.
+    """
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+
+    participants: set[uuid.UUID] = set(
+        await post_participant_ids(session, post.id)
+    )
+    participants.add(post.author_id)
+    participants.add(user.id)
+
+    friends_by_user = await friend_ids_for_users(session, participants)
+    viewer_friends: set[uuid.UUID] = friends_by_user.get(user.id, set())
+    author_friends: set[uuid.UUID] = friends_by_user.get(post.author_id, set())
+
+    audience: set[uuid.UUID] = set(participants)
+    for participant_id in participants:
+        audience |= friends_by_user.get(participant_id, set())
+    audience.discard(user.id)
+
+    profiles: dict[uuid.UUID, Profile] = {}
+    if audience:
+        rows = await session.scalars(
+            select(Profile).where(Profile.id.in_(audience))
+        )
+        profiles = {p.id: p for p in rows.all()}
+
+    def relation_for(candidate_id: uuid.UUID) -> AudienceRelation:
+        if candidate_id == post.author_id:
+            return "author"
+        if candidate_id in viewer_friends:
+            return "your_friend"
+        if candidate_id in author_friends:
+            return "author_friend"
+        if candidate_id in participants:
+            return "participant"
+        return "friend_of_participant"
+
+    people: list[AudienceMemberOut] = []
+    for candidate_id in audience:
+        profile = profiles.get(candidate_id)
+        if profile is None:
+            continue
+        people.append(
+            AudienceMemberOut(
+                user_id=candidate_id,
+                display_name=display_name(profile),
+                image_url=profile.image_url,
+                relation=relation_for(candidate_id),
+            )
+        )
+    people.sort(key=lambda p: (_RELATION_ORDER[p.relation], p.display_name))
+
+    author_profile = await session.get(Profile, post.author_id)
+    return PostAudienceOut(
+        post_id=post.id,
+        visibility=post.visibility,
+        viewer_is_author=post.author_id == user.id,
+        author_id=post.author_id,
+        author_name=(
+            display_name(author_profile) if author_profile is not None else "Friend"
+        ),
+        people=people,
+        your_friend_count=len(viewer_friends),
+        author_friend_count=len(author_friends),
+        average_friend_count=await average_friend_count_for_active_users(session),
+    )
 
 
 @router.patch("/{post_id}", response_model=PostOut)

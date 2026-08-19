@@ -1,14 +1,18 @@
 "use client";
 
 import { applyReactionToggle } from "@/components/reaction-bar";
+import { Avatar } from "@/components/avatar";
+import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { MentionInput } from "@/components/mention-input";
 import { MentionText } from "@/components/mention-text";
+import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { draftScopeKey } from "@/lib/drafts";
+import { commentWasEdited } from "@/lib/comments";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { Comment, Post, Profile, PostVisibility, UUID } from "@/lib/types";
@@ -28,33 +32,17 @@ function profileName(me: Profile | null): string {
   return full || "You";
 }
 
-export function Avatar({
-  name,
-  imageUrl,
-  size = "sm",
-}: {
-  name: string;
-  imageUrl: string | null;
-  size?: "sm" | "lg";
-}) {
-  const dims: string = size === "lg" ? "h-10 w-10" : "h-7 w-7";
-  if (imageUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return (
-      <img
-        src={imageUrl}
-        alt=""
-        className={`${dims} shrink-0 rounded-[9999px] object-cover`}
-      />
-    );
-  }
-  return (
-    <span
-      className={`${dims} flex shrink-0 items-center justify-center rounded-[9999px] bg-zinc-200 text-sm font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200`}
-    >
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
+/**
+ * Names the thread above the comment list so the audience model reads as
+ * private-by-default rather than a public comment section. Public threads are
+ * left unqualified: calling them out reads as a warning rather than a label.
+ */
+function conversationTitle(post: Post, isAuthor: boolean): string {
+  const scope: string = post.visibility === "public" ? "" : "private ";
+  if (isAuthor) return `Your ${scope}conversation about this article`;
+  const firstName: string = post.author_name.trim().split(/\s+/)[0] ?? "";
+  const owner: string = firstName === "" ? "This" : `${firstName}'s`;
+  return `${owner} ${scope}conversation about this article`;
 }
 
 export function PostThread({
@@ -126,6 +114,8 @@ export function PostThread({
   const unreadDividerRef = useRef<HTMLDivElement | null>(null);
   const scrolledUnreadRef = useRef<boolean>(false);
   const [ratingOpen, setRatingOpen] = useState<boolean>(false);
+  const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
+  const [shareAfterReply, setShareAfterReply] = useState<boolean>(false);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
   const isPreviewMode: boolean =
@@ -316,6 +306,13 @@ export function PostThread({
     }
   }
 
+  function replaceComment(updated: Comment): void {
+    onPostChange({
+      ...post,
+      replies: post.replies.map((r) => (r.id === updated.id ? updated : r)),
+    });
+  }
+
   async function remove(): Promise<void> {
     setMenuOpen(false);
     if (!window.confirm("Delete this post?")) return;
@@ -349,6 +346,7 @@ export function PostThread({
         unread_replies_for_viewer: false,
       });
       clearDraft();
+      setShareAfterReply(true);
       void api.markThreadSeen(post.id).then(() => {
         dispatchThreadSeen(post.id);
       }).catch(() => undefined);
@@ -591,6 +589,10 @@ export function PostThread({
           </div>
         ) : null}
 
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+          {conversationTitle(post, isAuthor)}
+        </p>
+
         {isGuest ? (
           post.reply_count > 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -639,6 +641,7 @@ export function PostThread({
                     reacting={reacting}
                     onReply={() => startReplyTo(r)}
                     onLike={() => void toggleCommentLike(r)}
+                    onEdit={replaceComment}
                     onDelete={() => {
                       void api.deleteComment(r.id).then(() => {
                         const childIds = new Set(
@@ -667,6 +670,7 @@ export function PostThread({
                           reacting={reacting}
                           onReply={() => startReplyTo(child)}
                           onLike={() => void toggleCommentLike(child)}
+                          onEdit={replaceComment}
                           onDelete={() => {
                             void api.deleteComment(child.id).then(() => {
                               onPostChange({
@@ -763,6 +767,13 @@ export function PostThread({
                   </>
                 ) : null}
               </div>
+              <button
+                type="button"
+                onClick={() => setAudienceOpen(true)}
+                className="text-left text-xs text-zinc-400 underline decoration-dotted underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+              >
+                Who will see this?
+              </button>
               {!compact && showAttach && showComposerActions ? (
                 <div className="flex gap-2">
                   <input
@@ -784,6 +795,19 @@ export function PostThread({
             </div>
           </div>
       )}
+      {audienceOpen ? (
+        <CommentAudienceModal
+          postId={post.id}
+          onClose={() => setAudienceOpen(false)}
+        />
+      ) : null}
+      {shareAfterReply ? (
+        <ShareAfterPostModal
+          postId={post.id}
+          kind="comment"
+          onClose={() => setShareAfterReply(false)}
+        />
+      ) : null}
       </div>
     </div>
   );
@@ -795,6 +819,7 @@ function CommentRow({
   reacting,
   onReply,
   onLike,
+  onEdit,
   onDelete,
 }: {
   comment: Comment;
@@ -802,11 +827,51 @@ function CommentRow({
   reacting: boolean;
   onReply: () => void;
   onLike: () => void;
+  onEdit: (updated: Comment) => void;
   onDelete: () => void;
 }) {
+  const { notify } = useToast();
+  const [editing, setEditing] = useState<boolean>(false);
+  const [editDraft, setEditDraft] = useState<string>(comment.text);
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
   const liked: boolean = comment.my_reaction === "like";
   const likeCount: number =
     comment.reactions.find((r) => r.reaction === "like")?.count ?? 0;
+  const isAuthor: boolean = userId !== null && comment.user_id === userId;
+  const edited: boolean = commentWasEdited(comment);
+
+  function startEdit(): void {
+    setEditDraft(comment.text);
+    setEditing(true);
+  }
+
+  function cancelEdit(): void {
+    setEditDraft(comment.text);
+    setEditing(false);
+  }
+
+  async function saveEdit(): Promise<void> {
+    const text: string = editDraft.trim();
+    if (!text || savingEdit) return;
+    if (text === comment.text) {
+      setEditing(false);
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const updated = await api.updateComment(comment.id, text);
+      onEdit(updated);
+      setEditing(false);
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : "Failed to update comment",
+        "error",
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   return (
     <div className="flex items-start gap-2">
@@ -819,42 +884,85 @@ function CommentRow({
           <span className="text-zinc-400">
             {relativeTime(comment.created_at)}
           </span>
-        </div>
-        <MentionText
-          text={comment.text}
-          className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
-        />
-        <div className="mt-0.5 flex items-center gap-3 text-xs">
-          <button
-            type="button"
-            disabled={reacting}
-            onClick={onLike}
-            aria-pressed={liked}
-            className={`disabled:opacity-40 ${
-              liked
-                ? "font-semibold text-zinc-800 dark:text-zinc-100"
-                : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-            }`}
-          >
-            Like{likeCount > 0 ? ` · ${likeCount}` : ""}
-          </button>
-          <button
-            type="button"
-            onClick={onReply}
-            className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          >
-            Reply
-          </button>
-          {userId !== null && comment.user_id === userId ? (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="text-zinc-400 hover:text-red-600"
-            >
-              Delete
-            </button>
+          {edited ? (
+            <span className="text-zinc-400">· edited</span>
           ) : null}
         </div>
+        {editing ? (
+          <div className="mt-1 space-y-2">
+            <MentionInput
+              value={editDraft}
+              onChange={setEditDraft}
+              rows={2}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void saveEdit()}
+                disabled={savingEdit || !editDraft.trim()}
+                className="bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {savingEdit ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                disabled={savingEdit}
+                className="border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <MentionText
+            text={comment.text}
+            className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+          />
+        )}
+        {editing ? null : (
+          <div className="mt-0.5 flex items-center gap-3 text-xs">
+            <button
+              type="button"
+              disabled={reacting}
+              onClick={onLike}
+              aria-pressed={liked}
+              className={`disabled:opacity-40 ${
+                liked
+                  ? "font-semibold text-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              }`}
+            >
+              Like{likeCount > 0 ? ` · ${likeCount}` : ""}
+            </button>
+            <button
+              type="button"
+              onClick={onReply}
+              className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            >
+              Reply
+            </button>
+            {isAuthor ? (
+              <>
+                <button
+                  type="button"
+                  onClick={startEdit}
+                  className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="text-zinc-400 hover:text-red-600"
+                >
+                  Delete
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

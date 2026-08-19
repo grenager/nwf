@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -240,6 +241,36 @@ class CommentOut(ORMModel):
     my_reaction: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+AudienceRelation = Literal[
+    "author", "your_friend", "author_friend", "participant", "friend_of_participant"
+]
+
+
+class AudienceMemberOut(BaseModel):
+    """One person who can already read a thread (the viewer is never listed)."""
+
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    relation: AudienceRelation
+
+
+class PostAudienceOut(BaseModel):
+    """Who can see replies on a post, for the "Who will see this?" explainer."""
+
+    post_id: uuid.UUID
+    visibility: PostVisibility
+    viewer_is_author: bool
+    author_id: uuid.UUID
+    author_name: str
+    people: list[AudienceMemberOut] = Field(default_factory=list)
+    your_friend_count: int = 0
+    author_friend_count: int = 0
+    # Mean friend count among users who post or comment, for the "grow your
+    # circle" nudge. Clients compare it against ``your_friend_count``.
+    average_friend_count: float = 0.0
 
 
 class CommentCreate(BaseModel):
@@ -523,6 +554,8 @@ class InvitationCreate(BaseModel):
     post_id: uuid.UUID | None = None
     message: str | None = Field(default=None, max_length=2_000)
     become_friend: bool = False
+    # Display name parsed from a "Name <email>" entry, used to greet by name.
+    invitee_name: str | None = Field(default=None, max_length=200)
 
 
 class InvitationCreateResult(BaseModel):

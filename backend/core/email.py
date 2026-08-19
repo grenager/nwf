@@ -27,13 +27,30 @@ class InviteEmailContent:
     image_url: str | None = None
     publisher: str | None = None
     take: str | None = None
+    # Display name parsed from a "Name <email>" entry, used to greet by name.
+    recipient_name: str | None = None
+
+
+def _greeting_name(content: InviteEmailContent) -> str | None:
+    """First name of the recipient, when the sender supplied one."""
+    full: str = (content.recipient_name or "").strip()
+    if not full:
+        return None
+    return full.split()[0]
 
 
 def _plain_text(content: InviteEmailContent) -> str:
-    lines: list[str] = [
-        f"{content.inviter_name} invited you to a private conversation on NewsWithFriends.",
-        "",
-    ]
+    lines: list[str] = []
+    greeting: str | None = _greeting_name(content)
+    if greeting is not None:
+        lines.extend([f"Hi {greeting},", ""])
+    lines.extend(
+        [
+            f"{content.inviter_name} invited you to a private conversation "
+            f"on NewsWithFriends.",
+            "",
+        ]
+    )
     if content.headline:
         lines.append(content.headline)
         if content.publisher:
@@ -54,12 +71,19 @@ def _plain_text(content: InviteEmailContent) -> str:
 def _html_body(content: InviteEmailContent) -> str:
     inviter: str = html.escape(content.inviter_name)
     url: str = html.escape(content.invite_url, quote=True)
-    parts: list[str] = [
+    parts: list[str] = []
+    greeting: str | None = _greeting_name(content)
+    if greeting is not None:
+        parts.append(
+            f'<p style="font-family:Georgia,serif;font-size:18px;line-height:1.5;'
+            f'color:#18181b;margin:0 0 8px;">Hi {html.escape(greeting)},</p>'
+        )
+    parts.append(
         f"<p style=\"font-family:Georgia,serif;font-size:18px;line-height:1.5;"
         f"color:#18181b;margin:0 0 16px;\">"
         f"<strong>{inviter}</strong> invited you to join a private conversation "
-        f"on NewsWithFriends.</p>",
-    ]
+        f"on NewsWithFriends.</p>"
+    )
     if content.headline:
         headline: str = html.escape(content.headline)
         publisher: str = html.escape(content.publisher or "")
