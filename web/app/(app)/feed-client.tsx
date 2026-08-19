@@ -224,27 +224,37 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
         </div>
       ) : null}
 
-      <div className="divide-y divide-zinc-200 [&>article:first-child]:pt-1 dark:divide-zinc-800">
-        {data.items.map((card, index) => (
-          <Fragment key={card.card_id}>
-            {index === dividerBeforeIndex &&
+      <div className="[&>article:first-child]:pt-1">
+        {data.items.map((card, index) => {
+          const showNewSinceDivider: boolean =
+            index === dividerBeforeIndex &&
             dividerBeforeIndex > 0 &&
-            data.new_since !== null ? (
-              <div className="my-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  New since {formatNewSince(data.new_since)}
-                </span>
-                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-              </div>
-            ) : null}
-            <PostCard
-              card={card}
-              me={me}
-              onCardChange={onCardChange}
-            />
-          </Fragment>
-        ))}
+            data.new_since !== null;
+          const showTopBorder: boolean =
+            index > 0 && !showNewSinceDivider;
+
+          return (
+            <Fragment key={card.card_id}>
+              {showNewSinceDivider ? (
+                <div
+                  className="relative border-t border-zinc-200 py-7 dark:border-zinc-800"
+                  role="separator"
+                  aria-label={`New since ${formatNewSince(data.new_since!)}`}
+                >
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:bg-zinc-950">
+                    New since {formatNewSince(data.new_since!)}
+                  </span>
+                </div>
+              ) : null}
+              <PostCard
+                card={card}
+                me={me}
+                onCardChange={onCardChange}
+                showTopBorder={showTopBorder}
+              />
+            </Fragment>
+          );
+        })}
       </div>
     </div>
   );

@@ -5,7 +5,6 @@ import { useAuth } from "@/components/auth-provider";
 import { PostThread } from "@/components/post-thread";
 import { ReaderBody } from "@/components/reader-body";
 import { SharePostModal } from "@/components/share-post-modal";
-import { StarsDisplay } from "@/components/star-rating";
 import { api, ApiError } from "@/lib/api";
 import type { Post, Profile, UUID } from "@/lib/types";
 import { useEffect, useState, type ReactNode } from "react";
@@ -109,9 +108,6 @@ export function PostDetail({
     );
   }
 
-  const hasAggregate: boolean =
-    post.rating_count > 0 && post.rating_avg !== null;
-
   const preview: ReactNode = (
     <>
       <ArticleCard
@@ -131,16 +127,6 @@ export function PostDetail({
             sourceName={post.source_name}
             authorName={post.author_name}
           />
-        </div>
-      ) : null}
-
-      {hasAggregate && post.rating_avg !== null ? (
-        <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-          <StarsDisplay value={post.rating_avg} size="sm" />
-          <span>
-            {post.rating_avg.toFixed(1)} · {post.rating_count} rating
-            {post.rating_count === 1 ? "" : "s"}
-          </span>
         </div>
       ) : null}
     </>

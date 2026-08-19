@@ -16,9 +16,16 @@ interface PostCardProps {
   card: FeedCard;
   me: Profile | null;
   onCardChange: (card: FeedCard) => void;
+  /** Top border between feed items (suppressed when a section divider sits above). */
+  showTopBorder?: boolean;
 }
 
-export function PostCard({ card, me, onCardChange }: PostCardProps) {
+export function PostCard({
+  card,
+  me,
+  onCardChange,
+  showTopBorder = false,
+}: PostCardProps) {
   const { user } = useAuth();
   const [inviteOpen, setInviteOpen] = useState<boolean>(false);
 
@@ -138,7 +145,9 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
       : (post.unread_reply_count ?? 0);
 
   return (
-    <article className="py-7">
+    <article
+      className={`py-7 ${showTopBorder ? "border-t border-zinc-200 dark:border-zinc-800" : ""}`}
+    >
       {unreadN > 0 ? (
         <div className="mb-2">
           <Link

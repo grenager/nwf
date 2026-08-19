@@ -125,10 +125,19 @@ export function PostThread({
   const markedSeenRef = useRef<boolean>(false);
   const unreadDividerRef = useRef<HTMLDivElement | null>(null);
   const scrolledUnreadRef = useRef<boolean>(false);
+  const [ratingOpen, setRatingOpen] = useState<boolean>(false);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
   const isPreviewMode: boolean =
     compact || (maxTopLevelComments !== undefined && maxTopLevelComments > 0);
+
+  const hasAggregate: boolean =
+    post.rating_count > 0 && post.rating_avg !== null;
+
+  function handleRate(next: number | null): void {
+    onRate(next);
+    setRatingOpen(false);
+  }
 
   // Stamp the per-thread read cursor when the signed-in viewer opens this thread
   // (detail page only — not every feed card mount).
@@ -382,9 +391,6 @@ export function PostThread({
               <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                 {post.author_name}
               </span>
-              {post.author_rating != null ? (
-                <StarsDisplay value={post.author_rating} size="xs" />
-              ) : null}
               <span className="text-xs text-zinc-400">
                 {relativeTime(post.created_at)}
               </span>
@@ -552,6 +558,39 @@ export function PostThread({
 
         {preview ? <div className="space-y-3">{preview}</div> : null}
 
+        {!compact && !isGuest ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+            {hasAggregate && post.rating_avg !== null ? (
+              <>
+                <StarsDisplay value={post.rating_avg} size="xs" />
+                <span>
+                  {post.rating_avg.toFixed(1)} · {post.rating_count} rating
+                  {post.rating_count === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : null}
+            {ratingOpen ? (
+              <RatingInput
+                storyId={storyId}
+                value={myRating}
+                onChange={handleRate}
+                size="sm"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!requireAuth("rate stories")) return;
+                  setRatingOpen(true);
+                }}
+                className="font-medium text-brand-600 hover:underline dark:text-brand-400"
+              >
+                {myRating != null ? "Change my rating" : "Rate this"}
+              </button>
+            )}
+          </div>
+        ) : null}
+
         {isGuest ? (
           post.reply_count > 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -661,18 +700,6 @@ export function PostThread({
       >
         <Avatar name={profileName(me)} imageUrl={me?.image_url ?? null} />
         <div className="min-w-0 flex-1 space-y-2">
-              {!compact ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    Your rating
-                  </span>
-                  <RatingInput
-                    storyId={storyId}
-                    value={myRating}
-                    onChange={onRate}
-                  />
-                </div>
-              ) : null}
               {replyTo ? (
                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                   <span>
@@ -789,9 +816,6 @@ function CommentRow({
           <span className="font-semibold text-zinc-800 dark:text-zinc-200">
             {comment.author_name}
           </span>
-          {comment.author_rating != null ? (
-            <StarsDisplay value={comment.author_rating} size="xs" />
-          ) : null}
           <span className="text-zinc-400">
             {relativeTime(comment.created_at)}
           </span>

@@ -62,13 +62,16 @@ export function StarPicker({
   value,
   onChange,
   disabled = false,
+  size = "lg",
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
   disabled?: boolean;
+  size?: "sm" | "lg";
 }) {
   const [hover, setHover] = useState<number>(0);
   const shown: number = hover || value || 0;
+  const sizeClass: string = size === "sm" ? SIZE_CLASS.sm : "text-xl";
 
   function choose(n: number): void {
     if (disabled) return;
@@ -77,7 +80,7 @@ export function StarPicker({
 
   return (
     <span
-      className="inline-flex text-xl leading-none"
+      className={`inline-flex leading-none ${sizeClass}`}
       onMouseLeave={() => setHover(0)}
     >
       {CELLS.map((n) => (
@@ -109,10 +112,16 @@ interface RatingInputProps {
   storyId: UUID;
   value: number | null;
   onChange: (value: number | null) => void;
+  size?: "sm" | "lg";
 }
 
 /** Half-star input bound to a story: persists to the API, rolls back on error. */
-export function RatingInput({ storyId, value, onChange }: RatingInputProps) {
+export function RatingInput({
+  storyId,
+  value,
+  onChange,
+  size = "lg",
+}: RatingInputProps) {
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const [busy, setBusy] = useState<boolean>(false);
@@ -138,6 +147,7 @@ export function RatingInput({ storyId, value, onChange }: RatingInputProps) {
     <StarPicker
       value={value}
       disabled={busy}
+      size={size}
       onChange={(next) => void commit(next)}
     />
   );
