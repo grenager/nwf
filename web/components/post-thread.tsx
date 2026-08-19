@@ -13,7 +13,14 @@ import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { Comment, Post, Profile, PostVisibility, UUID } from "@/lib/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+function dispatchThreadSeen(postId: UUID): void {
+  window.dispatchEvent(
+    new CustomEvent("nwf:thread-seen", { detail: { postId } }),
+  );
+}
 
 function profileName(me: Profile | null): string {
   if (!me) return "You";
@@ -61,6 +68,9 @@ export function PostThread({
   onDelete,
   onInvite,
   markSeenOnMount = false,
+  focusUnread = false,
+  maxTopLevelComments,
+  compact = false,
 }: {
   post: Post;
   me: Profile | null;
@@ -73,7 +83,14 @@ export function PostThread({
   onInvite: () => void;
   /** Stamp the read cursor only when the thread is actually opened (detail page). */
   markSeenOnMount?: boolean;
+  /** Scroll the "New replies" divider into view once (from ?focus=unread). */
+  focusUnread?: boolean;
+  /** Cap top-level comments shown (feed preview). Nested replies stay attached. */
+  maxTopLevelComments?: number;
+  /** Hide rating row and attach affordances (feed preview). */
+  compact?: boolean;
 }) {
+  const router = useRouter();
   const { user, session } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
@@ -106,8 +123,12 @@ export function PostThread({
   );
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const markedSeenRef = useRef<boolean>(false);
+  const unreadDividerRef = useRef<HTMLDivElement | null>(null);
+  const scrolledUnreadRef = useRef<boolean>(false);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
+  const isPreviewMode: boolean =
+    compact || (maxTopLevelComments !== undefined && maxTopLevelComments > 0);
 
   // Stamp the per-thread read cursor when the signed-in viewer opens this thread
   // (detail page only — not every feed card mount).
@@ -177,6 +198,40 @@ export function PostThread({
     tops,
     childrenByParent,
   ]);
+
+  const visibleTops: Comment[] = useMemo(() => {
+    if (maxTopLevelComments === undefined || maxTopLevelComments <= 0) {
+      return tops;
+    }
+    if (tops.length <= maxTopLevelComments) return tops;
+    return tops.slice(-maxTopLevelComments);
+  }, [tops, maxTopLevelComments]);
+
+  const displayedReplyCount: number = useMemo(() => {
+    let count: number = 0;
+    for (const top of visibleTops) {
+      count += 1 + (childrenByParent.get(top.id)?.length ?? 0);
+    }
+    return count;
+  }, [visibleTops, childrenByParent]);
+
+  const showViewAllComments: boolean =
+    maxTopLevelComments !== undefined &&
+    maxTopLevelComments > 0 &&
+    post.reply_count > displayedReplyCount;
+
+  useEffect(() => {
+    if (!focusUnread || firstUnreadTopId === null || scrolledUnreadRef.current) {
+      return;
+    }
+    scrolledUnreadRef.current = true;
+    requestAnimationFrame(() => {
+      unreadDividerRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }, [focusUnread, firstUnreadTopId]);
 
   function startReplyTo(comment: Comment): void {
     setDraftParentId(comment.id);
@@ -274,13 +329,20 @@ export function PostThread({
         text,
         replyTo?.id ?? null,
       );
+      const nowIso: string = new Date().toISOString();
       onPostChange({
         ...post,
         replies: [...post.replies, created],
         reply_count: post.reply_count + 1,
         participant_count: post.participant_count + 1,
+        last_seen_at: nowIso,
+        unread_reply_count: 0,
+        unread_replies_for_viewer: false,
       });
       clearDraft();
+      void api.markThreadSeen(post.id).then(() => {
+        dispatchThreadSeen(post.id);
+      }).catch(() => undefined);
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to reply", "error");
     } finally {
@@ -375,10 +437,14 @@ export function PostThread({
                         <button
                           type="button"
                           onClick={() => {
+                            setMenuOpen(false);
+                            if (isPreviewMode) {
+                              router.push(`/post/${post.id}`);
+                              return;
+                            }
                             setEditDraft(post.take ?? "");
                             setEditSharedDraft(post.shared_text ?? "");
                             setEditing(true);
-                            setMenuOpen(false);
                           }}
                           className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         >
@@ -500,12 +566,26 @@ export function PostThread({
             </p>
           ) : null
         ) : (
-          tops.map((r) => {
+          <>
+          {showViewAllComments ? (
+            <Link
+              href={`/post/${post.id}`}
+              scroll={false}
+              className="inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400"
+            >
+              View all {post.reply_count}{" "}
+              {post.reply_count === 1 ? "comment" : "comments"}
+            </Link>
+          ) : null}
+          {visibleTops.map((r) => {
             const kids: Comment[] = childrenByParent.get(r.id) ?? [];
             return (
               <Fragment key={r.id}>
                 {firstUnreadTopId === r.id ? (
-                  <div className="my-2 flex items-center gap-3">
+                  <div
+                    ref={unreadDividerRef}
+                    className="my-2 flex items-center gap-3"
+                  >
                     <div className="h-px flex-1 bg-brand-200 dark:bg-brand-900" />
                     <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
                       New replies
@@ -566,7 +646,8 @@ export function PostThread({
                 </div>
               </Fragment>
             );
-          })
+          })}
+          </>
         )}
 
       {isGuest ? null : (
@@ -580,16 +661,18 @@ export function PostThread({
       >
         <Avatar name={profileName(me)} imageUrl={me?.image_url ?? null} />
         <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  Your rating
-                </span>
-                <RatingInput
-                  storyId={storyId}
-                  value={myRating}
-                  onChange={onRate}
-                />
-              </div>
+              {!compact ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Your rating
+                  </span>
+                  <RatingInput
+                    storyId={storyId}
+                    value={myRating}
+                    onChange={onRate}
+                  />
+                </div>
+              ) : null}
               {replyTo ? (
                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                   <span>
@@ -640,18 +723,20 @@ export function PostThread({
                     >
                       Reply
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAttach((v) => !v)}
-                      className="shrink-0 rounded-full border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-                      title="Attach a related link"
-                    >
-                      Attach
-                    </button>
+                    {!compact ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAttach((v) => !v)}
+                        className="shrink-0 rounded-full border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                        title="Attach a related link"
+                      >
+                        Attach
+                      </button>
+                    ) : null}
                   </>
                 ) : null}
               </div>
-              {showAttach && showComposerActions ? (
+              {!compact && showAttach && showComposerActions ? (
                 <div className="flex gap-2">
                   <input
                     value={attachUrl}

@@ -36,6 +36,7 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
   function onPostChange(updated: Post): void {
     onCardChange({
       ...card,
+      unread_reply_count: updated.unread_reply_count,
       posts: card.posts.map((p) => (p.id === updated.id ? updated : p)),
     });
   }
@@ -159,6 +160,8 @@ export function PostCard({ card, me, onCardChange }: PostCardProps) {
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
         onInvite={() => setInviteOpen(true)}
+        maxTopLevelComments={2}
+        compact
       />
       {inviteOpen ? (
         <SharePostModal

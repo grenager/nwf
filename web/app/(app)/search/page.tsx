@@ -1,10 +1,9 @@
 "use client";
 
 import { StoryCard } from "@/components/story-card";
-import { StoryModal } from "@/components/story-modal";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { Story, UUID } from "@/lib/types";
+import type { Story } from "@/lib/types";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -27,7 +26,6 @@ function SearchInner() {
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [searched, setSearched] = useState<boolean>(false);
-  const [openStoryId, setOpenStoryId] = useState<UUID | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runSearch = useCallback(
@@ -73,15 +71,6 @@ function SearchInner() {
     debounceRef.current = setTimeout(() => void runSearch(value), 300);
   }
 
-  const patchStatus = useCallback(
-    (storyId: UUID, patch: { read?: boolean }): void => {
-      setResults((prev) =>
-        prev.map((s) => (s.id === storyId ? { ...s, ...patch } : s)),
-      );
-    },
-    [],
-  );
-
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
@@ -111,11 +100,7 @@ function SearchInner() {
           </p>
           <div className="flex flex-col gap-3">
             {results.map((story) => (
-              <StoryCard
-                key={story.id}
-                story={story}
-                onOpen={setOpenStoryId}
-              />
+              <StoryCard key={story.id} story={story} />
             ))}
           </div>
         </>
@@ -124,14 +109,6 @@ function SearchInner() {
           Type to search recent article titles.
         </p>
       )}
-
-      {openStoryId ? (
-        <StoryModal
-          storyId={openStoryId}
-          onClose={() => setOpenStoryId(null)}
-          onStatusChange={patchStatus}
-        />
-      ) : null}
     </div>
   );
 }

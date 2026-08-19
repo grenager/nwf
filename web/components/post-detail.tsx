@@ -14,6 +14,8 @@ interface PostDetailProps {
   postId: UUID;
   /** Called when the underlying post is deleted (e.g. to close a modal). */
   onDeleted?: () => void;
+  /** Scroll to the "New replies" divider when opened via ?focus=unread. */
+  focusUnread?: boolean;
 }
 
 /**
@@ -21,7 +23,11 @@ interface PostDetailProps {
  * when present, and the full conversation. Rendered both as a permalink page and
  * inside the intercepting-route modal.
  */
-export function PostDetail({ postId, onDeleted }: PostDetailProps) {
+export function PostDetail({
+  postId,
+  onDeleted,
+  focusUnread = false,
+}: PostDetailProps) {
   const { user } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [me, setMe] = useState<Profile | null>(null);
@@ -153,6 +159,7 @@ export function PostDetail({ postId, onDeleted }: PostDetailProps) {
         onDelete={() => onDeleted?.()}
         onInvite={() => setInviteOpen(true)}
         markSeenOnMount
+        focusUnread={focusUnread}
       />
       {inviteOpen ? (
         <SharePostModal

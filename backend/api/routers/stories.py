@@ -20,6 +20,7 @@ from api.friends import (
     friend_profiles_map,
     friend_stars_by_story,
     global_activity_by_story,
+    primary_post_ids_by_story,
     top_readers,
 )
 from api.schemas import (
@@ -272,6 +273,13 @@ async def title_search(
         for sid, profiles in friend_profiles.items()
     }
     items = _rows_to_stories(ranked_rows, friend_map)
+
+    if story_ids:
+        post_by_story = await primary_post_ids_by_story(
+            session, user.id, story_ids
+        )
+        for item in items:
+            item.post_id = post_by_story.get(item.id)
 
     source_ids = {story.source_id for story, _, _ in ranked_rows if story.source_id}
     if source_ids:

@@ -140,6 +140,8 @@ class StoryWithStatus(StoryOut):
     dismissed: bool = False
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
+    # Most recent post about this story the viewer may see (search → detail link).
+    post_id: uuid.UUID | None = None
 
 
 class FriendStarOut(BaseModel):
@@ -329,6 +331,7 @@ class PostOut(ORMModel):
     author_image_url: str | None = None
     take: str | None = None
     shared_text: str | None = None
+    shared_text_truncated: bool = False
     visibility: PostVisibility
     last_activity_at: datetime
     created_at: datetime
