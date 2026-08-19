@@ -6,8 +6,10 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from api.friends import ensure_friend_capacity, friend_slots_used
 from api.main import create_app
 from api.routers.invitations import (
     _DEFAULT_SHARE_PREFIX,
@@ -63,6 +65,7 @@ def test_invite_email_html_and_plain() -> None:
         to_email="friend@example.com",
         inviter_name="Ada Lovelace",
         invite_url="https://nwf.example/invite/tok",
+        unsubscribe_url="https://nwf.example/unsubscribe/invite/u",
         message="Let's talk",
         headline="A Story <script>",
         article_url="https://news.example/a",
@@ -84,6 +87,7 @@ def test_invite_email_greets_recipient_by_first_name() -> None:
         to_email="teg@example.com",
         inviter_name="Ada Lovelace",
         invite_url="https://nwf.example/invite/tok",
+        unsubscribe_url="https://nwf.example/unsubscribe/invite/u",
         recipient_name="Teg Grenager",
     )
     assert _plain_text(content).startswith("Hi Teg,")
@@ -95,6 +99,7 @@ def test_invite_email_omits_greeting_without_recipient_name() -> None:
         to_email="teg@example.com",
         inviter_name="Ada Lovelace",
         invite_url="https://nwf.example/invite/tok",
+        unsubscribe_url="https://nwf.example/unsubscribe/invite/u",
     )
     assert not _plain_text(content).startswith("Hi ")
     assert "Hi " not in _html_body(content)
@@ -110,10 +115,133 @@ async def test_send_invite_email_noop_without_api_key() -> None:
             to_email="a@b.com",
             inviter_name="Ada",
             invite_url="https://x",
+            unsubscribe_url="https://x/unsubscribe/invite/u",
         ),
         settings=settings,
     )
     assert sent is False
+
+
+def test_invite_email_carries_unsubscribe_link() -> None:
+    """Invitees who never asked for this must be able to opt out."""
+    content = InviteEmailContent(
+        to_email="friend@example.com",
+        inviter_name="Ada",
+        invite_url="https://nwf.example/invite/tok",
+        unsubscribe_url="https://nwf.example/unsubscribe/invite/abc",
+    )
+    plain = _plain_text(content)
+    assert (
+        "Unsubscribe from these emails: "
+        "https://nwf.example/unsubscribe/invite/abc" in plain
+    )
+    html = _html_body(content)
+    assert 'href="https://nwf.example/unsubscribe/invite/abc"' in html
+    assert "Unsubscribe from these emails" in html
+
+
+@pytest.mark.asyncio
+async def test_send_invite_email_sets_list_unsubscribe_header() -> None:
+    settings = MagicMock()
+    settings.resend_api_key = "rk"
+    settings.email_from = "NewsWithFriends <noreply@example.com>"
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("core.email.httpx.AsyncClient", return_value=mock_client):
+        sent = await send_invite_email(
+            InviteEmailContent(
+                to_email="a@b.com",
+                inviter_name="Ada",
+                invite_url="https://x",
+                unsubscribe_url="https://x/unsubscribe/invite/u",
+            ),
+            settings=settings,
+        )
+
+    assert sent is True
+    headers = mock_client.post.await_args.kwargs["json"]["headers"]
+    assert headers["List-Unsubscribe"] == "<https://x/unsubscribe/invite/u>"
+    assert headers["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
+@pytest.mark.asyncio
+async def test_friend_slots_used_counts_connections_and_invitations() -> None:
+    session = AsyncMock()
+    session.scalar = AsyncMock(side_effect=[7, 3])
+    assert await friend_slots_used(session, uuid.uuid4()) == 10
+
+
+@pytest.mark.asyncio
+async def test_ensure_friend_capacity_allows_below_the_limit() -> None:
+    session = AsyncMock()
+    session.scalar = AsyncMock(side_effect=[48, 1])
+    settings = MagicMock()
+    settings.max_friends = 50
+    await ensure_friend_capacity(session, uuid.uuid4(), settings=settings)
+
+
+@pytest.mark.asyncio
+async def test_ensure_friend_capacity_raises_at_the_limit() -> None:
+    session = AsyncMock()
+    session.scalar = AsyncMock(side_effect=[40, 10])
+    settings = MagicMock()
+    settings.max_friends = 50
+    with pytest.raises(HTTPException) as excinfo:
+        await ensure_friend_capacity(session, uuid.uuid4(), settings=settings)
+    assert excinfo.value.status_code == 409
+    assert "50-friend limit" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_accept_invitation_refuses_when_accepter_is_full() -> None:
+    """A full account cannot grow by accepting an invitation."""
+    invitation = Invitation(
+        token="tok-full",
+        inviter_id=uuid.uuid4(),
+        invitee_email="friend@example.com",
+        status=InvitationStatus.pending,
+        reusable=False,
+    )
+    session = AsyncMock()
+    session.scalar = AsyncMock(side_effect=[50, 0])
+    session.add = MagicMock()
+
+    with pytest.raises(HTTPException) as excinfo:
+        await accept_invitation_for_user(session, invitation, uuid.uuid4())
+    assert excinfo.value.status_code == 409
+    session.add.assert_not_called()
+    assert invitation.status == InvitationStatus.pending
+
+
+@pytest.mark.asyncio
+async def test_reusable_link_degrades_to_view_only_when_inviter_is_full() -> None:
+    """Share links reserve no slot, so a full inviter must not error the reader."""
+    invitation = Invitation(
+        token="tok-share",
+        inviter_id=uuid.uuid4(),
+        invitee_email=None,
+        post_id=uuid.uuid4(),
+        status=InvitationStatus.pending,
+        reusable=True,
+        become_friend=True,
+    )
+    session = AsyncMock()
+    # existing redemption lookup, then the redeemer's counts, then the inviter's
+    session.scalar = AsyncMock(side_effect=[None, 0, 0, 50, 0, None])
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+
+    result = await accept_invitation_for_user(session, invitation, uuid.uuid4())
+    assert result.status == "view_only"
+    assert result.became_friend is False
+    assert "full" in result.message
 
 
 @pytest.mark.asyncio

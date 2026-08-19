@@ -34,6 +34,7 @@ def test_openapi_includes_unsubscribe() -> None:
     client = TestClient(create_app())
     paths = client.get("/openapi.json").json()["paths"]
     assert "/email/unsubscribe/{token}" in paths
+    assert "/email/unsubscribe/invite/{token}" in paths
 
 
 def test_name_list_formatting() -> None:
@@ -82,8 +83,9 @@ def test_digest_email_links_use_app_base_url() -> None:
         settings=settings,
     )
     assert content.feed_url == "https://www.newswithfriends.org/"
+    # Digest-scoped so it does not also silence instant activity email.
     assert content.unsubscribe_url == (
-        f"https://www.newswithfriends.org/unsubscribe/{token}"
+        f"https://www.newswithfriends.org/unsubscribe/{token}?scope=digest"
     )
     assert content.lines[0].href == (
         f"https://www.newswithfriends.org/post/{post_id}"
@@ -161,6 +163,7 @@ def test_friend_notice_email_html() -> None:
         actor_name="Teg",
         actor_image_url="https://cdn.example/teg.jpg",
         action_url="https://www.newswithfriends.org/friends",
+        unsubscribe_url="https://www.newswithfriends.org/unsubscribe/tok",
         kind="request",
     )
     assert _friend_notice_subject(request) == "Teg sent you a friend request"
@@ -174,10 +177,36 @@ def test_friend_notice_email_html() -> None:
         actor_name="Jim",
         actor_image_url=None,
         action_url="https://www.newswithfriends.org/friends",
+        unsubscribe_url="https://www.newswithfriends.org/unsubscribe/tok",
         kind="accepted",
     )
     assert _friend_notice_subject(accepted) == "Jim accepted your friend request"
     assert "accepted your friend request" in _friend_notice_html(accepted)
+
+
+def test_friend_notice_email_carries_unsubscribe_link() -> None:
+    from core.email import (
+        FriendNoticeEmailContent,
+        _friend_notice_html,
+        _friend_notice_plain,
+    )
+
+    content = FriendNoticeEmailContent(
+        to_email="a@b.com",
+        actor_name="Teg",
+        actor_image_url=None,
+        action_url="https://www.newswithfriends.org/friends",
+        unsubscribe_url="https://www.newswithfriends.org/unsubscribe/tok",
+        kind="request",
+    )
+    assert (
+        "Unsubscribe: https://www.newswithfriends.org/unsubscribe/tok"
+        in _friend_notice_plain(content)
+    )
+    assert (
+        'href="https://www.newswithfriends.org/unsubscribe/tok"'
+        in _friend_notice_html(content)
+    )
 
 
 @pytest.mark.asyncio
@@ -193,6 +222,7 @@ async def test_send_friend_notice_noop_without_api_key() -> None:
             actor_name="Teg",
             actor_image_url=None,
             action_url="https://www.newswithfriends.org/friends",
+            unsubscribe_url="https://www.newswithfriends.org/unsubscribe/tok",
             kind="request",
         ),
         settings=settings,

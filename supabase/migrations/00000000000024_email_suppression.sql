@@ -8,9 +8,9 @@ alter table public.invitations
 create unique index if not exists invitations_unsubscribe_token_key
     on public.invitations (unsubscribe_token);
 
--- Addresses that must never be emailed again. Keyed by address (lowercased by
--- the API) because suppressed invitees have no profile row to hang a flag on.
-create table if not exists public.email_suppressions (
+-- Addresses that must never be emailed again. Keyed by the address itself
+-- because a suppressed invitee has no profile row to hang a preference on.
+create table public.email_suppressions (
     email         text primary key,
     reason        text,
     invitation_id uuid references public.invitations (id) on delete set null,
@@ -19,7 +19,6 @@ create table if not exists public.email_suppressions (
 
 alter table public.email_suppressions enable row level security;
 
--- Writes happen through the FastAPI service role, which bypasses RLS.
-drop policy if exists email_suppressions_select on public.email_suppressions;
+-- Writes go through the FastAPI service role, which bypasses RLS.
 create policy email_suppressions_select on public.email_suppressions
     for select using (public.is_admin());
