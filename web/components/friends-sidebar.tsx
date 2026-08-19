@@ -85,6 +85,19 @@ function FriendRow({
 }
 
 function GuestFriendsCta() {
+  const [discussingCount, setDiscussingCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    void api
+      .getCommunityStats()
+      .then((stats) => {
+        if (stats.discussing_count > 0) {
+          setDiscussingCount(stats.discussing_count);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
   return (
     <div className="py-1">
       <h2 className="font-serif text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -94,6 +107,13 @@ function GuestFriendsCta() {
       <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
         See what your friends are reading and compare coverage across outlets.
       </p>
+      {discussingCount !== null ? (
+        <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+          {discussingCount.toLocaleString()}{" "}
+          {discussingCount === 1 ? "person" : "people"} discussing articles with
+          their friends.
+        </p>
+      ) : null}
       <p className="mt-2 text-xs text-zinc-400">
         Your friends list is empty until you sign up.
       </p>

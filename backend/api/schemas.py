@@ -135,6 +135,14 @@ class FriendEngagementOut(BaseModel):
     readers: list[FriendMiniOut] = Field(default_factory=list)
 
 
+class StoryDiscussionOut(BaseModel):
+    """Anonymous social proof for guest cards: photos only, no names or ids."""
+
+    people_count: int = 0
+    avatar_urls: list[str] = Field(default_factory=list)
+    last_comment_at: datetime | None = None
+
+
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
@@ -143,6 +151,7 @@ class StoryWithStatus(StoryOut):
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     # Most recent post about this story the viewer may see (search → detail link).
     post_id: uuid.UUID | None = None
+    discussion: StoryDiscussionOut | None = None
 
 
 class FriendStarOut(BaseModel):
@@ -155,6 +164,14 @@ class StoryList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class CommunityStatsOut(BaseModel):
+    """Public aggregate counts for guest social proof."""
+
+    member_count: int = 0
+    discussing_count: int = 0
+    conversation_count: int = 0
 
 
 class StoryCreate(BaseModel):

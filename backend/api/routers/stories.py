@@ -16,6 +16,7 @@ from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
     aggregate_engagement,
     curated_source_subquery,
+    discussion_activity_by_story,
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
@@ -29,12 +30,13 @@ from api.schemas import (
     FriendMiniOut,
     FriendStarOut,
     StoryCreate,
+    StoryDiscussionOut,
     StoryList,
     StoryOut,
     StoryWithStatus,
 )
 from core.attribution import resolve_attribution
-from core.models import Source, Story, StoryStatus, UserSource
+from core.models import Comment, Source, Story, StoryStatus, UserSource
 
 router = APIRouter(prefix="/stories", tags=["stories"])
 
@@ -301,6 +303,34 @@ async def title_search(
     return StoryList(items=items, total=len(scored), limit=limit, offset=0)
 
 
+def _discover_freshness_expr() -> ColumnElement[Any]:
+    """Order discover by the newer of scrape time and last comment."""
+    last_comment = (
+        select(func.max(Comment.created_at))
+        .where(Comment.story_id == Story.id)
+        .correlate(Story)
+        .scalar_subquery()
+    )
+    return func.greatest(
+        Story.created_at,
+        func.coalesce(last_comment, Story.created_at),
+    )
+
+
+async def _attach_discussion(
+    session: SessionDep, items: list[StoryWithStatus]
+) -> None:
+    """Attach anonymous discussion social proof to story items."""
+    if not items:
+        return
+    story_ids: list[uuid.UUID] = [item.id for item in items]
+    discussion_map: dict[uuid.UUID, StoryDiscussionOut] = (
+        await discussion_activity_by_story(session, story_ids)
+    )
+    for item in items:
+        item.discussion = discussion_map.get(item.id)
+
+
 async def _enrich_story_sources(
     session: SessionDep, items: list[StoryWithStatus]
 ) -> None:
@@ -356,8 +386,9 @@ async def discover_stories(
 
     if viewer_id is None:
         response.headers["Cache-Control"] = _GUEST_CACHE_CONTROL
+        freshness = _discover_freshness_expr()
         stmt = (
-            base.order_by(Story.created_at.desc())
+            base.order_by(freshness.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -369,6 +400,7 @@ async def discover_stories(
             model.starred = False
             items.append(model)
         await _enrich_story_sources(session, items)
+        await _attach_discussion(session, items)
         total = await session.scalar(
             select(func.count()).select_from(base.subquery())
         )
@@ -381,9 +413,10 @@ async def discover_stories(
 
     # Authenticated: skip stories the viewer already has a visible post on.
     fetch_limit: int = limit + 40
+    freshness = _discover_freshness_expr()
     stmt = (
         _with_status_columns(base, viewer_id)
-        .order_by(Story.created_at.desc())
+        .order_by(freshness.desc())
         .limit(fetch_limit)
         .offset(offset)
     )
@@ -409,6 +442,7 @@ async def discover_stories(
     }
     items = _rows_to_stories(filtered, friend_map)
     await _enrich_story_sources(session, items)
+    await _attach_discussion(session, items)
 
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
     return StoryList(
