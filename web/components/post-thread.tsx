@@ -8,7 +8,9 @@ import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { draftScopeKey } from "@/lib/drafts";
 import { relativeTime } from "@/lib/time";
+import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { Comment, Post, Profile, PostVisibility, UUID } from "@/lib/types";
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -76,7 +78,17 @@ export function PostThread({
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const isGuest: boolean = session === null;
-  const [draft, setDraft] = useState<string>("");
+  const draftKey: string = draftScopeKey(
+    { kind: "post", postId: post.id },
+    user?.id ?? null,
+  );
+  const {
+    text: draft,
+    parentCommentId: draftParentId,
+    setText: setDraft,
+    setParentCommentId: setDraftParentId,
+    clear: clearDraft,
+  } = usePersistedDraft(isGuest ? null : draftKey);
   const [posting, setPosting] = useState<boolean>(false);
   const [attachUrl, setAttachUrl] = useState<string>("");
   const [showAttach, setShowAttach] = useState<boolean>(false);
@@ -88,7 +100,6 @@ export function PostThread({
     post.shared_text ?? "",
   );
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
-  const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [reacting, setReacting] = useState<boolean>(false);
   const [seenBoundary, setSeenBoundary] = useState<string | null>(
     post.last_seen_at ?? null,
@@ -132,6 +143,13 @@ export function PostThread({
     return { tops: topsLocal, childrenByParent: kids };
   }, [post.replies]);
 
+  // Derived from the persisted draft so a restored draft also restores its reply
+  // target, and a target deleted in the meantime falls back to a top-level reply.
+  const replyTo: Comment | null = useMemo(() => {
+    if (draftParentId === null) return null;
+    return post.replies.find((r) => r.id === draftParentId) ?? null;
+  }, [draftParentId, post.replies]);
+
   const firstUnreadTopId: UUID | null = useMemo(() => {
     if (!user) return null;
     // No prior cursor and nothing flagged unread — skip the divider.
@@ -161,7 +179,7 @@ export function PostThread({
   ]);
 
   function startReplyTo(comment: Comment): void {
-    setReplyTo(comment);
+    setDraftParentId(comment.id);
     setComposerActive(true);
     composerRef.current?.focus();
   }
@@ -262,8 +280,7 @@ export function PostThread({
         reply_count: post.reply_count + 1,
         participant_count: post.participant_count + 1,
       });
-      setDraft("");
-      setReplyTo(null);
+      clearDraft();
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to reply", "error");
     } finally {
@@ -583,7 +600,7 @@ export function PostThread({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setReplyTo(null)}
+                    onClick={() => setDraftParentId(null)}
                     className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
                   >
                     Cancel

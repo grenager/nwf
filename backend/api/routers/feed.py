@@ -437,6 +437,10 @@ async def get_feed(
         friend_ids=friends if viewer_id is not None else None,
         limit=limit,
         since_days=settings.inbox_candidate_days,
+        # A quiet couple of weeks should not leave the feed nearly empty; reach
+        # further back until there is enough to fill it.
+        min_results=settings.feed_min_items,
+        max_since_days=settings.feed_max_lookback_days,
     )
 
     # Aggregate counts are only rendered by the empty state, so only pay for

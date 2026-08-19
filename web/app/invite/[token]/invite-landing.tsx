@@ -9,7 +9,9 @@ import { ReaderBody } from "@/components/reader-body";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { draftScopeKey } from "@/lib/drafts";
 import { relativeTime } from "@/lib/time";
+import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { InvitePreview, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -82,8 +84,22 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const [joined, setJoined] = useState<boolean>(false);
   const [friendPromptDismissed, setFriendPromptDismissed] =
     useState<boolean>(false);
-  const [draft, setDraft] = useState<string>("");
+  const {
+    text: draft,
+    setText: setDraft,
+    clear: clearDraft,
+  } = usePersistedDraft(
+    draftScopeKey({ kind: "invite", token }, user?.id ?? null),
+  );
   const [posting, setPosting] = useState<boolean>(false);
+
+  // Height tracks the text itself so a restored draft opens at its real size.
+  useEffect(() => {
+    const el: HTMLTextAreaElement | null = composerRef.current;
+    if (el === null) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, REPLY_MAX_HEIGHT_PX)}px`;
+  }, [draft]);
 
   const load = useCallback(async (): Promise<void> => {
     if (!token) {
@@ -203,10 +219,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         replies: [...post.replies, created],
         reply_count: post.reply_count + 1,
       });
-      setDraft("");
-      if (composerRef.current !== null) {
-        composerRef.current.style.height = "auto";
-      }
+      clearDraft();
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Failed to reply", "error");
     } finally {
@@ -444,12 +457,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                   ref={composerRef}
                   rows={1}
                   value={draft}
-                  onChange={(e) => {
-                    const el: HTMLTextAreaElement = e.target;
-                    setDraft(el.value);
-                    el.style.height = "auto";
-                    el.style.height = `${Math.min(el.scrollHeight, REPLY_MAX_HEIGHT_PX)}px`;
-                  }}
+                  onChange={(e) => setDraft(e.target.value)}
                   onFocus={() => {
                     if (!requireAuth("reply")) return;
                   }}

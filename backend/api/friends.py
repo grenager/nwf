@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import Select, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -450,49 +451,73 @@ async def visible_post_ids_for_viewer(
     friend_ids: list[uuid.UUID] | None = None,
     limit: int = 100,
     since_days: int = 14,
+    min_results: int = 0,
+    max_since_days: int | None = None,
 ) -> list[uuid.UUID]:
     """Candidate post ids the viewer may see, newest-posted first.
 
     Guests see only public posts. Authenticated users see public posts plus
     private posts where they are a participant or a friend of any participant.
     Sorted by ``created_at`` so a new reply does not bump a post to the top.
+
+    ``since_days`` keeps the common case cheap by only scanning recent posts. If
+    that window yields fewer than ``min_results`` posts, the lookback widens to
+    ``max_since_days`` (``None`` for no cutoff) so a quiet week still produces a
+    full feed instead of a near-empty one.
     """
-    from datetime import UTC, datetime, timedelta
+    friends: list[uuid.UUID] | None = None
+    if viewer_id is not None:
+        friends = (
+            friend_ids
+            if friend_ids is not None
+            else await accepted_friend_ids(session, viewer_id)
+        )
 
-    since = datetime.now(UTC) - timedelta(days=since_days)
-
-    if viewer_id is None:
-        rows = await session.scalars(
-            select(Post.id)
-            .where(
-                Post.visibility == PostVisibility.public,
-                Post.created_at >= since,
+    def query(since: datetime | None) -> Select[tuple[uuid.UUID]]:
+        if viewer_id is None:
+            stmt = select(Post.id).where(
+                Post.visibility == PostVisibility.public
             )
+            if since is not None:
+                stmt = stmt.where(Post.created_at >= since)
+            return stmt.order_by(Post.created_at.desc()).limit(limit)
+
+        # Posts where viewer or any friend is a participant, OR public.
+        participant_filter = [viewer_id, *(friends or [])]
+        stmt = (
+            select(Post.id)
+            .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
+            .where(
+                or_(
+                    Post.visibility == PostVisibility.public,
+                    Post.author_id == viewer_id,
+                    PostParticipant.user_id.in_(participant_filter),
+                ),
+            )
+        )
+        if since is not None:
+            stmt = stmt.where(Post.created_at >= since)
+        return (
+            stmt.group_by(Post.id, Post.created_at)
             .order_by(Post.created_at.desc())
             .limit(limit)
         )
-        return list(rows.all())
 
-    friends: list[uuid.UUID] = (
-        friend_ids
-        if friend_ids is not None
-        else await accepted_friend_ids(session, viewer_id)
+    now = datetime.now(UTC)
+    recent = await session.scalars(query(now - timedelta(days=since_days)))
+    post_ids: list[uuid.UUID] = list(recent.all())
+
+    wanted: int = min(min_results, limit)
+    if len(post_ids) >= wanted or (
+        max_since_days is not None and max_since_days <= since_days
+    ):
+        return post_ids
+
+    # Widen the window. The result is a superset in the same order, so it simply
+    # replaces the recent-only pass.
+    wider: datetime | None = (
+        now - timedelta(days=max_since_days)
+        if max_since_days is not None
+        else None
     )
-    # Posts where viewer or any friend is a participant, OR public.
-    participant_filter = [viewer_id, *friends]
-    stmt = (
-        select(Post.id)
-        .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
-        .where(
-            Post.created_at >= since,
-            or_(
-                Post.visibility == PostVisibility.public,
-                Post.author_id == viewer_id,
-                PostParticipant.user_id.in_(participant_filter),
-            ),
-        )
-        .group_by(Post.id, Post.created_at)
-        .order_by(Post.created_at.desc())
-        .limit(limit)
-    )
-    return list((await session.scalars(stmt)).all())
+    return list((await session.scalars(query(wider))).all())

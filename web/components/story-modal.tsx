@@ -8,8 +8,10 @@ import { MentionText } from "@/components/mention-text";
 import { SourceLogo } from "@/components/source-logo";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { draftScopeKey } from "@/lib/drafts";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
+import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { Comment, Story, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -78,7 +80,15 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
   const [loading, setLoading] = useState<boolean>(true);
 
   const [comments, setComments] = useState<Comment[]>([]);
-  const [draft, setDraft] = useState<string>("");
+  const {
+    text: draft,
+    setText: setDraft,
+    clear: clearDraft,
+  } = usePersistedDraft(
+    isGuest
+      ? null
+      : draftScopeKey({ kind: "story", storyId }, user?.id ?? null),
+  );
   const [posting, setPosting] = useState<boolean>(false);
   const commentRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -200,7 +210,7 @@ export function StoryModal({ storyId, onClose, onStatusChange }: StoryModalProps
           updated_at: createdPost.updated_at,
         },
       ]);
-      setDraft("");
+      clearDraft();
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Failed to post comment",
