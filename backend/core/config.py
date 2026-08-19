@@ -96,6 +96,19 @@ class Settings(BaseSettings):
         default=14,
         description="How far back to look for feed candidates",
     )
+    feed_min_items: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "Posts the feed tries to show before it stops widening the lookback"
+        ),
+    )
+    feed_max_lookback_days: int | None = Field(
+        default=365,
+        description=(
+            "Widest lookback used to reach feed_min_items; None for no cutoff"
+        ),
+    )
 
     # --- Logging ----------------------------------------------------------
     log_level: str = Field(default="INFO")

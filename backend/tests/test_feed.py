@@ -1,8 +1,10 @@
-"""Regression guard: the feed serializer must stay O(1) in query count.
+"""Feed guards: serializer query count, and lookback widening.
 
 The feed used to call ``serialize_post`` (and ``post_participant_ids``) once per
 post, firing hundreds of sequential queries. These tests pin the batched path so
-a future refactor can't silently reintroduce the N+1.
+a future refactor can't silently reintroduce the N+1. They also pin the candidate
+query's lookback behaviour: recent-window first, widened only when the feed would
+otherwise come up short.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from api.friends import visible_post_ids_for_viewer
 from api.routers.feed import _build_post_outs, _participants_by_post
 from core.models import Post, PostVisibility, Story, StoryKind
 
@@ -150,3 +153,122 @@ async def test_participants_empty_makes_no_query() -> None:
     result = await _participants_by_post(session, [])  # type: ignore[arg-type]
     assert result == {}
     assert session.total_queries == 0
+
+
+class _ScriptedSession:
+    """Serves a scripted result per ``scalars`` call and records the statements."""
+
+    def __init__(self, results: list[list[uuid.UUID]]) -> None:
+        self._results: list[list[uuid.UUID]] = list(results)
+        self.statements: list[Any] = []
+
+    async def scalars(
+        self, stmt: Any, *_args: Any, **_kwargs: Any
+    ) -> _FakeScalarResult:
+        self.statements.append(stmt)
+        rows = self._results.pop(0) if self._results else []
+        return _FakeScalarResult(rows)
+
+    def has_date_cutoff(self, index: int) -> bool:
+        return "created_at >=" in str(self.statements[index])
+
+
+def _ids(n: int) -> list[uuid.UUID]:
+    return [uuid.uuid4() for _ in range(n)]
+
+
+@pytest.mark.asyncio
+async def test_recent_window_satisfying_minimum_makes_one_query() -> None:
+    session = _ScriptedSession([_ids(20)])
+    result = await visible_post_ids_for_viewer(
+        session,  # type: ignore[arg-type]
+        None,
+        limit=40,
+        since_days=14,
+        min_results=20,
+        max_since_days=365,
+    )
+    assert len(result) == 20
+    assert len(session.statements) == 1
+
+
+@pytest.mark.asyncio
+async def test_thin_recent_window_widens_lookback() -> None:
+    wide = _ids(18)
+    session = _ScriptedSession([_ids(3), wide])
+    result = await visible_post_ids_for_viewer(
+        session,  # type: ignore[arg-type]
+        None,
+        limit=40,
+        since_days=14,
+        min_results=20,
+        max_since_days=365,
+    )
+    # The widened pass is a superset, so it replaces the recent-only result.
+    assert result == wide
+    assert len(session.statements) == 2
+    assert session.has_date_cutoff(0)
+    assert session.has_date_cutoff(1)
+
+
+@pytest.mark.asyncio
+async def test_widening_without_max_lookback_drops_the_cutoff() -> None:
+    session = _ScriptedSession([_ids(1), _ids(9)])
+    await visible_post_ids_for_viewer(
+        session,  # type: ignore[arg-type]
+        None,
+        limit=40,
+        since_days=14,
+        min_results=20,
+        max_since_days=None,
+    )
+    assert len(session.statements) == 2
+    assert session.has_date_cutoff(0)
+    assert not session.has_date_cutoff(1)
+
+
+@pytest.mark.asyncio
+async def test_no_minimum_never_widens() -> None:
+    session = _ScriptedSession([_ids(2)])
+    result = await visible_post_ids_for_viewer(
+        session,  # type: ignore[arg-type]
+        None,
+        limit=40,
+        since_days=14,
+    )
+    assert len(result) == 2
+    assert len(session.statements) == 1
+
+
+@pytest.mark.asyncio
+async def test_minimum_above_limit_does_not_force_a_second_pass() -> None:
+    session = _ScriptedSession([_ids(5)])
+    result = await visible_post_ids_for_viewer(
+        session,  # type: ignore[arg-type]
+        None,
+        limit=5,
+        since_days=14,
+        min_results=20,
+        max_since_days=365,
+    )
+    assert len(result) == 5
+    assert len(session.statements) == 1
+
+
+@pytest.mark.asyncio
+async def test_viewer_query_widens_without_refetching_friends() -> None:
+    viewer = uuid.uuid4()
+    wide = _ids(20)
+    session = _ScriptedSession([_ids(1), wide])
+    result = await visible_post_ids_for_viewer(
+        session,  # type: ignore[arg-type]
+        viewer,
+        friend_ids=[uuid.uuid4()],
+        limit=40,
+        since_days=14,
+        min_results=20,
+        max_since_days=365,
+    )
+    assert result == wide
+    # Two candidate queries and no extra friend lookup.
+    assert len(session.statements) == 2
