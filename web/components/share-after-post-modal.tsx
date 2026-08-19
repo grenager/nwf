@@ -106,13 +106,17 @@ export function ShareAfterPostModal({
     const failures: string[] = [];
     for (const recipient of recipients) {
       try {
-        await api.createInvitation({
+        const created = await api.createInvitation({
           email: recipient.email,
           invitee_name: recipient.name,
           post_id: postId,
           become_friend: true,
         });
-        succeeded += 1;
+        if (created.status === "suppressed") {
+          failures.push(`${recipient.email}: ${created.message}`);
+        } else {
+          succeeded += 1;
+        }
       } catch (err) {
         failures.push(
           `${recipient.email}: ${

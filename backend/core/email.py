@@ -13,6 +13,51 @@ from core.logging import get_logger
 
 log = get_logger("email")
 
+_FOOTER_TEXT_STYLE = (
+    "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"
+    "font-size:12px;color:#a1a1aa;"
+)
+
+
+def _footer_html(
+    *,
+    action_url: str | None,
+    unsubscribe_url: str,
+    unsubscribe_label: str = "Unsubscribe",
+) -> str:
+    """Shared footer: optional plain-link fallback plus an unsubscribe link."""
+    parts: list[str] = []
+    if action_url:
+        url: str = html.escape(action_url, quote=True)
+        parts.append(
+            f'<p style="{_FOOTER_TEXT_STYLE}margin:16px 0 0;">'
+            f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
+        )
+    unsub: str = html.escape(unsubscribe_url, quote=True)
+    parts.append(
+        f'<p style="{_FOOTER_TEXT_STYLE}margin:20px 0 0;">'
+        f'<a href="{unsub}" style="color:#71717a;">'
+        f"{html.escape(unsubscribe_label)}</a></p>"
+    )
+    return "".join(parts)
+
+
+def _footer_text(
+    *,
+    unsubscribe_url: str,
+    unsubscribe_label: str = "Unsubscribe",
+) -> str:
+    """Plain-text counterpart of :func:`_footer_html`."""
+    return f"{unsubscribe_label}: {unsubscribe_url}"
+
+
+def _unsubscribe_headers(unsubscribe_url: str) -> dict[str, str]:
+    """One-click unsubscribe headers honored by Gmail/Apple Mail."""
+    return {
+        "List-Unsubscribe": f"<{unsubscribe_url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
+
 
 @dataclass(frozen=True)
 class InviteEmailContent:
@@ -21,6 +66,7 @@ class InviteEmailContent:
     to_email: str
     inviter_name: str
     invite_url: str
+    unsubscribe_url: str
     message: str | None = None
     headline: str | None = None
     article_url: str | None = None
@@ -65,6 +111,13 @@ def _plain_text(content: InviteEmailContent) -> str:
         lines.append(content.message)
         lines.append("")
     lines.append(f"Accept invitation: {content.invite_url}")
+    lines.append("")
+    lines.append(
+        _footer_text(
+            unsubscribe_url=content.unsubscribe_url,
+            unsubscribe_label="Unsubscribe from these emails",
+        )
+    )
     return "\n".join(lines)
 
 
@@ -136,9 +189,13 @@ def _html_body(content: InviteEmailContent) -> str:
         f'font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;'
         f'text-decoration:none;padding:12px 20px;border-radius:4px;">'
         f"Accept invitation</a></p>"
-        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;'
-        f'font-size:12px;color:#a1a1aa;margin:16px 0 0;">'
-        f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
+    )
+    parts.append(
+        _footer_html(
+            action_url=content.invite_url,
+            unsubscribe_url=content.unsubscribe_url,
+            unsubscribe_label="Unsubscribe from these emails",
+        )
     )
     return (
         '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
@@ -173,6 +230,7 @@ async def send_invite_email(
         "subject": subject,
         "html": _html_body(content),
         "text": _plain_text(content),
+        "headers": _unsubscribe_headers(content.unsubscribe_url),
     }
     headers: dict[str, str] = {
         "Authorization": f"Bearer {cfg.resend_api_key}",
@@ -263,7 +321,12 @@ def _digest_plain_text(content: DigestEmailContent) -> str:
         lines.append("")
     lines.append(f"Open your feed: {content.feed_url}")
     lines.append("")
-    lines.append(f"Unsubscribe: {content.unsubscribe_url}")
+    lines.append(
+        _footer_text(
+            unsubscribe_url=content.unsubscribe_url,
+            unsubscribe_label="Unsubscribe from daily digests",
+        )
+    )
     return "\n".join(lines)
 
 
@@ -365,7 +428,6 @@ def _digest_html_body(content: DigestEmailContent) -> str:
     greeting_name: str = html.escape((content.recipient_first or "").strip())
     greeting: str = f"Hi {greeting_name}," if greeting_name else "Hi,"
     feed: str = html.escape(content.feed_url, quote=True)
-    unsub: str = html.escape(content.unsubscribe_url, quote=True)
     parts: list[str] = [
         f'<p style="font-family:Georgia,serif;font-size:18px;line-height:1.5;'
         f'color:#18181b;margin:0 0 8px;">{greeting}</p>',
@@ -382,10 +444,13 @@ def _digest_html_body(content: DigestEmailContent) -> str:
         f'sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;'
         f'text-transform:uppercase;text-decoration:none;padding:12px 20px;'
         f'border-radius:4px;">Open NewsWithFriends</a></p>'
-        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
-        f'sans-serif;font-size:12px;color:#a1a1aa;margin:20px 0 0;">'
-        f'<a href="{unsub}" style="color:#71717a;">Unsubscribe from daily digests</a>'
-        f"</p>"
+    )
+    parts.append(
+        _footer_html(
+            action_url=None,
+            unsubscribe_url=content.unsubscribe_url,
+            unsubscribe_label="Unsubscribe from daily digests",
+        )
     )
     return (
         '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
@@ -426,7 +491,10 @@ def digest_email_from_user_digest(
         recipient_first=recipient_first,
         lines=line_contents,
         feed_url=feed_url,
-        unsubscribe_url=settings.app_url(f"/unsubscribe/{unsubscribe_token}"),
+        # Digest-scoped: this link must not silence instant activity emails.
+        unsubscribe_url=settings.app_url(
+            f"/unsubscribe/{unsubscribe_token}?scope=digest"
+        ),
     )
 
 
@@ -451,10 +519,7 @@ async def send_digest_email(
         "subject": subject,
         "html": _digest_html_body(content),
         "text": _digest_plain_text(content),
-        "headers": {
-            "List-Unsubscribe": f"<{content.unsubscribe_url}>",
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
+        "headers": _unsubscribe_headers(content.unsubscribe_url),
     }
     headers: dict[str, str] = {
         "Authorization": f"Bearer {cfg.resend_api_key}",
@@ -492,6 +557,7 @@ class FriendNoticeEmailContent:
     actor_name: str
     actor_image_url: str | None
     action_url: str
+    unsubscribe_url: str
     kind: str  # "request" | "accepted"
 
 
@@ -508,7 +574,8 @@ def _friend_notice_plain(content: FriendNoticeEmailContent) -> str:
     else:
         lead = f"{content.actor_name} sent you a friend request on NewsWithFriends."
         cta = "Review friend requests"
-    return f"{lead}\n\n{cta}: {content.action_url}\n"
+    footer: str = _footer_text(unsubscribe_url=content.unsubscribe_url)
+    return f"{lead}\n\n{cta}: {content.action_url}\n\n{footer}\n"
 
 
 def _friend_notice_html(content: FriendNoticeEmailContent) -> str:
@@ -543,10 +610,11 @@ def _friend_notice_html(content: FriendNoticeEmailContent) -> str:
         f'sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;'
         f'text-transform:uppercase;text-decoration:none;padding:12px 20px;'
         f'border-radius:4px;">{button}</a></p>'
-        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
-        f'sans-serif;font-size:12px;color:#a1a1aa;margin:16px 0 0;">'
-        f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
-        "</div>"
+        + _footer_html(
+            action_url=content.action_url,
+            unsubscribe_url=content.unsubscribe_url,
+        )
+        + "</div>"
     )
 
 
@@ -572,6 +640,7 @@ async def send_friend_notice_email(
         "subject": _friend_notice_subject(content),
         "html": _friend_notice_html(content),
         "text": _friend_notice_plain(content),
+        "headers": _unsubscribe_headers(content.unsubscribe_url),
     }
     headers: dict[str, str] = {
         "Authorization": f"Bearer {cfg.resend_api_key}",
@@ -614,13 +683,19 @@ class ActivityEmailContent:
     recipient_first: str | None
     actor_name: str
     actor_image_url: str | None
-    kind: str  # "new_post" | "comment" | "reply"
+    kind: str  # "new_post" | "comment" | "reply" | "conversation"
     headline: str | None
     source_label: str | None
     story_image_url: str | None
     excerpt: str | None
     action_url: str
     unsubscribe_url: str
+    # Set for recipients who were invited but have not accepted yet, explaining
+    # why the conversation is not open to them yet.
+    pending_note: str | None = None
+    # Overrides the CTA label when the button leads somewhere other than the
+    # article itself (an invite landing page or the friend requests screen).
+    cta_label: str | None = None
 
 
 def _activity_subject(content: ActivityEmailContent) -> str:
@@ -628,25 +703,37 @@ def _activity_subject(content: ActivityEmailContent) -> str:
         return f"{content.actor_name} commented on your article"
     if content.kind == "reply":
         return f"{content.actor_name} responded to your comment"
+    if content.kind == "conversation":
+        return (
+            f"{content.actor_name} replied in a conversation you were invited to"
+        )
     return f"{content.actor_name} posted a new article"
 
 
 def _activity_lead(content: ActivityEmailContent) -> tuple[str, str]:
     """Return (plain lead sentence, CTA button label)."""
     if content.kind == "comment":
-        return (
+        lead, cta = (
             f"{content.actor_name} commented on your article on NewsWithFriends.",
             "View conversation",
         )
-    if content.kind == "reply":
-        return (
+    elif content.kind == "reply":
+        lead, cta = (
             f"{content.actor_name} responded to your comment on NewsWithFriends.",
             "View conversation",
         )
-    return (
-        f"{content.actor_name} posted a new article on NewsWithFriends.",
-        "View article",
-    )
+    elif content.kind == "conversation":
+        lead, cta = (
+            f"{content.actor_name} replied in a conversation you were invited "
+            f"to on NewsWithFriends.",
+            "View conversation",
+        )
+    else:
+        lead, cta = (
+            f"{content.actor_name} posted a new article on NewsWithFriends.",
+            "View article",
+        )
+    return lead, content.cta_label or cta
 
 
 def _activity_plain(content: ActivityEmailContent) -> str:
@@ -660,9 +747,12 @@ def _activity_plain(content: ActivityEmailContent) -> str:
     if content.excerpt:
         lines.append(f'{content.actor_name}: "{content.excerpt}"')
         lines.append("")
+    if content.pending_note:
+        lines.append(content.pending_note)
+        lines.append("")
     lines.append(f"{cta}: {content.action_url}")
     lines.append("")
-    lines.append(f"Unsubscribe: {content.unsubscribe_url}")
+    lines.append(_footer_text(unsubscribe_url=content.unsubscribe_url))
     return "\n".join(lines)
 
 
@@ -705,7 +795,6 @@ def _activity_article_card_html(content: ActivityEmailContent) -> str:
 def _activity_html(content: ActivityEmailContent) -> str:
     actor: str = html.escape(content.actor_name)
     url: str = html.escape(content.action_url, quote=True)
-    unsub: str = html.escape(content.unsubscribe_url, quote=True)
     _, button = _activity_lead(content)
     if content.kind == "comment":
         lead = (
@@ -714,6 +803,11 @@ def _activity_html(content: ActivityEmailContent) -> str:
     elif content.kind == "reply":
         lead = (
             f"<strong>{actor}</strong> responded to your comment on NewsWithFriends."
+        )
+    elif content.kind == "conversation":
+        lead = (
+            f"<strong>{actor}</strong> replied in a conversation you were "
+            f"invited to on NewsWithFriends."
         )
     else:
         lead = f"<strong>{actor}</strong> posted a new article on NewsWithFriends."
@@ -737,6 +831,15 @@ def _activity_html(content: ActivityEmailContent) -> str:
             f'<strong>{actor}</strong>: “{excerpt}”</p>'
         )
 
+    pending_block: str = ""
+    if content.pending_note:
+        note: str = html.escape(content.pending_note)
+        pending_block = (
+            f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+            f'sans-serif;font-size:14px;line-height:1.5;color:#71717a;'
+            f'margin:0 0 16px;">{note}</p>'
+        )
+
     return (
         '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
         f"{avatar_block}"
@@ -744,19 +847,18 @@ def _activity_html(content: ActivityEmailContent) -> str:
         f'color:#18181b;margin:0 0 16px;">{lead}</p>'
         f"{_activity_article_card_html(content)}"
         f"{excerpt_block}"
+        f"{pending_block}"
         f'<p style="margin:24px 0 8px;">'
         f'<a href="{url}" style="display:inline-block;background:#18181b;'
         f'color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
         f'sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;'
         f'text-transform:uppercase;text-decoration:none;padding:12px 20px;'
         f'border-radius:4px;">{html.escape(button)}</a></p>'
-        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
-        f'sans-serif;font-size:12px;color:#a1a1aa;margin:16px 0 0;">'
-        f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
-        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
-        f'sans-serif;font-size:12px;color:#a1a1aa;margin:20px 0 0;">'
-        f'<a href="{unsub}" style="color:#71717a;">Unsubscribe</a></p>'
-        "</div>"
+        + _footer_html(
+            action_url=content.action_url,
+            unsubscribe_url=content.unsubscribe_url,
+        )
+        + "</div>"
     )
 
 
@@ -785,10 +887,7 @@ async def send_activity_email(
         "subject": _activity_subject(content),
         "html": _activity_html(content),
         "text": _activity_plain(content),
-        "headers": {
-            "List-Unsubscribe": f"<{content.unsubscribe_url}>",
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
+        "headers": _unsubscribe_headers(content.unsubscribe_url),
     }
     headers: dict[str, str] = {
         "Authorization": f"Bearer {cfg.resend_api_key}",

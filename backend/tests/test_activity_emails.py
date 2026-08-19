@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from api.activity_mail import notify_comment_activity, notify_friends_of_new_post
-from api.friends import ActivityEmailRecipient
+from api.friends import ActivityEmailRecipient, PendingInviteRecipient
 from core.email import (
     ActivityEmailContent,
     _activity_html,
@@ -70,6 +70,20 @@ def test_activity_html_and_plain_escape() -> None:
     assert "<script>" not in html
 
 
+def test_activity_pending_note_and_cta_override_render() -> None:
+    content = _content(
+        pending_note="Join to read the conversation.",
+        cta_label="Join the conversation",
+    )
+    plain = _activity_plain(content)
+    assert "Join to read the conversation." in plain
+    assert "Join the conversation: " in plain
+
+    html = _activity_html(content)
+    assert "Join to read the conversation." in html
+    assert "Join the conversation</a>" in html
+
+
 @pytest.mark.asyncio
 async def test_send_activity_email_noop_without_api_key() -> None:
     settings = MagicMock()
@@ -129,8 +143,16 @@ async def test_notify_friends_of_new_post_fans_out() -> None:
         ),
         patch(
             "api.activity_mail.load_activity_email_recipients",
-            new=AsyncMock(return_value=recipients),
+            new=AsyncMock(side_effect=[recipients, []]),
         ) as load_mock,
+        patch(
+            "api.activity_mail.pending_connection_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[]),
+        ),
         patch(
             "api.activity_mail.send_activity_email",
             new=AsyncMock(return_value=True),
@@ -148,7 +170,7 @@ async def test_notify_friends_of_new_post_fans_out() -> None:
         )
 
     # Author excluded from audience passed to loader
-    called_ids = set(load_mock.await_args.args[1])
+    called_ids = set(load_mock.await_args_list[0].args[1])
     assert author_id not in called_ids
     assert friend_a in called_ids
     assert friend_b in called_ids
@@ -158,6 +180,266 @@ async def test_notify_friends_of_new_post_fans_out() -> None:
     assert kinds == {"new_post"}
     subjects = {_activity_subject(c.args[0]) for c in send_mock.await_args_list}
     assert subjects == {"Shalom posted a new article"}
+
+
+@pytest.mark.asyncio
+async def test_notify_friends_of_new_post_reaches_pending_audiences() -> None:
+    """Unanswered requests and un-signed-up invitees hear about a new post."""
+    author_id = uuid.uuid4()
+    friend_id = uuid.uuid4()
+    pending_id = uuid.uuid4()
+
+    post = MagicMock()
+    post.id = uuid.uuid4()
+    post.author_id = author_id
+    post.take = "My take"
+
+    story = MagicMock()
+    story.full_headline = "Quiet week"
+    story.article_url = "https://news.example/a"
+    story.source_id = None
+    story.publisher = "Outlet"
+    story.image_url = None
+
+    author = MagicMock()
+    author.id = author_id
+    author.first = "Shalom"
+    author.last = None
+    author.image_url = None
+
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+
+    friend = ActivityEmailRecipient(
+        user_id=friend_id,
+        email="friend@example.com",
+        first="Ada",
+        unsubscribe_token=uuid.uuid4(),
+    )
+    pending = ActivityEmailRecipient(
+        user_id=pending_id,
+        email="pending@example.com",
+        first="Bob",
+        unsubscribe_token=uuid.uuid4(),
+    )
+    invitation_id = uuid.uuid4()
+    invitee = PendingInviteRecipient(
+        invitation_id=invitation_id,
+        email="invitee@example.com",
+        invite_token="tok123",
+        unsubscribe_token=uuid.uuid4(),
+    )
+
+    with (
+        patch(
+            "api.activity_mail.accepted_friend_ids",
+            new=AsyncMock(return_value=[friend_id]),
+        ),
+        patch(
+            "api.activity_mail.load_activity_email_recipients",
+            new=AsyncMock(side_effect=[[friend], [pending]]),
+        ),
+        patch(
+            "api.activity_mail.pending_connection_ids",
+            new=AsyncMock(return_value=[pending_id]),
+        ),
+        patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[invitee]),
+        ) as invite_mock,
+        patch(
+            "api.activity_mail.send_activity_email",
+            new=AsyncMock(return_value=True),
+        ) as send_mock,
+        patch(
+            "api.activity_mail.get_settings",
+            return_value=MagicMock(
+                app_url=lambda p: f"https://nwf.example{p}",
+                resend_api_key="rk",
+            ),
+        ),
+    ):
+        await notify_friends_of_new_post(
+            session, post=post, story=story, author=author
+        )
+
+    # Invitees are scoped to this author, never the whole invitation table.
+    assert invite_mock.await_args.kwargs["inviter_id"] == author_id
+
+    by_email: dict[str, ActivityEmailContent] = {
+        call.args[0].to_email: call.args[0] for call in send_mock.await_args_list
+    }
+    assert set(by_email) == {
+        "friend@example.com",
+        "pending@example.com",
+        "invitee@example.com",
+    }
+
+    accepted = by_email["friend@example.com"]
+    assert accepted.pending_note is None
+    assert accepted.action_url == f"https://nwf.example/post/{post.id}"
+
+    requested = by_email["pending@example.com"]
+    assert requested.pending_note is not None
+    assert requested.action_url == "https://nwf.example/friends"
+    assert requested.cta_label == "Accept friend request"
+
+    invited = by_email["invitee@example.com"]
+    assert invited.pending_note is not None
+    assert invited.action_url == "https://nwf.example/invite/tok123"
+    assert (
+        invited.unsubscribe_url
+        == f"https://nwf.example/unsubscribe/invite/{invitee.unsubscribe_token}"
+    )
+
+    # The nudge is recorded so the invitee is not emailed again today.
+    assert session.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_invitee_nudge_not_recorded_when_send_fails() -> None:
+    """A failed send must not consume the invitee's daily throttle slot."""
+    author_id = uuid.uuid4()
+
+    post = MagicMock()
+    post.id = uuid.uuid4()
+    post.author_id = author_id
+    post.take = None
+
+    story = MagicMock()
+    story.full_headline = "Headline"
+    story.article_url = "https://news.example/a"
+    story.source_id = None
+    story.publisher = None
+    story.image_url = None
+
+    author = MagicMock()
+    author.id = author_id
+    author.first = "Shalom"
+    author.last = None
+    author.image_url = None
+
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+
+    invitee = PendingInviteRecipient(
+        invitation_id=uuid.uuid4(),
+        email="invitee@example.com",
+        invite_token="tok123",
+        unsubscribe_token=uuid.uuid4(),
+    )
+
+    with (
+        patch(
+            "api.activity_mail.accepted_friend_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "api.activity_mail.load_activity_email_recipients",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "api.activity_mail.pending_connection_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[invitee]),
+        ),
+        patch(
+            "api.activity_mail.send_activity_email",
+            new=AsyncMock(return_value=False),
+        ) as send_mock,
+        patch(
+            "api.activity_mail.get_settings",
+            return_value=MagicMock(
+                app_url=lambda p: f"https://nwf.example{p}",
+                resend_api_key=None,
+            ),
+        ),
+    ):
+        await notify_friends_of_new_post(
+            session, post=post, story=story, author=author
+        )
+
+    assert send_mock.await_count == 1
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_notify_comment_activity_nudges_invited_conversation() -> None:
+    """People invited to this post hear about new replies in it."""
+    author_id = uuid.uuid4()
+    commenter_id = uuid.uuid4()
+
+    post = MagicMock()
+    post.id = uuid.uuid4()
+    post.author_id = author_id
+
+    story = MagicMock()
+    story.full_headline = "Headline"
+    story.article_url = "https://news.example/a"
+    story.source_id = None
+    story.publisher = None
+    story.image_url = None
+
+    commenter = MagicMock()
+    commenter.id = commenter_id
+    commenter.first = "Teg"
+    commenter.last = None
+    commenter.image_url = None
+
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+
+    invitee = PendingInviteRecipient(
+        invitation_id=uuid.uuid4(),
+        email="invitee@example.com",
+        invite_token="tok456",
+        unsubscribe_token=uuid.uuid4(),
+    )
+
+    with (
+        patch(
+            "api.activity_mail.load_activity_email_recipients",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[invitee]),
+        ) as invite_mock,
+        patch(
+            "api.activity_mail.send_activity_email",
+            new=AsyncMock(return_value=True),
+        ) as send_mock,
+        patch(
+            "api.activity_mail.get_settings",
+            return_value=MagicMock(
+                app_url=lambda p: f"https://nwf.example{p}",
+                resend_api_key="rk",
+            ),
+        ),
+    ):
+        await notify_comment_activity(
+            session,
+            post=post,
+            story=story,
+            comment_text="Great thread",
+            commenter=commenter,
+            parent_author_id=None,
+        )
+
+    # Scoped to this conversation rather than everyone the commenter invited.
+    assert invite_mock.await_args.kwargs["post_id"] == post.id
+
+    assert send_mock.await_count == 1
+    content: ActivityEmailContent = send_mock.await_args.args[0]
+    assert content.kind == "conversation"
+    assert content.to_email == "invitee@example.com"
+    assert (
+        _activity_subject(content)
+        == "Teg replied in a conversation you were invited to"
+    )
 
 
 @pytest.mark.asyncio
@@ -196,6 +478,10 @@ async def test_notify_comment_activity_emails_post_author() -> None:
         patch(
             "api.activity_mail.load_activity_email_recipients",
             new=AsyncMock(return_value=[recipient]),
+        ),
+        patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[]),
         ),
         patch(
             "api.activity_mail.send_activity_email",
@@ -264,6 +550,10 @@ async def test_notify_reply_dedupes_and_prefers_reply_framing() -> None:
             new=AsyncMock(return_value=[recipient]),
         ) as load_mock,
         patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
             "api.activity_mail.send_activity_email",
             new=AsyncMock(return_value=True),
         ) as send_mock,
@@ -325,6 +615,10 @@ async def test_notify_skips_self_comment_on_own_post() -> None:
             new=AsyncMock(return_value=[]),
         ) as load_mock,
         patch(
+            "api.activity_mail.load_pending_invite_recipients",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
             "api.activity_mail.send_activity_email",
             new=AsyncMock(return_value=True),
         ) as send_mock,
@@ -340,6 +634,58 @@ async def test_notify_skips_self_comment_on_own_post() -> None:
 
     load_mock.assert_not_awaited()
     send_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pending_invite_loader_skips_suppressed_and_registered() -> None:
+    """Only addresses that still need an invitation get nudged."""
+    from api.friends import load_pending_invite_recipients
+
+    inviter = uuid.uuid4()
+
+    def _invitation(email: str) -> MagicMock:
+        invitation = MagicMock()
+        invitation.id = uuid.uuid4()
+        invitation.invitee_email = email
+        invitation.token = f"tok-{email}"
+        invitation.unsubscribe_token = uuid.uuid4()
+        return invitation
+
+    fresh = _invitation("fresh@example.com")
+    session = AsyncMock()
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [
+        fresh,
+        _invitation("Opted@Example.com"),
+        _invitation("member@example.com"),
+    ]
+    session.scalars = AsyncMock(return_value=scalars_result)
+
+    with (
+        patch(
+            "api.friends.suppressed_emails",
+            new=AsyncMock(return_value={"opted@example.com"}),
+        ),
+        patch(
+            "api.friends.emails_with_accounts",
+            new=AsyncMock(return_value={"member@example.com"}),
+        ),
+    ):
+        recipients = await load_pending_invite_recipients(
+            session, inviter_id=inviter
+        )
+
+    assert [r.email for r in recipients] == ["fresh@example.com"]
+    assert recipients[0].invitation_id == fresh.id
+
+
+@pytest.mark.asyncio
+async def test_pending_invite_loader_requires_a_scope() -> None:
+    """Guard against accidentally emailing every invitee in the database."""
+    from api.friends import load_pending_invite_recipients
+
+    with pytest.raises(ValueError):
+        await load_pending_invite_recipients(AsyncMock())
 
 
 @pytest.mark.asyncio

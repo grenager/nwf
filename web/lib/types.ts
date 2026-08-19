@@ -331,6 +331,9 @@ export interface FriendsOverview {
   friends: FriendSummary[];
   total: number;
   online: number;
+  /** Friends plus outstanding requests and invitations. */
+  slots_used: number;
+  friend_limit: number;
 }
 
 export type FriendActivityKind = "read" | "commented" | "rated";

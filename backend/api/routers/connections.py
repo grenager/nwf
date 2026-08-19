@@ -11,7 +11,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import CurrentUser, SessionDep
-from api.friends import accepted_friend_ids, display_name, email_for_user
+from api.friends import (
+    accepted_friend_ids,
+    display_name,
+    email_for_user,
+    ensure_friend_capacity,
+    friend_slots_used,
+)
 from api.schemas import (
     ConnectionCreate,
     ConnectionOut,
@@ -81,6 +87,16 @@ async def _notify_friend_event(
                 error=str(exc),
             )
 
+    recipient: Profile | None = await session.get(Profile, recipient_id)
+    if recipient is None or recipient.instant_email_opt_out:
+        log.info(
+            "connections.friend_email.skip",
+            reason="opted_out" if recipient is not None else "no_profile",
+            kind=kind,
+            recipient_id=str(recipient_id),
+        )
+        return
+
     email: str | None = await email_for_user(session, recipient_id)
     if not email:
         log.info(
@@ -100,6 +116,9 @@ async def _notify_friend_event(
                 actor_name=actor_name,
                 actor_image_url=actor.image_url if actor is not None else None,
                 action_url=settings.app_url(action_path),
+                unsubscribe_url=settings.app_url(
+                    f"/unsubscribe/{recipient.unsubscribe_token}"
+                ),
                 kind=kind,
             ),
             settings=settings,
@@ -298,9 +317,17 @@ async def list_recommended_friends(
 @router.get("/friends", response_model=FriendsOverviewOut)
 async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOverviewOut:
     """Accepted friends with recent-activity ordering for the sidebar."""
+    settings = get_settings()
+    slots_used: int = await friend_slots_used(session, user.id)
     friend_ids = await accepted_friend_ids(session, user.id)
     if not friend_ids:
-        return FriendsOverviewOut(friends=[], total=0, online=0)
+        return FriendsOverviewOut(
+            friends=[],
+            total=0,
+            online=0,
+            slots_used=slots_used,
+            friend_limit=settings.max_friends,
+        )
 
     profiles: dict[uuid.UUID, Profile] = {
         p.id: p
@@ -403,7 +430,11 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
     )
     online_count = sum(1 for f in summaries if f.online)
     return FriendsOverviewOut(
-        friends=summaries, total=len(summaries), online=online_count
+        friends=summaries,
+        total=len(summaries),
+        online=online_count,
+        slots_used=slots_used,
+        friend_limit=settings.max_friends,
     )
 
 
@@ -573,6 +604,7 @@ async def invite_by_email(
             existing.status == ConnectionStatus.pending
             and existing.second_id == user.id
         ):
+            await ensure_friend_capacity(session, user.id)
             existing.status = ConnectionStatus.accepted
             await session.flush()
             await _notify_friend_event(
@@ -593,6 +625,7 @@ async def invite_by_email(
             message="Friend request already pending.",
         )
 
+    await ensure_friend_capacity(session, user.id)
     session.add(
         Connection(
             first_id=user.id,
@@ -624,6 +657,7 @@ async def create_connection(
             existing.status == ConnectionStatus.pending
             and existing.second_id == user.id
         ):
+            await ensure_friend_capacity(session, user.id)
             existing.status = ConnectionStatus.accepted
             await session.flush()
             await session.refresh(existing)
@@ -632,6 +666,7 @@ async def create_connection(
             )
         return existing
 
+    await ensure_friend_capacity(session, user.id)
     connection = Connection(
         first_id=user.id,
         second_id=payload.target_user_id,
@@ -660,6 +695,11 @@ async def update_connection(
     if connection is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "connection not found")
     previous: ConnectionStatus = connection.status
+    if (
+        previous == ConnectionStatus.pending
+        and payload.status == ConnectionStatus.accepted
+    ):
+        await ensure_friend_capacity(session, user.id)
     connection.status = payload.status
     await session.flush()
     await session.refresh(connection)

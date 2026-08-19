@@ -673,6 +673,34 @@ class Invitation(Base):
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Separate from ``token``: opting out must not grant invite acceptance.
+    unsubscribe_token: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        nullable=False,
+        server_default=func.gen_random_uuid(),
+        unique=True,
+    )
+    # Throttle watermark for activity nudges sent to a not-yet-signed-up invitee.
+    last_activity_email_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class EmailSuppression(Base):
+    """An address that must never receive email again."""
+
+    __tablename__ = "email_suppressions"
+
+    email: Mapped[str] = mapped_column(Text, primary_key=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    invitation_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("invitations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class InvitationRedemption(Base):

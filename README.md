@@ -166,6 +166,8 @@ start command to `nwf-api`); scraper and digest override their start commands to
   - `CORS_ORIGINS=["https://newswithfriends.org","https://www.newswithfriends.org"]`
   - leave `SUPABASE_JWT_SECRET` **empty** in prod (verify via JWKS)
   - `RESEND_API_KEY`, `EMAIL_FROM`
+  - `MAX_FRIENDS` (optional, default `50`) — friend slots per account, counting
+  outstanding requests and invitations, so invites cannot be used for bulk email
   - `ADMIN_API_SECRET` (random), `LOG_JSON=true`
 - `nwf-scraper` — root `backend`, start `nwf-scraper`. Env: `DATABASE_URL`,
 `SUPABASE_URL`, `SCRAPE_INTERVAL_SECONDS`, `SCRAPE_BATCH_SIZE`, `LOG_JSON=true`.
