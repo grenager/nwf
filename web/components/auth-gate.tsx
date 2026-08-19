@@ -74,7 +74,7 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
               </button>
               <Link
                 href="/signin"
-                className="bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+                className="bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
               >
                 Create free account
               </Link>

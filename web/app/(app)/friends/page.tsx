@@ -330,7 +330,7 @@ export default function PeoplePage() {
           <section>
             <div className="mb-3 border-b-2 border-zinc-900 pb-2 dark:border-zinc-100">
               <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-                Recommended
+                People you may know
               </h2>
               <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
                 Friends of friends

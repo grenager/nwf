@@ -36,7 +36,7 @@ export function MentionText({
     nodes.push(
       <span
         key={`m${key}`}
-        className="font-semibold text-brand-600 dark:text-brand-400"
+        className="font-semibold text-zinc-900 dark:text-zinc-100"
       >
         @{display}
       </span>,

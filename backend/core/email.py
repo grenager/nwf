@@ -110,7 +110,7 @@ def _plain_text(content: InviteEmailContent) -> str:
     if content.message:
         lines.append(content.message)
         lines.append("")
-    lines.append(f"Join the conversation: {content.invite_url}")
+    lines.append(f"Accept invitation: {content.invite_url}")
     lines.append("")
     lines.append(
         _footer_text(
@@ -188,7 +188,7 @@ def _html_body(content: InviteEmailContent) -> str:
         f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;'
         f'font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;'
         f'text-decoration:none;padding:12px 20px;border-radius:4px;">'
-        f"Join the conversation</a></p>"
+        f"Accept invitation</a></p>"
     )
     parts.append(
         _footer_html(

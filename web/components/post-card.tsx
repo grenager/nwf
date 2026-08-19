@@ -110,7 +110,7 @@ export function PostCard({
           <Link
             href={`/post/${post.id}`}
             scroll={false}
-            className="mt-1 inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400"
+            className="mt-1 inline-block text-xs font-semibold text-zinc-900 hover:underline dark:text-zinc-100"
           >
             More →
           </Link>
@@ -153,7 +153,7 @@ export function PostCard({
           <Link
             href={`/post/${post.id}?focus=unread`}
             scroll={false}
-            className="inline-flex items-center rounded-[9999px] bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 dark:bg-brand-950 dark:text-brand-300 dark:hover:bg-brand-900"
+            className="inline-flex items-center rounded-[9999px] bg-zinc-100 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-800 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
           >
             {unreadN} new {unreadN === 1 ? "reply" : "replies"}
           </Link>

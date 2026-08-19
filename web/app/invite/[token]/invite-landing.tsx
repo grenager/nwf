@@ -16,13 +16,18 @@ import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { InvitePreview, Post, Profile } from "@/lib/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 function InviteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
-        <BrandLink markClassName="h-6 w-6 text-brand-600" />
+        <BrandLink
+          className="text-zinc-900 dark:text-zinc-50"
+          markClassName="h-6 w-6"
+          showWordmark={false}
+        />
         <Link
           href="/"
           className="text-sm font-medium text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -45,6 +50,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const { session, user } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
+  const router = useRouter();
   const autoAcceptStarted = useRef<boolean>(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -130,10 +136,11 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         const result = await api.acceptInvite(token, addFriend);
         if (result.became_friend || result.status === "already_accepted") {
           setJoined(true);
-          notify(result.message, "success");
-          // Refresh post so ratings/my state reflect the authenticated viewer.
-          const refreshed = await api.getInvitePost(token).catch(() => null);
-          if (refreshed) setPost(refreshed);
+          const inviterName: string = preview?.inviter_name ?? "your friend";
+          notify(`You're now friends with ${inviterName}`, "success");
+          const destination: string =
+            result.post_id !== null ? `/post/${result.post_id}` : "/";
+          router.replace(destination);
           return true;
         }
         notify(result.message, "info");
@@ -149,14 +156,16 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         setAccepting(false);
       }
     },
-    [accepting, notify, token],
+    [accepting, notify, preview, router, token],
   );
 
-  // Auto-friend when the share was created with become_friend.
+  // Auto-friend email invites and share links that opted into friendship.
   useEffect(() => {
     if (!session || !preview || preview.status === "revoked") return;
     if (preview.status === "expired") return;
-    if (!preview.become_friend) return;
+    const shouldAutoAccept: boolean =
+      !preview.reusable || preview.become_friend;
+    if (!shouldAutoAccept) return;
     if (user != null && user.id === preview.inviter_id) return;
     if (joined || autoAcceptStarted.current) return;
     autoAcceptStarted.current = true;
@@ -168,6 +177,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     !joined &&
     !isOwnInvite &&
     preview != null &&
+    preview.reusable &&
     !preview.become_friend &&
     !friendPromptDismissed &&
     preview.status !== "revoked" &&
@@ -301,7 +311,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       ) : null}
 
       {showFriendPrompt ? (
-        <div className="mb-6 border border-brand-200 bg-brand-50 p-4 dark:border-brand-900 dark:bg-brand-950">
+        <div className="mb-6 border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-sm text-zinc-800 dark:text-zinc-100">
             Add <strong>{preview.inviter_name}</strong> as a friend to join this
             conversation?

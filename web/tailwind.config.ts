@@ -32,16 +32,8 @@ const config: Config = {
       inner: "none",
     },
     extend: {
-      colors: {
-        // Warm coffee-brown accent: newsy + friendly, echoes the mug logomark.
-        brand: {
-          50: "#f7f3ef",
-          100: "#ece1d6",
-          500: "#8a6a4f",
-          600: "#6f4e37",
-          700: "#5a3e2b",
-        },
-      },
+      // Minimal black/white aesthetic: no accent hue, everything reads as ink
+      // on paper via the built-in zinc scale.
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },

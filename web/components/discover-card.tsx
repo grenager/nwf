@@ -109,7 +109,7 @@ export function DiscoverCard({
         <button
           type="button"
           onClick={handleStart}
-          className="bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
+          className="bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           {isGuest ? "Sign in to discuss privately" : "Start a private conversation"}
         </button>
