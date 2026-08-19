@@ -22,7 +22,11 @@ function InviteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
-        <BrandLink markClassName="h-6 w-6 text-brand-600" />
+        <BrandLink
+          className="text-zinc-900 dark:text-zinc-50"
+          markClassName="h-6 w-6"
+          showWordmark={false}
+        />
         <Link
           href="/"
           className="text-sm font-medium text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -301,7 +305,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       ) : null}
 
       {showFriendPrompt ? (
-        <div className="mb-6 border border-brand-200 bg-brand-50 p-4 dark:border-brand-900 dark:bg-brand-950">
+        <div className="mb-6 border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-sm text-zinc-800 dark:text-zinc-100">
             Add <strong>{preview.inviter_name}</strong> as a friend to join this
             conversation?

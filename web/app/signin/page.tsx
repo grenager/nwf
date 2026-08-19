@@ -59,7 +59,7 @@ function SignInForm() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
       <BrandLink
-        className="mb-8 justify-center text-2xl font-bold text-brand-600"
+        className="mb-8 justify-center text-2xl font-bold text-zinc-900 dark:text-zinc-50"
         markClassName="h-7 w-7"
       />
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -86,7 +86,7 @@ function SignInForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
-              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
+              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:focus:border-zinc-400 dark:focus:ring-zinc-700 dark:border-slate-700 dark:bg-slate-800"
             />
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -95,7 +95,7 @@ function SignInForm() {
                 onChange={(e) => setFirst(e.target.value)}
                 placeholder="First name (optional)"
                 autoComplete="given-name"
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
+                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:focus:border-zinc-400 dark:focus:ring-zinc-700 dark:border-slate-700 dark:bg-slate-800"
               />
               <input
                 type="text"
@@ -103,13 +103,13 @@ function SignInForm() {
                 onChange={(e) => setLast(e.target.value)}
                 placeholder="Last name (optional)"
                 autoComplete="family-name"
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800"
+                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:focus:border-zinc-400 dark:focus:ring-zinc-700 dark:border-slate-700 dark:bg-slate-800"
               />
             </div>
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-lg bg-brand-600 py-2.5 font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+              className="w-full rounded-lg bg-zinc-900 py-2.5 font-semibold text-white transition hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
               {busy ? "Sending…" : "Send magic link"}
             </button>

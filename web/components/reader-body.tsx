@@ -116,7 +116,7 @@ export function ReaderBody({
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="mt-2 text-sm font-semibold text-brand-600 transition hover:underline dark:text-brand-400"
+          className="mt-2 text-sm font-semibold text-zinc-900 transition hover:underline dark:text-zinc-100"
         >
           {expanded ? "Show less" : "Show all"}
         </button>

@@ -56,7 +56,7 @@ export function ConversationsClient() {
   if (!session) {
     return (
       <div className="mx-auto max-w-2xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
-        <Link href="/signin" className="font-semibold text-brand-600 underline">
+        <Link href="/signin" className="font-semibold text-zinc-900 underline dark:text-zinc-100">
           Sign in
         </Link>{" "}
         to see conversations you&apos;re part of.
@@ -109,7 +109,7 @@ function ConversationRow({ item }: { item: ConversationItem }) {
               {item.full_headline}
             </p>
             {item.unread_count > 0 ? (
-              <span className="shrink-0 rounded-[9999px] bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white">
+              <span className="shrink-0 rounded-[9999px] bg-zinc-900 px-2 py-0.5 text-[10px] font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
                 {item.unread_count} new
               </span>
             ) : null}

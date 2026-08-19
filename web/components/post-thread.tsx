@@ -518,7 +518,7 @@ export function PostThread({
                     href={a.article_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                    className="text-xs font-medium text-zinc-900 hover:underline dark:text-zinc-100"
                   >
                     ↗ attached: {a.article_url}
                   </a>
@@ -555,7 +555,7 @@ export function PostThread({
                   if (!requireAuth("rate stories")) return;
                   setRatingOpen(true);
                 }}
-                className="font-medium text-brand-600 hover:underline dark:text-brand-400"
+                className="font-medium text-zinc-900 hover:underline dark:text-zinc-100"
               >
                 {myRating != null ? "Change my rating" : "Rate this"}
               </button>
@@ -574,7 +574,7 @@ export function PostThread({
               {post.reply_count === 1 ? "comment" : "comments"}.{" "}
               <Link
                 href="/signin"
-                className="font-semibold text-brand-600 hover:underline dark:text-brand-400"
+                className="font-semibold text-zinc-900 hover:underline dark:text-zinc-100"
               >
                 Sign in to join the conversation.
               </Link>
@@ -586,7 +586,7 @@ export function PostThread({
             <Link
               href={`/post/${post.id}`}
               scroll={false}
-              className="inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400"
+              className="inline-block text-xs font-semibold text-zinc-900 hover:underline dark:text-zinc-100"
             >
               View all {post.reply_count}{" "}
               {post.reply_count === 1 ? "comment" : "comments"}
@@ -601,11 +601,11 @@ export function PostThread({
                     ref={unreadDividerRef}
                     className="my-2 flex items-center gap-3"
                   >
-                    <div className="h-px flex-1 bg-brand-200 dark:bg-brand-900" />
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
+                    <div className="h-px flex-1 bg-zinc-300 dark:bg-zinc-700" />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-900 dark:text-zinc-100">
                       New replies
                     </span>
-                    <div className="h-px flex-1 bg-brand-200 dark:bg-brand-900" />
+                    <div className="h-px flex-1 bg-zinc-300 dark:bg-zinc-700" />
                   </div>
                 ) : null}
                 <div className="space-y-2">

@@ -96,7 +96,7 @@ export function NotificationsClient() {
   if (!session) {
     return (
       <div className="mx-auto max-w-2xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
-        <Link href="/signin" className="font-semibold text-brand-600 underline">
+        <Link href="/signin" className="font-semibold text-zinc-900 underline dark:text-zinc-100">
           Sign in
         </Link>{" "}
         to see your alerts.
@@ -126,7 +126,7 @@ export function NotificationsClient() {
                 href={hrefFor(item)}
                 scroll={false}
                 className={`flex gap-3 py-4 transition hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
-                  wasUnread ? "bg-brand-50/40 dark:bg-brand-950/20" : ""
+                  wasUnread ? "bg-zinc-100/60 dark:bg-zinc-900/40" : ""
                 }`}
               >
                 <Avatar
