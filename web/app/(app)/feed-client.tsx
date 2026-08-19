@@ -224,7 +224,7 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
           </p>
           <Link
             href="/signin"
-            className="mt-4 inline-block bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            className="mt-4 inline-block bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             Create free account
           </Link>

@@ -412,7 +412,7 @@ export function FriendProfileModal({
                     href={item.article_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:text-brand-600 dark:text-slate-100"
+                    className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
                   >
                     {item.headline}
                   </a>

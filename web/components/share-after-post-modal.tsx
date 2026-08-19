@@ -156,7 +156,7 @@ export function ShareAfterPostModal({
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600 dark:text-brand-400">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
               Conversations on NWF are private.
             </p>
             <h2 className="mt-1 font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
@@ -237,7 +237,7 @@ export function ShareAfterPostModal({
             <button
               type="submit"
               disabled={!canSend}
-              className="rounded-full bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
+              className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
               {sending ? "Sending…" : "Send invites"}
             </button>

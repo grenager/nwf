@@ -319,7 +319,11 @@ export function Nav() {
     <>
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <BrandLink markClassName="h-6 w-6 text-brand-600" />
+          <BrandLink
+            className="text-zinc-900 dark:text-zinc-50"
+            markClassName="h-6 w-6"
+            showWordmark={false}
+          />
 
           <nav className="hidden items-center gap-1 sm:flex">
             {links.map((link) => (
@@ -338,7 +342,7 @@ export function Nav() {
             {isGuest ? (
               <Link
                 href="/signin"
-                className="bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+                className="bg-zinc-900 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
               >
                 Create free account
               </Link>
@@ -395,7 +399,7 @@ export function Nav() {
             {isGuest ? (
               <Link
                 href="/signin"
-                className="bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+                className="bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
               >
                 Sign up
               </Link>

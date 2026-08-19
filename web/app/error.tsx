@@ -19,7 +19,7 @@ export default function GlobalError({
       <p className="mt-2 text-sm text-slate-500">{error.message}</p>
       <button
         onClick={reset}
-        className="mt-6 rounded-lg bg-brand-600 px-5 py-2.5 font-semibold text-white hover:bg-brand-700"
+        className="mt-6 rounded-lg bg-zinc-900 px-5 py-2.5 font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
       >
         Try again
       </button>

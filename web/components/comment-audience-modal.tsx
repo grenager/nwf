@@ -114,7 +114,7 @@ export function CommentAudienceModal({
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600 dark:text-brand-400">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
               Conversations on NWF are private.
             </p>
             <h2 className="mt-1 font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
