@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import ColumnElement
@@ -15,6 +15,7 @@ from sqlalchemy.sql import ColumnElement
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
     aggregate_engagement,
+    curated_source_subquery,
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
@@ -36,6 +37,8 @@ from core.attribution import resolve_attribution
 from core.models import Source, Story, StoryStatus, UserSource
 
 router = APIRouter(prefix="/stories", tags=["stories"])
+
+_GUEST_CACHE_CONTROL: str = "public, s-maxage=30, stale-while-revalidate=300"
 
 
 def _headline_from_url(url: str) -> str:
@@ -296,6 +299,124 @@ async def title_search(
                 item.source_image_url = source.image_url
 
     return StoryList(items=items, total=len(scored), limit=limit, offset=0)
+
+
+async def _enrich_story_sources(
+    session: SessionDep, items: list[StoryWithStatus]
+) -> None:
+    """Attach source_name and source_image_url from the sources table."""
+    source_ids = {item.source_id for item in items if item.source_id}
+    if not source_ids:
+        return
+    sources = {
+        s.id: s
+        for s in (
+            await session.scalars(select(Source).where(Source.id.in_(source_ids)))
+        ).all()
+    }
+    for item in items:
+        source = sources.get(item.source_id) if item.source_id else None
+        if source is not None:
+            item.source_name, item.source_image_url = resolve_attribution(
+                article_url=item.article_url,
+                source_name=source.name,
+                source_homepage_url=source.homepage_url,
+                source_image_url=source.image_url,
+                publisher=None,
+            )
+
+
+@router.get("/discover", response_model=StoryList)
+async def discover_stories(
+    session: SessionDep,
+    user: OptionalUser,
+    response: Response,
+    limit: int = Query(default=30, le=100, ge=1),
+    offset: int = Query(default=0, ge=0),
+) -> StoryList:
+    """Recent articles from curated sources for cold-start browsing."""
+    curated = curated_source_subquery()
+    base = select(Story).where(
+        Story.source_id.in_(curated),
+        Story.archived.is_(False),
+    )
+
+    viewer_id: uuid.UUID | None = user.id if user is not None else None
+
+    if viewer_id is not None:
+        dismissed = (
+            select(StoryStatus.story_id)
+            .where(
+                StoryStatus.user_id == viewer_id,
+                StoryStatus.dismissed.is_(True),
+            )
+            .scalar_subquery()
+        )
+        base = base.where(Story.id.not_in(dismissed))
+
+    if viewer_id is None:
+        response.headers["Cache-Control"] = _GUEST_CACHE_CONTROL
+        stmt = (
+            base.order_by(Story.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        stories = list((await session.scalars(stmt)).all())
+        items: list[StoryWithStatus] = []
+        for story in stories:
+            model = StoryWithStatus.model_validate(story)
+            model.read = False
+            model.starred = False
+            items.append(model)
+        await _enrich_story_sources(session, items)
+        total = await session.scalar(
+            select(func.count()).select_from(base.subquery())
+        )
+        return StoryList(
+            items=items,
+            total=int(total or 0),
+            limit=limit,
+            offset=offset,
+        )
+
+    # Authenticated: skip stories the viewer already has a visible post on.
+    fetch_limit: int = limit + 40
+    stmt = (
+        _with_status_columns(base, viewer_id)
+        .order_by(Story.created_at.desc())
+        .limit(fetch_limit)
+        .offset(offset)
+    )
+    rows = (await session.execute(stmt)).all()
+    story_ids = [story.id for story, _, _ in rows]
+    post_by_story = await primary_post_ids_by_story(session, viewer_id, story_ids)
+    exclude: set[uuid.UUID] = set(post_by_story.keys())
+
+    filtered: list[Any] = [
+        (story, read, starred)
+        for story, read, starred in rows
+        if story.id not in exclude
+    ][:limit]
+
+    filtered_ids = [story.id for story, _, _ in filtered]
+    friend_profiles = await friend_stars_by_story(session, viewer_id, filtered_ids)
+    friend_map = {
+        sid: [
+            FriendStarOut(user_id=p.id, display_name=display_name(p))
+            for p in profiles
+        ]
+        for sid, profiles in friend_profiles.items()
+    }
+    items = _rows_to_stories(filtered, friend_map)
+    await _enrich_story_sources(session, items)
+
+    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    return StoryList(
+        items=items,
+        total=int(total or 0),
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("", response_model=StoryWithStatus, status_code=status.HTTP_201_CREATED)

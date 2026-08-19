@@ -480,9 +480,7 @@ async def can_see_post(
     friend_ids: list[uuid.UUID] | None = None,
     participant_ids: list[uuid.UUID] | None = None,
 ) -> bool:
-    """True if viewer may see the post (public, participant, or FoF of participant)."""
-    if post.visibility == PostVisibility.public:
-        return True
+    """True if viewer may see the post (participant or FoF of participant)."""
     if viewer_id is None:
         return False
     if post.author_id == viewer_id:
@@ -505,8 +503,6 @@ async def can_see_post(
 
 def audience_label(visibility: PostVisibility, participant_count: int) -> str:
     """Human-readable audience for the composer / card chrome."""
-    if visibility == PostVisibility.public:
-        return "public"
     if participant_count <= 1:
         return "visible to friends"
     return f"visible to friends of {participant_count} participants"
@@ -524,8 +520,8 @@ async def visible_post_ids_for_viewer(
 ) -> list[uuid.UUID]:
     """Candidate post ids the viewer may see, newest-posted first.
 
-    Guests see only public posts. Authenticated users see public posts plus
-    private posts where they are a participant or a friend of any participant.
+    Authenticated users see private posts where they are a participant or a
+    friend of any participant. Guests see nothing.
     Sorted by ``created_at`` so a new reply does not bump a post to the top.
 
     ``since_days`` keeps the common case cheap by only scanning recent posts. If
@@ -533,31 +529,22 @@ async def visible_post_ids_for_viewer(
     ``max_since_days`` (``None`` for no cutoff) so a quiet week still produces a
     full feed instead of a near-empty one.
     """
-    friends: list[uuid.UUID] | None = None
-    if viewer_id is not None:
-        friends = (
-            friend_ids
-            if friend_ids is not None
-            else await accepted_friend_ids(session, viewer_id)
-        )
+    if viewer_id is None:
+        return []
+
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
 
     def query(since: datetime | None) -> Select[tuple[uuid.UUID]]:
-        if viewer_id is None:
-            stmt = select(Post.id).where(
-                Post.visibility == PostVisibility.public
-            )
-            if since is not None:
-                stmt = stmt.where(Post.created_at >= since)
-            return stmt.order_by(Post.created_at.desc()).limit(limit)
-
-        # Posts where viewer or any friend is a participant, OR public.
-        participant_filter = [viewer_id, *(friends or [])]
+        participant_filter = [viewer_id, *friends]
         stmt = (
             select(Post.id)
             .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
             .where(
                 or_(
-                    Post.visibility == PostVisibility.public,
                     Post.author_id == viewer_id,
                     PostParticipant.user_id.in_(participant_filter),
                 ),
@@ -615,7 +602,6 @@ async def primary_post_ids_by_story(
             .where(
                 Post.story_id.in_(story_ids),
                 or_(
-                    Post.visibility == PostVisibility.public,
                     Post.author_id == viewer_id,
                     PostParticipant.user_id.in_(participant_filter),
                 ),

@@ -19,7 +19,6 @@ import type {
   NotificationList,
   Post,
   PostAudience,
-  PostVisibility,
   PreferencesUpdate,
   PreviewCard,
   Profile,
@@ -142,6 +141,16 @@ export const api = {
     request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
   titleSearchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/title-search?q=${encodeURIComponent(q)}`),
+  discoverStories: (opts?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<StoryList> => {
+    const params = new URLSearchParams();
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs: string = params.toString();
+    return request<StoryList>(qs ? `/stories/discover?${qs}` : "/stories/discover");
+  },
   addStory: (url: string, kind: StoryKind): Promise<Story> =>
     request<Story>("/stories", {
       method: "POST",
@@ -180,7 +189,6 @@ export const api = {
     url?: string;
     take?: string | null;
     shared_text?: string | null;
-    visibility?: PostVisibility;
     kind?: StoryKind;
     title?: string;
     canonical_url?: string;
@@ -199,7 +207,6 @@ export const api = {
     payload: {
       take?: string | null;
       shared_text?: string | null;
-      visibility?: PostVisibility;
     },
   ): Promise<Post> =>
     request<Post>(`/posts/${id}`, {

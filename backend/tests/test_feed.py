@@ -94,7 +94,7 @@ def _make_posts(n: int) -> tuple[list[Post], dict[uuid.UUID, Story]]:
             story_id=story.id,
             author_id=uuid.uuid4(),
             take="a take",
-            visibility=PostVisibility.public,
+            visibility=PostVisibility.private,
             last_activity_at=now,
             created_at=now,
             updated_at=now,
@@ -184,10 +184,12 @@ def _ids(n: int) -> list[uuid.UUID]:
 
 @pytest.mark.asyncio
 async def test_recent_window_satisfying_minimum_makes_one_query() -> None:
+    viewer = uuid.uuid4()
     session = _ScriptedSession([_ids(20)])
     result = await visible_post_ids_for_viewer(
         session,  # type: ignore[arg-type]
-        None,
+        viewer,
+        friend_ids=[],
         limit=40,
         since_days=14,
         min_results=20,
@@ -199,11 +201,13 @@ async def test_recent_window_satisfying_minimum_makes_one_query() -> None:
 
 @pytest.mark.asyncio
 async def test_thin_recent_window_widens_lookback() -> None:
+    viewer = uuid.uuid4()
     wide = _ids(18)
     session = _ScriptedSession([_ids(3), wide])
     result = await visible_post_ids_for_viewer(
         session,  # type: ignore[arg-type]
-        None,
+        viewer,
+        friend_ids=[],
         limit=40,
         since_days=14,
         min_results=20,
@@ -218,10 +222,12 @@ async def test_thin_recent_window_widens_lookback() -> None:
 
 @pytest.mark.asyncio
 async def test_widening_without_max_lookback_drops_the_cutoff() -> None:
+    viewer = uuid.uuid4()
     session = _ScriptedSession([_ids(1), _ids(9)])
     await visible_post_ids_for_viewer(
         session,  # type: ignore[arg-type]
-        None,
+        viewer,
+        friend_ids=[],
         limit=40,
         since_days=14,
         min_results=20,
@@ -234,10 +240,12 @@ async def test_widening_without_max_lookback_drops_the_cutoff() -> None:
 
 @pytest.mark.asyncio
 async def test_no_minimum_never_widens() -> None:
+    viewer = uuid.uuid4()
     session = _ScriptedSession([_ids(2)])
     result = await visible_post_ids_for_viewer(
         session,  # type: ignore[arg-type]
-        None,
+        viewer,
+        friend_ids=[],
         limit=40,
         since_days=14,
     )
@@ -247,10 +255,12 @@ async def test_no_minimum_never_widens() -> None:
 
 @pytest.mark.asyncio
 async def test_minimum_above_limit_does_not_force_a_second_pass() -> None:
+    viewer = uuid.uuid4()
     session = _ScriptedSession([_ids(5)])
     result = await visible_post_ids_for_viewer(
         session,  # type: ignore[arg-type]
-        None,
+        viewer,
+        friend_ids=[],
         limit=5,
         since_days=14,
         min_results=20,

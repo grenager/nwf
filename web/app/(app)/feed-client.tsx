@@ -1,20 +1,22 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { DiscoverFeed } from "@/components/discover-feed";
 import { PostCard } from "@/components/post-card";
 import { FeedSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
+import type { FeedCard, FeedPayload, Post, Profile, Story, StoryList } from "@/lib/types";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
+const THIN_FEED_THRESHOLD: number = 5;
+const DISCOVER_LIMIT: number = 20;
 
 interface FeedClientProps {
-  // Server-rendered public feed, so guests (and the first paint for everyone)
-  // have content without waiting on a client-side round-trip.
-  initialGuestData: FeedPayload | null;
+  /** Server-rendered article discover feed for guests' first paint. */
+  initialGuestStories: StoryList | null;
 }
 
 function formatNewSince(iso: string): string {
@@ -27,13 +29,16 @@ function formatNewSince(iso: string): string {
   });
 }
 
-export function FeedClient({ initialGuestData }: FeedClientProps) {
+export function FeedClient({ initialGuestStories }: FeedClientProps) {
   const { notify } = useToast();
   const { session, loading: authLoading } = useAuth();
   const isSignedIn: boolean = session !== null;
-  const [data, setData] = useState<FeedPayload | null>(initialGuestData);
+  const [data, setData] = useState<FeedPayload | null>(null);
+  const [discoverStories, setDiscoverStories] = useState<Story[]>(
+    initialGuestStories?.items ?? [],
+  );
   const [me, setMe] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState<boolean>(initialGuestData === null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -43,12 +48,32 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
     void api.getMe().then(setMe).catch(() => undefined);
   }, [isSignedIn]);
 
+  const loadDiscover = useCallback(async (): Promise<void> => {
+    try {
+      const payload: StoryList = await api.discoverStories({
+        limit: DISCOVER_LIMIT,
+      });
+      setDiscoverStories(payload.items);
+    } catch {
+      // Discover is supplementary; don't block the feed on failure.
+    }
+  }, []);
+
   const load = useCallback(
     async (opts?: { silent?: boolean }): Promise<void> => {
       if (!opts?.silent) setLoading(true);
       try {
-        const payload: FeedPayload = await api.getFeed();
-        setData(payload);
+        if (isSignedIn) {
+          const payload: FeedPayload = await api.getFeed();
+          setData(payload);
+          if (payload.items.length < THIN_FEED_THRESHOLD) {
+            await loadDiscover();
+          } else {
+            setDiscoverStories([]);
+          }
+        } else {
+          await loadDiscover();
+        }
       } catch (err) {
         notify(
           err instanceof ApiError ? err.message : "Failed to load feed",
@@ -58,23 +83,19 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
         setLoading(false);
       }
     },
-    [notify],
+    [isSignedIn, loadDiscover, notify],
   );
 
-  // Guests are already served the SSR payload; only hit the API for a
-  // personalized feed once auth resolves, or if the server render had no data.
   useEffect(() => {
     if (authLoading) return;
-    if (isSignedIn) {
-      void load({ silent: data !== null });
+    if (!isSignedIn && initialGuestStories !== null) {
+      setLoading(false);
       return;
     }
-    if (data === null) void load();
+    void load({ silent: isSignedIn && data !== null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isSignedIn, load]);
 
-  // A post created elsewhere (e.g. the nav "+ Post" modal) should appear at the
-  // very top immediately — prepend from the event payload, no refetch.
   useEffect(() => {
     function onPostCreated(event: Event): void {
       const custom: CustomEvent = event as CustomEvent;
@@ -129,6 +150,9 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
           items: [card, ...withoutDup],
         };
       });
+      setDiscoverStories((prev) =>
+        prev.filter((story) => story.id !== post.story_id),
+      );
     }
     window.addEventListener("nwf:post-created", onPostCreated);
     return () =>
@@ -155,12 +179,17 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
   function onCardChange(updated: FeedCard): void {
     setData((prev) => {
       if (!prev) return prev;
-      // A card with no posts left (last post deleted) is dropped entirely.
       const items: FeedCard[] = prev.items
         .map((c) => (c.card_id === updated.card_id ? updated : c))
         .filter((c) => c.posts.length > 0);
       return { ...prev, items };
     });
+  }
+
+  function onDiscoverPostCreated(post: Post): void {
+    window.dispatchEvent(
+      new CustomEvent("nwf:post-created", { detail: post }),
+    );
   }
 
   if (loading) {
@@ -171,22 +200,15 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
     );
   }
 
-  if (!data) {
-    return (
-      <div className="border border-dashed border-zinc-300 p-10 text-center text-zinc-500">
-        Could not load feed.{" "}
-        <button onClick={() => void load()} className="text-brand-600 underline">
-          Retry
-        </button>
-      </div>
-    );
-  }
+  const showDiscover: boolean =
+    !isSignedIn || (data !== null && data.items.length < THIN_FEED_THRESHOLD);
+  const postItems: FeedCard[] = data?.items ?? [];
 
   let dividerBeforeIndex: number = -1;
-  if (data.new_since !== null) {
+  if (data?.new_since !== null && data?.new_since !== undefined) {
     const newSinceMs: number = Date.parse(data.new_since);
     if (!Number.isNaN(newSinceMs)) {
-      dividerBeforeIndex = data.items.findIndex((card) => {
+      dividerBeforeIndex = postItems.findIndex((card) => {
         const createdMs: number = Date.parse(card.posts[0]?.created_at ?? "");
         return !Number.isNaN(createdMs) && createdMs <= newSinceMs;
       });
@@ -195,12 +217,10 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
-      {!isSignedIn && data.items.length === 0 ? (
+      {!isSignedIn && postItems.length === 0 && discoverStories.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
-            {data.aggregate_readers > 0
-              ? `${data.aggregate_readers} readers, ${data.aggregate_private_conversations} private conversations you can't see.`
-              : "Public posts from contributors will show up here."}
+            Private conversations with friends — sign up to start one.
           </p>
           <Link
             href="/signin"
@@ -211,11 +231,11 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
         </div>
       ) : null}
 
-      {isSignedIn && data.items.length === 0 ? (
+      {isSignedIn && postItems.length === 0 && discoverStories.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
-          No posts yet. Share an article with the Add button, or wait for friends
-          to post.
-          {data.aggregate_private_conversations > 0 ? (
+          No posts yet. Share an article with the Add button, or pick one below
+          to start a conversation.
+          {data && data.aggregate_private_conversations > 0 ? (
             <p className="mt-2 text-xs">
               {data.aggregate_private_conversations} private conversations
               elsewhere on the site.
@@ -225,11 +245,12 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
       ) : null}
 
       <div className="[&>article:first-child]:pt-1">
-        {data.items.map((card, index) => {
+        {postItems.map((card, index) => {
           const showNewSinceDivider: boolean =
             index === dividerBeforeIndex &&
             dividerBeforeIndex > 0 &&
-            data.new_since !== null;
+            data?.new_since !== null &&
+            data?.new_since !== undefined;
           const showTopBorder: boolean =
             index > 0 && !showNewSinceDivider;
 
@@ -239,10 +260,10 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
                 <div
                   className="relative border-t border-zinc-200 py-7 dark:border-zinc-800"
                   role="separator"
-                  aria-label={`New since ${formatNewSince(data.new_since!)}`}
+                  aria-label={`New since ${formatNewSince(data!.new_since!)}`}
                 >
                   <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:bg-zinc-950">
-                    New since {formatNewSince(data.new_since!)}
+                    New since {formatNewSince(data!.new_since!)}
                   </span>
                 </div>
               ) : null}
@@ -256,6 +277,19 @@ export function FeedClient({ initialGuestData }: FeedClientProps) {
           );
         })}
       </div>
+
+      {showDiscover ? (
+        <DiscoverFeed
+          stories={discoverStories}
+          isGuest={!isSignedIn}
+          heading={
+            isSignedIn
+              ? "More articles to discuss"
+              : "Articles to discuss with friends"
+          }
+          onPostCreated={onDiscoverPostCreated}
+        />
+      ) : null}
     </div>
   );
 }
