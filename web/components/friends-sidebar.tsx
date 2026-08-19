@@ -8,13 +8,43 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import type {
+  FriendRequest,
   FriendSummary,
   InvitationCreateResult,
   RecommendedFriend,
   UUID,
 } from "@/lib/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+function mutualLabel(count: number): string {
+  if (count <= 0) return "";
+  return count === 1 ? "1 mutual friend" : `${count} mutual friends`;
+}
+
+function SidebarAvatar({
+  name,
+  imageUrl,
+}: {
+  name: string;
+  imageUrl: string | null;
+}) {
+  if (imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt=""
+        className="h-7 w-7 shrink-0 rounded-[9999px] object-cover"
+      />
+    );
+  }
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9999px] bg-zinc-200 text-xs font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200">
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
 
 function FriendAvatar({ friend }: { friend: FriendSummary }) {
   return (
@@ -134,8 +164,12 @@ export function FriendsSidebar() {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [online, setOnline] = useState<number>(0);
-  const [incomingCount, setIncomingCount] = useState<number>(0);
+  const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [recommended, setRecommended] = useState<RecommendedFriend[]>([]);
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<UUID>>(
+    () => new Set<UUID>(),
+  );
+  const pendingRef = useRef<Set<UUID>>(new Set());
   const [loading, setLoading] = useState<boolean>(true);
   const [openId, setOpenId] = useState<UUID | null>(null);
 
@@ -164,8 +198,8 @@ export function FriendsSidebar() {
       setFriends(data.friends);
       setTotal(data.total);
       setOnline(data.online);
-      setIncomingCount(requests.incoming.length);
-      setRecommended(recs.slice(0, 3));
+      setIncoming(requests.incoming);
+      setRecommended(recs.slice(0, 5));
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Failed to load friends",
@@ -179,6 +213,22 @@ export function FriendsSidebar() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  function beginPending(userId: UUID): boolean {
+    if (pendingRef.current.has(userId)) return false;
+    const next: Set<UUID> = new Set(pendingRef.current);
+    next.add(userId);
+    pendingRef.current = next;
+    setPendingIds(next);
+    return true;
+  }
+
+  function endPending(userId: UUID): void {
+    const next: Set<UUID> = new Set(pendingRef.current);
+    next.delete(userId);
+    pendingRef.current = next;
+    setPendingIds(next);
+  }
 
   function startInvite(): void {
     if (!requireAuth("invite friends")) return;
@@ -228,13 +278,48 @@ export function FriendsSidebar() {
     }
   }
 
-  async function addRecommended(userId: UUID): Promise<void> {
+  async function acceptInvitation(userId: UUID): Promise<void> {
+    if (!beginPending(userId)) return;
+    try {
+      await api.updateConnection(userId, "accepted");
+      notify("Friend added", "success");
+      void load();
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : "Failed to accept",
+        "error",
+      );
+    } finally {
+      endPending(userId);
+    }
+  }
+
+  async function ignoreInvitation(userId: UUID): Promise<void> {
+    if (!beginPending(userId)) return;
+    try {
+      await api.deleteConnection(userId);
+      notify("Request ignored", "info");
+      void load();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed", "error");
+    } finally {
+      endPending(userId);
+    }
+  }
+
+  async function connect(userId: UUID): Promise<void> {
+    if (!beginPending(userId)) return;
     try {
       await api.createConnection(userId);
       notify("Friend request sent", "success");
       void load();
     } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Failed to add", "error");
+      notify(
+        err instanceof ApiError ? err.message : "Failed to add",
+        "error",
+      );
+    } finally {
+      endPending(userId);
     }
   }
 
@@ -261,22 +346,6 @@ export function FriendsSidebar() {
           {inviting ? "Cancel" : "Invite"}
         </button>
       </div>
-
-      {incomingCount > 0 ? (
-        <Link
-          href="/friends"
-          className="mt-3 flex items-center justify-between border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/40"
-        >
-          <span className="font-semibold text-emerald-800 dark:text-emerald-300">
-            {incomingCount === 1
-              ? "1 friend request"
-              : `${incomingCount} friend requests`}
-          </span>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-emerald-700 dark:text-emerald-400">
-            View
-          </span>
-        </Link>
-      ) : null}
 
       {inviting ? (
         <form
@@ -331,11 +400,73 @@ export function FriendsSidebar() {
         </div>
       )}
 
+      {!loading && incoming.length > 0 ? (
+        <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+          <div className="mb-2 flex items-end justify-between">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+              Invitations
+            </h3>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-600">
+              {incoming.length} new
+            </span>
+          </div>
+          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            {incoming.map((req) => {
+              const busy: boolean = pendingIds.has(req.user_id);
+              const mutual: string = mutualLabel(req.mutual_count);
+              return (
+                <li
+                  key={req.user_id}
+                  className="flex items-center gap-2 py-2.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(req.user_id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <SidebarAvatar
+                      name={req.display_name}
+                      imageUrl={req.image_url}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                        {req.display_name}
+                      </p>
+                      {mutual ? (
+                        <p className="truncate text-[11px] text-zinc-400">
+                          {mutual}
+                        </p>
+                      ) : null}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void acceptInvitation(req.user_id)}
+                    className="shrink-0 bg-zinc-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void ignoreInvitation(req.user_id)}
+                    className="shrink-0 px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400 hover:text-zinc-700 disabled:opacity-40"
+                  >
+                    Ignore
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
       {!loading && recommended.length > 0 ? (
         <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <div className="mb-2 flex items-end justify-between">
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-              Recommended
+              People you may know
             </h3>
             <Link
               href="/friends"
@@ -344,29 +475,42 @@ export function FriendsSidebar() {
               See all
             </Link>
           </div>
-          <ul className="space-y-2">
-            {recommended.map((rec) => (
-              <li
-                key={rec.user_id}
-                className="flex items-center justify-between gap-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                    {rec.display_name}
-                  </p>
-                  <p className="text-[11px] text-zinc-400">
-                    {rec.mutual_count} mutual
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void addRecommended(rec.user_id)}
-                  className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-900 dark:text-zinc-100"
+          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            {recommended.map((rec) => {
+              const busy: boolean = pendingIds.has(rec.user_id);
+              const mutual: string = mutualLabel(rec.mutual_count);
+              return (
+                <li
+                  key={rec.user_id}
+                  className="flex items-center gap-2 py-2.5"
                 >
-                  Add
-                </button>
-              </li>
-            ))}
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <SidebarAvatar
+                      name={rec.display_name}
+                      imageUrl={rec.image_url}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                        {rec.display_name}
+                      </p>
+                      {mutual ? (
+                        <p className="truncate text-[11px] text-zinc-400">
+                          {mutual}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void connect(rec.user_id)}
+                    className="shrink-0 border border-zinc-300 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                  >
+                    Connect
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
