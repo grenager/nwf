@@ -7,6 +7,7 @@ import type {
   Comment,
   Connection,
   ConnectionStatus,
+  CommunityStats,
   ConversationList,
   FeedPayload,
   FriendProfile,
@@ -151,6 +152,8 @@ export const api = {
     const qs: string = params.toString();
     return request<StoryList>(qs ? `/stories/discover?${qs}` : "/stories/discover");
   },
+  getCommunityStats: (): Promise<CommunityStats> =>
+    request<CommunityStats>("/community/stats"),
   addStory: (url: string, kind: StoryKind): Promise<Story> =>
     request<Story>("/stories", {
       method: "POST",

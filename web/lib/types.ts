@@ -48,6 +48,13 @@ export interface FriendEngagement {
   readers: FriendMini[];
 }
 
+/** Anonymous discussion social proof on discover cards (no names or ids). */
+export interface StoryDiscussion {
+  people_count: number;
+  avatar_urls: string[];
+  last_comment_at: string | null;
+}
+
 export interface Story {
   id: UUID;
   article_url: string;
@@ -72,6 +79,8 @@ export interface Story {
   engagement: FriendEngagement;
   /** Most recent viewer-visible post about this story, when one exists. */
   post_id?: UUID | null;
+  /** Anonymous comment activity for guest discover cards. */
+  discussion?: StoryDiscussion | null;
 }
 
 export interface StoryList {
@@ -79,6 +88,13 @@ export interface StoryList {
   total: number;
   limit: number;
   offset: number;
+}
+
+/** Public aggregate counts for guest social proof (`GET /community/stats`). */
+export interface CommunityStats {
+  member_count: number;
+  discussing_count: number;
+  conversation_count: number;
 }
 
 /** Fixed emoji reaction set for posts and comments. */

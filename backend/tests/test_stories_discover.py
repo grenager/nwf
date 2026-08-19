@@ -76,9 +76,15 @@ async def test_discover_guest_returns_unread_stories() -> None:
     session = _DiscoverSession(scalar_stories=[story], scalar_total=1)
     response = MagicMock()
 
-    with patch(
-        "api.routers.stories._enrich_story_sources",
-        AsyncMock(),
+    with (
+        patch(
+            "api.routers.stories._enrich_story_sources",
+            AsyncMock(),
+        ),
+        patch(
+            "api.routers.stories._attach_discussion",
+            AsyncMock(),
+        ),
     ):
         result = await discover_stories(
             session,  # type: ignore[arg-type]
@@ -123,6 +129,10 @@ async def test_discover_authenticated_excludes_stories_with_visible_post() -> No
             "api.routers.stories._enrich_story_sources",
             AsyncMock(),
         ),
+        patch(
+            "api.routers.stories._attach_discussion",
+            AsyncMock(),
+        ),
     ):
         # Simulate execute returning both stories before filtering
         session._execute_rows = [
@@ -139,3 +149,50 @@ async def test_discover_authenticated_excludes_stories_with_visible_post() -> No
 
     assert len(result.items) == 1
     assert result.items[0].id == story_without_post.id
+
+
+@pytest.mark.asyncio
+async def test_discover_attaches_discussion_without_identity_fields() -> None:
+    from api.schemas import StoryDiscussionOut
+
+    story = _story()
+    session = _DiscoverSession(scalar_stories=[story], scalar_total=1)
+    response = MagicMock()
+    discussion = StoryDiscussionOut(
+        people_count=2,
+        avatar_urls=["https://cdn.example/a.jpg"],
+        last_comment_at=datetime.now(UTC),
+    )
+
+    with (
+        patch(
+            "api.routers.stories._enrich_story_sources",
+            AsyncMock(),
+        ),
+        patch(
+            "api.routers.stories.discussion_activity_by_story",
+            AsyncMock(return_value={story.id: discussion}),
+        ),
+    ):
+        result = await discover_stories(
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            response,
+            limit=10,
+            offset=0,
+        )
+
+    assert result.items[0].discussion is not None
+    assert result.items[0].discussion.people_count == 2
+    payload = result.items[0].discussion.model_dump()
+    assert "user_id" not in payload
+    assert "display_name" not in payload
+
+
+def test_discover_freshness_expr_orders_by_comment_recency() -> None:
+    from api.routers.stories import _discover_freshness_expr
+
+    expr = _discover_freshness_expr()
+    sql: str = str(expr.compile(compile_kwargs={"literal_binds": True}))
+    assert "greatest" in sql.lower()
+    assert "created_at" in sql.lower()

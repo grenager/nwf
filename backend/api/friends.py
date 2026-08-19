@@ -12,6 +12,7 @@ from sqlalchemy import Select, func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.schemas import StoryDiscussionOut
 from core.models import (
     Comment,
     Connection,
@@ -146,6 +147,68 @@ async def global_activity_by_story(
         activity.setdefault(story_id, StoryActivity()).commented.add(user_id)
 
     return activity
+
+
+async def discussion_activity_by_story(
+    session: AsyncSession,
+    story_ids: list[uuid.UUID],
+    *,
+    avatar_limit: int = 3,
+) -> dict[uuid.UUID, StoryDiscussionOut]:
+    """Per-story comment counts, recency, and anonymous avatar urls for guests."""
+    if not story_ids:
+        return {}
+
+    count_rows = (
+        await session.execute(
+            select(
+                Comment.story_id,
+                func.count(func.distinct(Comment.user_id)),
+                func.max(Comment.created_at),
+            )
+            .where(Comment.story_id.in_(story_ids))
+            .group_by(Comment.story_id)
+        )
+    ).all()
+
+    out: dict[uuid.UUID, StoryDiscussionOut] = {}
+    for story_id, people_count, last_at in count_rows:
+        count: int = int(people_count or 0)
+        if count <= 0:
+            continue
+        out[story_id] = StoryDiscussionOut(
+            people_count=count,
+            avatar_urls=[],
+            last_comment_at=last_at,
+        )
+
+    avatar_rows = (
+        await session.execute(
+            select(Comment.story_id, Comment.user_id, Profile.image_url)
+            .join(Profile, Profile.id == Comment.user_id)
+            .where(
+                Comment.story_id.in_(story_ids),
+                Profile.image_url.isnot(None),
+                Profile.image_url != "",
+            )
+            .order_by(Comment.created_at.desc())
+        )
+    ).all()
+
+    seen_by_story: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for story_id, user_id, image_url in avatar_rows:
+        entry = out.get(story_id)
+        if entry is None or image_url is None:
+            continue
+        seen = seen_by_story.setdefault(story_id, set())
+        if user_id in seen:
+            continue
+        if len(entry.avatar_urls) >= avatar_limit:
+            continue
+        seen.add(user_id)
+        entry.avatar_urls.append(image_url)
+
+    return out
 
 
 async def accepted_friend_ids(session: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
