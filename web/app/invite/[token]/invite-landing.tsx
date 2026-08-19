@@ -1,9 +1,11 @@
 "use client";
 
 import { ArticleCard } from "@/components/article-card";
+import { Avatar } from "@/components/avatar";
 import { useAuth } from "@/components/auth-provider";
 import { BrandLink } from "@/components/brand-mark";
 import { useAuthGate } from "@/components/auth-gate";
+import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { MentionText } from "@/components/mention-text";
 import { ReaderBody } from "@/components/reader-body";
 import { RatingInput, StarsDisplay } from "@/components/star-rating";
@@ -15,35 +17,6 @@ import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { InvitePreview, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-function Avatar({
-  name,
-  imageUrl,
-  size = "sm",
-}: {
-  name: string;
-  imageUrl: string | null;
-  size?: "sm" | "lg";
-}) {
-  const dims: string = size === "lg" ? "h-10 w-10" : "h-7 w-7";
-  if (imageUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return (
-      <img
-        src={imageUrl}
-        alt=""
-        className={`${dims} shrink-0 rounded-[9999px] object-cover`}
-      />
-    );
-  }
-  return (
-    <span
-      className={`${dims} flex shrink-0 items-center justify-center rounded-[9999px] bg-zinc-200 text-sm font-bold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200`}
-    >
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
-}
 
 function InviteHeader() {
   return (
@@ -92,6 +65,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     draftScopeKey({ kind: "invite", token }, user?.id ?? null),
   );
   const [posting, setPosting] = useState<boolean>(false);
+  const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
 
   // Height tracks the text itself so a restored draft opens at its real size.
   useEffect(() => {
@@ -498,8 +472,23 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                   Reply
                 </button>
               </div>
+              {isGuest ? null : (
+                <button
+                  type="button"
+                  onClick={() => setAudienceOpen(true)}
+                  className="text-left text-xs text-zinc-400 underline decoration-dotted underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+                >
+                  Who will see this?
+                </button>
+              )}
             </div>
           </div>
+          {audienceOpen ? (
+            <CommentAudienceModal
+              postId={post.id}
+              onClose={() => setAudienceOpen(false)}
+            />
+          ) : null}
         </section>
       ) : (
         <p className="text-sm text-zinc-500">

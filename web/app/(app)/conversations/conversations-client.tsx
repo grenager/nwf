@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar } from "@/components/post-thread";
+import { Avatar } from "@/components/avatar";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
