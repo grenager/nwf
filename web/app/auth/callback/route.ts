@@ -55,5 +55,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.redirect(`${base}/signin`);
+  const signIn: string =
+    next === "/"
+      ? `${base}/signin`
+      : `${base}/signin?next=${encodeURIComponent(next)}`;
+  return NextResponse.redirect(signIn);
 }

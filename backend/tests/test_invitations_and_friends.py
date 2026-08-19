@@ -72,10 +72,10 @@ def test_invite_email_html_and_plain() -> None:
     )
     plain = _plain_text(content)
     assert "Ada Lovelace" in plain
-    assert "Join the conversation" in plain
+    assert "Accept invitation" in plain
     html = _html_body(content)
     assert "A Story &lt;script&gt;" in html
-    assert "Join the conversation" in html
+    assert "Accept invitation" in html
     assert "The Outlet" in html
 
 
@@ -175,6 +175,7 @@ async def test_accept_invitation_idempotent() -> None:
 
 @pytest.mark.asyncio
 async def test_accept_invitation_creates_friendship() -> None:
+    """Single-use email invites auto-friend even when become_friend is false."""
     inviter = uuid.uuid4()
     invitee = uuid.uuid4()
     post_id = uuid.uuid4()

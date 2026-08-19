@@ -64,7 +64,7 @@ def _plain_text(content: InviteEmailContent) -> str:
     if content.message:
         lines.append(content.message)
         lines.append("")
-    lines.append(f"Join the conversation: {content.invite_url}")
+    lines.append(f"Accept invitation: {content.invite_url}")
     return "\n".join(lines)
 
 
@@ -135,7 +135,7 @@ def _html_body(content: InviteEmailContent) -> str:
         f'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;'
         f'font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;'
         f'text-decoration:none;padding:12px 20px;border-radius:4px;">'
-        f"Join the conversation</a></p>"
+        f"Accept invitation</a></p>"
         f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;'
         f'font-size:12px;color:#a1a1aa;margin:16px 0 0;">'
         f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
