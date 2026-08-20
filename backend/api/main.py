@@ -91,7 +91,7 @@ def run() -> None:
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.api_reload,
-        reload_dirs=["api", "core", "scraper"] if settings.api_reload else None,
+        reload_dirs=["api", "core"] if settings.api_reload else None,
     )
 
 
