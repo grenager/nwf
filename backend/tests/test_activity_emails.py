@@ -18,6 +18,24 @@ from core.email import (
 )
 
 
+class _NullSavepoint:
+    """Stands in for the SAVEPOINT the notify_* helpers open on the session."""
+
+    async def __aenter__(self) -> _NullSavepoint:
+        return self
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+def _mail_session() -> AsyncMock:
+    """A mock session shaped like the AsyncSession the notify_* helpers use."""
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+    session.begin_nested = MagicMock(return_value=_NullSavepoint())
+    return session
+
+
 def _content(**overrides: object) -> ActivityEmailContent:
     base: dict[str, object] = {
         "to_email": "friend@example.com",
@@ -118,8 +136,7 @@ async def test_notify_friends_of_new_post_fans_out() -> None:
     author.last = None
     author.image_url = None
 
-    session = AsyncMock()
-    session.get = AsyncMock(return_value=None)
+    session = _mail_session()
 
     recipients = [
         ActivityEmailRecipient(
@@ -207,8 +224,7 @@ async def test_notify_friends_of_new_post_reaches_pending_audiences() -> None:
     author.last = None
     author.image_url = None
 
-    session = AsyncMock()
-    session.get = AsyncMock(return_value=None)
+    session = _mail_session()
 
     friend = ActivityEmailRecipient(
         user_id=friend_id,
@@ -319,8 +335,7 @@ async def test_invitee_nudge_not_recorded_when_send_fails() -> None:
     author.last = None
     author.image_url = None
 
-    session = AsyncMock()
-    session.get = AsyncMock(return_value=None)
+    session = _mail_session()
 
     invitee = PendingInviteRecipient(
         invitation_id=uuid.uuid4(),
@@ -389,8 +404,7 @@ async def test_notify_comment_activity_nudges_invited_conversation() -> None:
     commenter.last = None
     commenter.image_url = None
 
-    session = AsyncMock()
-    session.get = AsyncMock(return_value=None)
+    session = _mail_session()
 
     invitee = PendingInviteRecipient(
         invitation_id=uuid.uuid4(),
@@ -464,8 +478,7 @@ async def test_notify_comment_activity_emails_post_author() -> None:
     commenter.last = None
     commenter.image_url = None
 
-    session = AsyncMock()
-    session.get = AsyncMock(return_value=None)
+    session = _mail_session()
 
     recipient = ActivityEmailRecipient(
         user_id=author_id,
@@ -534,8 +547,7 @@ async def test_notify_reply_dedupes_and_prefers_reply_framing() -> None:
     commenter.last = None
     commenter.image_url = None
 
-    session = AsyncMock()
-    session.get = AsyncMock(return_value=None)
+    session = _mail_session()
 
     recipient = ActivityEmailRecipient(
         user_id=author_id,
@@ -608,6 +620,7 @@ async def test_notify_skips_self_comment_on_own_post() -> None:
     commenter.image_url = None
 
     session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=_NullSavepoint())
 
     with (
         patch(
@@ -653,6 +666,7 @@ async def test_pending_invite_loader_skips_suppressed_and_registered() -> None:
 
     fresh = _invitation("fresh@example.com")
     session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=_NullSavepoint())
     scalars_result = MagicMock()
     scalars_result.all.return_value = [
         fresh,
@@ -709,6 +723,7 @@ async def test_opted_out_recipients_are_skipped_by_loader() -> None:
     ok_profile.unsubscribe_token = uuid.uuid4()
 
     session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=_NullSavepoint())
     scalars_result = MagicMock()
     scalars_result.all.return_value = [opted_profile, ok_profile]
     session.scalars = AsyncMock(return_value=scalars_result)
@@ -721,3 +736,44 @@ async def test_opted_out_recipients_are_skipped_by_loader() -> None:
 
     assert len(recipients) == 1
     assert recipients[0].user_id == ok
+
+
+@pytest.mark.asyncio
+async def test_email_db_failure_does_not_poison_caller_transaction() -> None:
+    """A DB error while emailing must not roll back the caller's own writes.
+
+    The notify_* helpers query the caller's session, so a failing statement
+    used to leave the surrounding transaction aborted -- the comment or post
+    that triggered the email was rolled back with it and the request 500'd.
+    The SAVEPOINT confines the damage to the email work.
+    """
+    post = MagicMock()
+    post.id = uuid.uuid4()
+    post.author_id = uuid.uuid4()
+    post.take = "a take"
+    story = MagicMock()
+    author = MagicMock()
+    author.id = post.author_id
+
+    rolled_back: list[bool] = []
+
+    class _TrackingSavepoint(_NullSavepoint):
+        async def __aexit__(self, *exc: object) -> bool:
+            rolled_back.append(exc[0] is not None)
+            return False
+
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+    session.begin_nested = MagicMock(return_value=_TrackingSavepoint())
+
+    with patch(
+        "api.activity_mail.accepted_friend_ids",
+        new=AsyncMock(side_effect=RuntimeError("column does not exist")),
+    ):
+        # Must not raise: the caller's request has to survive this.
+        await notify_friends_of_new_post(
+            session, post=post, story=story, author=author
+        )
+
+    # The savepoint saw the exception, so only the email work was undone.
+    assert rolled_back == [True]
