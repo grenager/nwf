@@ -214,79 +214,85 @@ async def notify_friends_of_new_post(
     signed up. The latter two get a note explaining they need to accept first.
     """
     try:
-        friend_ids: list[uuid.UUID] = await accepted_friend_ids(
-            session, post.author_id
-        )
-        audience: list[uuid.UUID] = [
-            fid for fid in friend_ids if fid != post.author_id
-        ]
-        recipients = await load_activity_email_recipients(session, audience)
-        pending_ids: list[uuid.UUID] = await pending_connection_ids(
-            session, post.author_id
-        )
-        pending_recipients = await load_activity_email_recipients(
-            session, pending_ids
-        )
-        invitees = await load_pending_invite_recipients(
-            session, inviter_id=post.author_id
-        )
-        if not (recipients or pending_recipients or invitees):
-            return
+        async with session.begin_nested():
+            friend_ids: list[uuid.UUID] = await accepted_friend_ids(
+                session, post.author_id
+            )
+            audience: list[uuid.UUID] = [
+                fid for fid in friend_ids if fid != post.author_id
+            ]
+            recipients = await load_activity_email_recipients(session, audience)
+            pending_ids: list[uuid.UUID] = await pending_connection_ids(
+                session, post.author_id
+            )
+            pending_recipients = await load_activity_email_recipients(
+                session, pending_ids
+            )
+            invitees = await load_pending_invite_recipients(
+                session, inviter_id=post.author_id
+            )
+            if not (recipients or pending_recipients or invitees):
+                return
 
-        ctx = await _context(
-            session, story=story, actor=author, excerpt=_truncate(post.take)
-        )
-        settings: Settings = ctx.settings
-        action_url: str = settings.app_url(f"/post/{post.id}")
-        friends_url: str = settings.app_url("/friends")
-        pending_note: str = (
-            f"Accept {ctx.actor_name}'s friend request to read the "
-            f"conversation."
-        )
-        invitee_note: str = (
-            f"{ctx.actor_name} invited you to NewsWithFriends. Join to read "
-            f"the conversation."
-        )
+            ctx = await _context(
+                session, story=story, actor=author, excerpt=_truncate(post.take)
+            )
+            settings: Settings = ctx.settings
+            action_url: str = settings.app_url(f"/post/{post.id}")
+            friends_url: str = settings.app_url("/friends")
+            pending_note: str = (
+                f"Accept {ctx.actor_name}'s friend request to read the "
+                f"conversation."
+            )
+            invitee_note: str = (
+                f"{ctx.actor_name} invited you to NewsWithFriends. Join to read "
+                f"the conversation."
+            )
 
-        await asyncio.gather(
-            *[
-                send_activity_email(
-                    _member_content(
-                        ctx, recipient, kind="new_post", action_url=action_url
-                    ),
-                    settings=settings,
-                )
-                for recipient in recipients
-            ],
-            *[
-                send_activity_email(
-                    _member_content(
-                        ctx,
-                        recipient,
-                        kind="new_post",
-                        action_url=friends_url,
-                        pending_note=pending_note,
-                        cta_label="Accept friend request",
-                    ),
-                    settings=settings,
-                )
-                for recipient in pending_recipients
-            ],
-        )
-        await _send_to_invitees(
-            session,
-            [
-                (
-                    invitee,
-                    _invitee_content(
-                        ctx, invitee, kind="new_post", pending_note=invitee_note
-                    ),
-                )
-                for invitee in invitees
-            ],
-            settings=settings,
-        )
-    except Exception as exc:  # never fail the API on email issues
+            await asyncio.gather(
+                *[
+                    send_activity_email(
+                        _member_content(
+                            ctx, recipient, kind="new_post", action_url=action_url
+                        ),
+                        settings=settings,
+                    )
+                    for recipient in recipients
+                ],
+                *[
+                    send_activity_email(
+                        _member_content(
+                            ctx,
+                            recipient,
+                            kind="new_post",
+                            action_url=friends_url,
+                            pending_note=pending_note,
+                            cta_label="Accept friend request",
+                        ),
+                        settings=settings,
+                    )
+                    for recipient in pending_recipients
+                ],
+            )
+            await _send_to_invitees(
+                session,
+                [
+                    (
+                        invitee,
+                        _invitee_content(
+                            ctx, invitee, kind="new_post", pending_note=invitee_note
+                        ),
+                    )
+                    for invitee in invitees
+                ],
+                settings=settings,
+            )
+    except Exception as exc:
+        # Never fail the API on email issues. The work above runs inside a
+        # SAVEPOINT because some of it queries the database on the caller's
+        # session: without one, a failed statement leaves the surrounding
+        # transaction aborted and the caller's own writes (the post, the
+        # comment) get rolled back with it.
         log.warning(
             "activity_mail.new_post.error",
             post_id=str(post.id),
@@ -311,67 +317,73 @@ async def notify_comment_activity(
     shared with them in their invitation.
     """
     try:
-        # recipient_id -> kind, preferring reply over comment
-        targets: dict[uuid.UUID, str] = {}
-        if post.author_id != commenter.id:
-            targets[post.author_id] = "comment"
-        if (
-            parent_author_id is not None
-            and parent_author_id != commenter.id
-        ):
-            targets[parent_author_id] = "reply"
+        async with session.begin_nested():
+            # recipient_id -> kind, preferring reply over comment
+            targets: dict[uuid.UUID, str] = {}
+            if post.author_id != commenter.id:
+                targets[post.author_id] = "comment"
+            if (
+                parent_author_id is not None
+                and parent_author_id != commenter.id
+            ):
+                targets[parent_author_id] = "reply"
 
-        recipients = (
-            await load_activity_email_recipients(session, targets.keys())
-            if targets
-            else []
-        )
-        invitees = await load_pending_invite_recipients(
-            session, post_id=post.id
-        )
-        if not (recipients or invitees):
-            return
+            recipients = (
+                await load_activity_email_recipients(session, targets.keys())
+                if targets
+                else []
+            )
+            invitees = await load_pending_invite_recipients(
+                session, post_id=post.id
+            )
+            if not (recipients or invitees):
+                return
 
-        ctx = await _context(
-            session, story=story, actor=commenter, excerpt=_truncate(comment_text)
-        )
-        settings: Settings = ctx.settings
-        action_url: str = settings.app_url(f"/post/{post.id}")
+            ctx = await _context(
+                session, story=story, actor=commenter, excerpt=_truncate(comment_text)
+            )
+            settings: Settings = ctx.settings
+            action_url: str = settings.app_url(f"/post/{post.id}")
 
-        await asyncio.gather(
-            *[
-                send_activity_email(
-                    _member_content(
-                        ctx,
-                        recipient,
-                        kind=targets[recipient.user_id],
-                        action_url=action_url,
-                    ),
-                    settings=settings,
-                )
-                for recipient in recipients
-                if recipient.user_id in targets
-            ]
-        )
-        await _send_to_invitees(
-            session,
-            [
-                (
-                    invitee,
-                    _invitee_content(
-                        ctx,
-                        invitee,
-                        kind="conversation",
-                        pending_note=(
-                            "Join NewsWithFriends to read the full thread."
+            await asyncio.gather(
+                *[
+                    send_activity_email(
+                        _member_content(
+                            ctx,
+                            recipient,
+                            kind=targets[recipient.user_id],
+                            action_url=action_url,
                         ),
-                    ),
-                )
-                for invitee in invitees
-            ],
-            settings=settings,
-        )
-    except Exception as exc:  # never fail the API on email issues
+                        settings=settings,
+                    )
+                    for recipient in recipients
+                    if recipient.user_id in targets
+                ]
+            )
+            await _send_to_invitees(
+                session,
+                [
+                    (
+                        invitee,
+                        _invitee_content(
+                            ctx,
+                            invitee,
+                            kind="conversation",
+                            pending_note=(
+                                "Join NewsWithFriends to read the full thread."
+                            ),
+                        ),
+                    )
+                    for invitee in invitees
+                ],
+                settings=settings,
+            )
+    except Exception as exc:
+        # Never fail the API on email issues. The work above runs inside a
+        # SAVEPOINT because some of it queries the database on the caller's
+        # session: without one, a failed statement leaves the surrounding
+        # transaction aborted and the caller's own writes (the post, the
+        # comment) get rolled back with it.
         log.warning(
             "activity_mail.comment.error",
             post_id=str(post.id),
