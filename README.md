@@ -1,6 +1,6 @@
 # NewsWithFriends
 
-A social news discovery service: follow the sources you trust, get a single aggregated feed, star what matters, and see what your friends are reading and saying.
+A social feed for friends: connect with people you know via symmetric friend requests, share posts, comment and react, and see what your friends are talking about.
 
 Built on a **FastAPI** API + **Python scraper worker** backed by **Supabase** (Postgres + Auth), with a **Next.js** frontend. Deployed on **Railway** at [newswithfriends.org](https://newswithfriends.org).
 
