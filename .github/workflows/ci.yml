@@ -34,7 +34,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Mypy
-        run: uv run mypy core api scraper digest
+        run: uv run mypy core api digest
 
       - name: Pytest
         run: uv run pytest -q

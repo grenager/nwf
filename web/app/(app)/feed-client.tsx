@@ -1,23 +1,15 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
-import { DiscoverFeed } from "@/components/discover-feed";
 import { PostCard } from "@/components/post-card";
 import { FeedSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { FeedCard, FeedPayload, Post, Profile, Story, StoryList } from "@/lib/types";
+import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
-const THIN_FEED_THRESHOLD: number = 5;
-const DISCOVER_LIMIT: number = 20;
-
-interface FeedClientProps {
-  /** Server-rendered article discover feed for guests' first paint. */
-  initialGuestStories: StoryList | null;
-}
 
 function formatNewSince(iso: string): string {
   const date: Date = new Date(iso);
@@ -29,14 +21,11 @@ function formatNewSince(iso: string): string {
   });
 }
 
-export function FeedClient({ initialGuestStories }: FeedClientProps) {
+export function FeedClient() {
   const { notify } = useToast();
   const { session, loading: authLoading } = useAuth();
   const isSignedIn: boolean = session !== null;
   const [data, setData] = useState<FeedPayload | null>(null);
-  const [discoverStories, setDiscoverStories] = useState<Story[]>(
-    initialGuestStories?.items ?? [],
-  );
   const [me, setMe] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -48,17 +37,6 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
     void api.getMe().then(setMe).catch(() => undefined);
   }, [isSignedIn]);
 
-  const loadDiscover = useCallback(async (): Promise<void> => {
-    try {
-      const payload: StoryList = await api.discoverStories({
-        limit: DISCOVER_LIMIT,
-      });
-      setDiscoverStories(payload.items);
-    } catch {
-      // Discover is supplementary; don't block the feed on failure.
-    }
-  }, []);
-
   const load = useCallback(
     async (opts?: { silent?: boolean }): Promise<void> => {
       if (!opts?.silent) setLoading(true);
@@ -66,13 +44,8 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
         if (isSignedIn) {
           const payload: FeedPayload = await api.getFeed();
           setData(payload);
-          if (payload.items.length < THIN_FEED_THRESHOLD) {
-            await loadDiscover();
-          } else {
-            setDiscoverStories([]);
-          }
         } else {
-          await loadDiscover();
+          setData(null);
         }
       } catch (err) {
         notify(
@@ -83,15 +56,11 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
         setLoading(false);
       }
     },
-    [isSignedIn, loadDiscover, notify],
+    [isSignedIn, notify],
   );
 
   useEffect(() => {
     if (authLoading) return;
-    if (!isSignedIn && initialGuestStories !== null) {
-      setLoading(false);
-      return;
-    }
     void load({ silent: isSignedIn && data !== null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isSignedIn, load]);
@@ -150,9 +119,6 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
           items: [card, ...withoutDup],
         };
       });
-      setDiscoverStories((prev) =>
-        prev.filter((story) => story.id !== post.story_id),
-      );
     }
     window.addEventListener("nwf:post-created", onPostCreated);
     return () =>
@@ -186,12 +152,6 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
     });
   }
 
-  function onDiscoverPostCreated(post: Post): void {
-    window.dispatchEvent(
-      new CustomEvent("nwf:post-created", { detail: post }),
-    );
-  }
-
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -200,8 +160,6 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
     );
   }
 
-  const showDiscover: boolean =
-    !isSignedIn || (data !== null && data.items.length < THIN_FEED_THRESHOLD);
   const postItems: FeedCard[] = data?.items ?? [];
 
   let dividerBeforeIndex: number = -1;
@@ -217,7 +175,7 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
-      {!isSignedIn && postItems.length === 0 && discoverStories.length === 0 ? (
+      {!isSignedIn && postItems.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
             Private conversations with friends — sign up to start one.
@@ -231,10 +189,10 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
         </div>
       ) : null}
 
-      {isSignedIn && postItems.length === 0 && discoverStories.length === 0 ? (
+      {isSignedIn && postItems.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
-          No posts yet. Share an article with the Add button, or pick one below
-          to start a conversation.
+          No posts yet. Share an article with the Add button to start a
+          conversation.
           {data && data.aggregate_private_conversations > 0 ? (
             <p className="mt-2 text-xs">
               {data.aggregate_private_conversations} private conversations
@@ -277,19 +235,6 @@ export function FeedClient({ initialGuestStories }: FeedClientProps) {
           );
         })}
       </div>
-
-      {showDiscover ? (
-        <DiscoverFeed
-          stories={discoverStories}
-          isGuest={!isSignedIn}
-          heading={
-            isSignedIn
-              ? "More articles to discuss"
-              : "Articles to discuss with friends"
-          }
-          onPostCreated={onDiscoverPostCreated}
-        />
-      ) : null}
     </div>
   );
 }

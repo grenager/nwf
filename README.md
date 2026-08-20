@@ -2,7 +2,7 @@
 
 A social feed for friends: connect with people you know via symmetric friend requests, share posts, comment and react, and see what your friends are talking about.
 
-Built on a **FastAPI** API + **Python scraper worker** backed by **Supabase** (Postgres + Auth), with a **Next.js** frontend. Deployed on **Railway** at [newswithfriends.org](https://newswithfriends.org).
+Built on a **FastAPI** API backed by **Supabase** (Postgres + Auth), with a **Next.js** frontend and a daily digest worker. Deployed on **Railway** at [newswithfriends.org](https://newswithfriends.org).
 
 
 
@@ -12,7 +12,8 @@ flowchart TD
   Web -->|Bearer JWT| API["FastAPI"]
   API -->|verify JWT via JWKS/HS256| API
   API -->|SQLAlchemy async| DB["Supabase Postgres"]
-  Scraper["Scraper (APScheduler)"] -->|upsert| DB
+  Digest["Digest (APScheduler)"] -->|read| DB
+  Digest -->|activity email| Resend["Resend"]
   SBAuth --- DB
 ```
 
@@ -26,13 +27,13 @@ flowchart TD
 newswithfriends/
   supabase/
     migrations/*.sql   # schema + RLS (source of truth)
-    seed.sql           # dev sources
+    seed.sql           # notes on loading the outlet catalog
     config.toml
-  backend/             # one Python project, three entrypoints
+  backend/             # one Python project, two entrypoints
     core/              # config, db (SQLAlchemy async), models, auth, logging
     api/               # FastAPI app (nwf-api)
-    scraper/           # APScheduler worker (nwf-scraper)
     digest/            # Daily activity digest emails (nwf-digest)
+    scripts/           # one-off dev/admin utilities
     tests/
   web/                 # Next.js App Router frontend
   .github/workflows/   # CI
@@ -67,7 +68,7 @@ supabase db push
 
 Magic-link (OTP) auth is enabled in `supabase/config.toml`.
 
-## 2. Backend (API + scraper + digest)
+## 2. Backend (API + digest)
 
 ```bash
 cd backend
@@ -77,9 +78,6 @@ cp .env.example .env     # fill DATABASE_URL + SUPABASE_* values
 
 # API (http://localhost:8000, docs at /docs)
 nwf-api
-
-# Scraper worker (separate terminal)
-nwf-scraper
 
 # Daily digest worker (separate terminal; cron at DIGEST_SEND_HOUR_PT PT)
 nwf-digest
@@ -93,7 +91,7 @@ Checks:
 
 ```bash
 ruff check .
-mypy core api scraper digest
+mypy core api digest
 pytest -q
 ```
 
@@ -129,13 +127,12 @@ Everything ships on **Railway** under the `newswithfriends.org` domains, backed
 by a managed **Supabase** project.
 
 
-| Component        | Railway service    | Domain                                           |
-| ---------------- | ------------------ | ------------------------------------------------ |
-| Web (Next.js)    | `nwf-web`          | `newswithfriends.org`, `www.newswithfriends.org` |
-| API (FastAPI)    | `nwf-api`          | `api.newswithfriends.org`                        |
-| Scraper (worker) | `nwf-scraper`      | — (no public domain)                             |
-| Digest (worker)  | `nwf-digest`       | — (no public domain)                             |
-| Postgres + Auth  | Supabase (managed) | —                                                |
+| Component       | Railway service    | Domain                                           |
+| --------------- | ------------------ | ------------------------------------------------ |
+| Web (Next.js)   | `nwf-web`          | `newswithfriends.org`, `www.newswithfriends.org` |
+| API (FastAPI)   | `nwf-api`          | `api.newswithfriends.org`                        |
+| Digest (worker) | `nwf-digest`       | — (no public domain)                             |
+| Postgres + Auth | Supabase (managed) | —                                                |
 
 
 
@@ -152,11 +149,10 @@ In the Supabase dashboard set **Auth → URL Configuration**:
 
 ### Railway services
 
-Create one Railway project with four services from this repo. The Python
+Create one Railway project with three services from this repo. The Python
 services share `backend/Dockerfile` + `backend/railway.json` (which defaults the
-start command to `nwf-api`); scraper and digest override their start commands to
-`nwf-scraper` / `nwf-digest` in the Railway dashboard. The web service uses
-`web/railway.json`.
+start command to `nwf-api`); the digest service overrides its start command to
+`nwf-digest` in the Railway dashboard. The web service uses `web/railway.json`.
 
 - `nwf-api` — root `backend`, start `nwf-api`. Attach domain
 `api.newswithfriends.org`. Env:
@@ -169,8 +165,6 @@ start command to `nwf-api`); scraper and digest override their start commands to
   - `MAX_FRIENDS` (optional, default `50`) — friend slots per account, counting
   outstanding requests and invitations, so invites cannot be used for bulk email
   - `ADMIN_API_SECRET` (random), `LOG_JSON=true`
-- `nwf-scraper` — root `backend`, start `nwf-scraper`. Env: `DATABASE_URL`,
-`SUPABASE_URL`, `SCRAPE_INTERVAL_SECONDS`, `SCRAPE_BATCH_SIZE`, `LOG_JSON=true`.
 - `nwf-digest` — root `backend`, start `nwf-digest`. Env: `DATABASE_URL`,
 `SUPABASE_URL`, `APP_BASE_URL=https://www.newswithfriends.org`,
 `RESEND_API_KEY`, `EMAIL_FROM`, `DIGEST_SEND_HOUR_PT=4`, `LOG_JSON=true`.
@@ -180,6 +174,6 @@ Attach `newswithfriends.org` + `www`. Env:
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>`
   - `NEXT_PUBLIC_API_URL=https://api.newswithfriends.org`
 
-A `render.yaml` is also included as an alternative host for the two Python  
+A `render.yaml` is also included as an alternative host for the Python
 processes.
 

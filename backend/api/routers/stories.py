@@ -1,4 +1,4 @@
-"""Story retrieval: single, search (FTS), recommended feed, updates."""
+"""Story retrieval: a single story, and title search over posted articles."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import ColumnElement
@@ -15,8 +15,6 @@ from sqlalchemy.sql import ColumnElement
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
     aggregate_engagement,
-    curated_source_subquery,
-    discussion_activity_by_story,
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
@@ -30,17 +28,13 @@ from api.schemas import (
     FriendMiniOut,
     FriendStarOut,
     StoryCreate,
-    StoryDiscussionOut,
     StoryList,
-    StoryOut,
     StoryWithStatus,
 )
 from core.attribution import resolve_attribution
-from core.models import Comment, Source, Story, StoryStatus, UserSource
+from core.models import Source, Story, StoryStatus
 
 router = APIRouter(prefix="/stories", tags=["stories"])
-
-_GUEST_CACHE_CONTROL: str = "public, s-maxage=30, stale-while-revalidate=300"
 
 
 def _headline_from_url(url: str) -> str:
@@ -81,158 +75,6 @@ def _rows_to_stories(
             model.friend_stars = friend_map.get(story.id, [])
         items.append(model)
     return items
-
-
-@router.get("/search", response_model=StoryList)
-async def search_stories(
-    session: SessionDep,
-    user: CurrentUser,
-    q: str = Query(min_length=1),
-    limit: int = Query(default=50, le=200, ge=1),
-    offset: int = Query(default=0, ge=0),
-) -> StoryList:
-    """Full-text search over the generated tsvector column."""
-    ts_query = func.websearch_to_tsquery("english", q)
-    match: ColumnElement[bool] = Story.__table__.c.search_tsv.op("@@")(ts_query)
-    rank = func.ts_rank(Story.__table__.c.search_tsv, ts_query)
-
-    base = select(Story).where(match, Story.archived.is_(False))
-    total = await session.scalar(
-        select(func.count()).select_from(base.subquery())
-    )
-    stmt = (
-        _with_status_columns(base, user.id)
-        .order_by(rank.desc(), Story.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    rows = (await session.execute(stmt)).all()
-    story_ids = [story.id for story, _, _ in rows]
-    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
-    friend_map = {
-        sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
-        for sid, profiles in friend_profiles.items()
-    }
-    return StoryList(
-        items=_rows_to_stories(rows, friend_map),
-        total=int(total or 0),
-        limit=limit,
-        offset=offset,
-    )
-
-
-@router.get("/recommended", response_model=StoryList)
-async def recommended_feed(
-    session: SessionDep,
-    user: CurrentUser,
-    limit: int = Query(default=50, le=200, ge=1),
-    offset: int = Query(default=0, ge=0),
-) -> StoryList:
-    """Aggregate feed of recent stories from the user's followed sources."""
-    followed = (
-        select(UserSource.source_id).where(UserSource.user_id == user.id).scalar_subquery()
-    )
-    base = select(Story).where(
-        Story.source_id.in_(followed),
-        Story.archived.is_(False),
-    )
-    total = await session.scalar(select(func.count()).select_from(base.subquery()))
-    stmt = (
-        _with_status_columns(base, user.id)
-        .order_by(Story.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    rows = (await session.execute(stmt)).all()
-    story_ids = [story.id for story, _, _ in rows]
-    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
-    friend_map = {
-        sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
-        for sid, profiles in friend_profiles.items()
-    }
-    return StoryList(
-        items=_rows_to_stories(rows, friend_map),
-        total=int(total or 0),
-        limit=limit,
-        offset=offset,
-    )
-
-
-@router.get("/by-source", response_model=StoryList)
-async def stories_by_source(
-    session: SessionDep,
-    user: CurrentUser,
-    per_source: int = Query(default=6, le=20, ge=1),
-) -> StoryList:
-    """Latest stories grouped per followed source.
-
-    Unlike ``/recommended`` (a single global top-N feed), this returns the most
-    recent ``per_source`` stories for *each* followed source, so the Sources
-    page reflects real per-source freshness instead of only whichever sources
-    happen to dominate the global recency window.
-    """
-    followed = (
-        select(UserSource.source_id).where(UserSource.user_id == user.id).scalar_subquery()
-    )
-    ranked = (
-        select(
-            Story.id.label("id"),
-            func.row_number()
-            .over(
-                partition_by=Story.source_id,
-                order_by=Story.created_at.desc(),
-            )
-            .label("rn"),
-        )
-        .where(Story.source_id.in_(followed), Story.archived.is_(False))
-        .subquery()
-    )
-    base = (
-        select(Story)
-        .join(ranked, ranked.c.id == Story.id)
-        .where(ranked.c.rn <= per_source)
-    )
-    stmt = _with_status_columns(base, user.id).order_by(
-        Story.source_id, Story.created_at.desc()
-    )
-    rows = (await session.execute(stmt)).all()
-    return StoryList(
-        items=_rows_to_stories(rows),
-        total=len(rows),
-        limit=per_source,
-        offset=0,
-    )
-
-
-@router.get("/updates", response_model=StoryList)
-async def story_updates(
-    session: SessionDep,
-    user: CurrentUser,
-    since: datetime = Query(description="ISO timestamp; return stories created after this"),
-    limit: int = Query(default=100, le=500, ge=1),
-) -> StoryList:
-    """Stories from followed sources created since a timestamp (polling)."""
-    followed = (
-        select(UserSource.source_id).where(UserSource.user_id == user.id).scalar_subquery()
-    )
-    base = select(Story).where(
-        Story.source_id.in_(followed),
-        Story.created_at > since,
-        Story.archived.is_(False),
-    )
-    total = await session.scalar(select(func.count()).select_from(base.subquery()))
-    stmt = (
-        _with_status_columns(base, user.id)
-        .order_by(Story.created_at.desc())
-        .limit(limit)
-    )
-    rows = (await session.execute(stmt)).all()
-    return StoryList(
-        items=_rows_to_stories(rows),
-        total=int(total or 0),
-        limit=limit,
-        offset=0,
-    )
 
 
 @router.get("/title-search", response_model=StoryList)
@@ -301,156 +143,6 @@ async def title_search(
                 item.source_image_url = source.image_url
 
     return StoryList(items=items, total=len(scored), limit=limit, offset=0)
-
-
-def _discover_freshness_expr() -> ColumnElement[Any]:
-    """Order discover by the newer of scrape time and last comment."""
-    last_comment = (
-        select(func.max(Comment.created_at))
-        .where(Comment.story_id == Story.id)
-        .correlate(Story)
-        .scalar_subquery()
-    )
-    return func.greatest(
-        Story.created_at,
-        func.coalesce(last_comment, Story.created_at),
-    )
-
-
-async def _attach_discussion(
-    session: SessionDep, items: list[StoryWithStatus]
-) -> None:
-    """Attach anonymous discussion social proof to story items."""
-    if not items:
-        return
-    story_ids: list[uuid.UUID] = [item.id for item in items]
-    discussion_map: dict[uuid.UUID, StoryDiscussionOut] = (
-        await discussion_activity_by_story(session, story_ids)
-    )
-    for item in items:
-        item.discussion = discussion_map.get(item.id)
-
-
-async def _enrich_story_sources(
-    session: SessionDep, items: list[StoryWithStatus]
-) -> None:
-    """Attach source_name and source_image_url from the sources table."""
-    source_ids = {item.source_id for item in items if item.source_id}
-    if not source_ids:
-        return
-    sources = {
-        s.id: s
-        for s in (
-            await session.scalars(select(Source).where(Source.id.in_(source_ids)))
-        ).all()
-    }
-    for item in items:
-        source = sources.get(item.source_id) if item.source_id else None
-        if source is not None:
-            item.source_name, item.source_image_url = resolve_attribution(
-                article_url=item.article_url,
-                source_name=source.name,
-                source_homepage_url=source.homepage_url,
-                source_image_url=source.image_url,
-                publisher=None,
-            )
-
-
-@router.get("/discover", response_model=StoryList)
-async def discover_stories(
-    session: SessionDep,
-    user: OptionalUser,
-    response: Response,
-    limit: int = Query(default=30, le=100, ge=1),
-    offset: int = Query(default=0, ge=0),
-) -> StoryList:
-    """Recent articles from curated sources for cold-start browsing."""
-    curated = curated_source_subquery()
-    base = select(Story).where(
-        Story.source_id.in_(curated),
-        Story.archived.is_(False),
-    )
-
-    viewer_id: uuid.UUID | None = user.id if user is not None else None
-
-    if viewer_id is not None:
-        dismissed = (
-            select(StoryStatus.story_id)
-            .where(
-                StoryStatus.user_id == viewer_id,
-                StoryStatus.dismissed.is_(True),
-            )
-            .scalar_subquery()
-        )
-        base = base.where(Story.id.not_in(dismissed))
-
-    if viewer_id is None:
-        response.headers["Cache-Control"] = _GUEST_CACHE_CONTROL
-        freshness = _discover_freshness_expr()
-        stmt = (
-            base.order_by(freshness.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-        stories = list((await session.scalars(stmt)).all())
-        items: list[StoryWithStatus] = []
-        for story in stories:
-            model = StoryWithStatus.model_validate(story)
-            model.read = False
-            model.starred = False
-            items.append(model)
-        await _enrich_story_sources(session, items)
-        await _attach_discussion(session, items)
-        total = await session.scalar(
-            select(func.count()).select_from(base.subquery())
-        )
-        return StoryList(
-            items=items,
-            total=int(total or 0),
-            limit=limit,
-            offset=offset,
-        )
-
-    # Authenticated: skip stories the viewer already has a visible post on.
-    fetch_limit: int = limit + 40
-    freshness = _discover_freshness_expr()
-    stmt = (
-        _with_status_columns(base, viewer_id)
-        .order_by(freshness.desc())
-        .limit(fetch_limit)
-        .offset(offset)
-    )
-    rows = (await session.execute(stmt)).all()
-    story_ids = [story.id for story, _, _ in rows]
-    post_by_story = await primary_post_ids_by_story(session, viewer_id, story_ids)
-    exclude: set[uuid.UUID] = set(post_by_story.keys())
-
-    filtered: list[Any] = [
-        (story, read, starred)
-        for story, read, starred in rows
-        if story.id not in exclude
-    ][:limit]
-
-    filtered_ids = [story.id for story, _, _ in filtered]
-    friend_profiles = await friend_stars_by_story(session, viewer_id, filtered_ids)
-    friend_map = {
-        sid: [
-            FriendStarOut(user_id=p.id, display_name=display_name(p))
-            for p in profiles
-        ]
-        for sid, profiles in friend_profiles.items()
-    }
-    items = _rows_to_stories(filtered, friend_map)
-    await _enrich_story_sources(session, items)
-    await _attach_discussion(session, items)
-
-    total = await session.scalar(select(func.count()).select_from(base.subquery()))
-    return StoryList(
-        items=items,
-        total=int(total or 0),
-        limit=limit,
-        offset=offset,
-    )
 
 
 @router.post("", response_model=StoryWithStatus, status_code=status.HTTP_201_CREATED)
@@ -574,5 +266,4 @@ async def get_story(
     return model
 
 
-# Re-export for callers importing StoryOut alongside the router.
-__all__ = ["StoryOut", "router"]
+__all__ = ["router"]

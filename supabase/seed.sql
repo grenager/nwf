@@ -5,3 +5,6 @@
 --
 -- (Kept as a separate importer because it upserts on homepage_url and is
 -- idempotent, which is friendlier than a static SQL seed for 70+ sources.)
+--
+-- Sources exist only to attribute posted article URLs to a known outlet
+-- (publisher name and logo); they no longer drive a feed of their own.

@@ -31,11 +31,6 @@ export interface PreferencesUpdate {
 export type StoryKind = "news" | "analysis";
 export type PostVisibility = "private";
 
-export interface FriendStar {
-  user_id: UUID;
-  display_name: string;
-}
-
 export interface FriendMini {
   user_id: UUID;
   display_name: string;
@@ -46,13 +41,6 @@ export interface FriendEngagement {
   read: number;
   commented: number;
   readers: FriendMini[];
-}
-
-/** Anonymous discussion social proof on discover cards (no names or ids). */
-export interface StoryDiscussion {
-  people_count: number;
-  avatar_urls: string[];
-  last_comment_at: string | null;
 }
 
 export interface Story {
@@ -75,12 +63,10 @@ export interface Story {
   read: boolean;
   starred: boolean;
   dismissed: boolean;
-  friend_stars?: FriendStar[];
   engagement: FriendEngagement;
   /** Most recent viewer-visible post about this story, when one exists. */
   post_id?: UUID | null;
   /** Anonymous comment activity for guest discover cards. */
-  discussion?: StoryDiscussion | null;
 }
 
 export interface StoryList {

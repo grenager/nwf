@@ -1,4 +1,4 @@
-"""Current-user endpoints: profile, preferences, sources, read/star/take state."""
+"""Current-user endpoints: profile, preferences, read/star/take state."""
 
 from __future__ import annotations
 
@@ -16,20 +16,16 @@ from api.schemas import (
     ProfileOut,
     RatingSet,
     ReadMark,
-    SourceOut,
     StarMark,
     StoryList,
     StoryWithStatus,
     TakeMark,
-    UserSourcesUpdate,
 )
 from core.models import (
     Profile,
-    Source,
     Story,
     StoryRating,
     StoryStatus,
-    UserSource,
 )
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -62,31 +58,6 @@ async def update_preferences(
     await session.flush()
     await session.refresh(profile)
     return profile
-
-
-@router.get("/sources", response_model=list[SourceOut])
-async def list_my_sources(session: SessionDep, user: CurrentUser) -> list[Source]:
-    result = await session.scalars(
-        select(Source)
-        .join(UserSource, UserSource.source_id == Source.id)
-        .where(UserSource.user_id == user.id)
-        .order_by(UserSource.position)
-    )
-    return list(result.all())
-
-
-@router.put("/sources", response_model=list[SourceOut])
-async def set_my_sources(
-    payload: UserSourcesUpdate, session: SessionDep, user: CurrentUser
-) -> list[Source]:
-    """Replace the user's followed sources, preserving list order via position."""
-    await session.execute(delete(UserSource).where(UserSource.user_id == user.id))
-    for position, source_id in enumerate(payload.source_ids):
-        session.add(
-            UserSource(user_id=user.id, source_id=source_id, position=position)
-        )
-    await session.flush()
-    return await list_my_sources(session, user)
 
 
 @router.post("/read", status_code=status.HTTP_204_NO_CONTENT)

@@ -44,63 +44,6 @@ class PreferencesUpdate(BaseModel):
     instant_email_opt_out: bool | None = None
 
 
-# --- Sources --------------------------------------------------------------
-class SourceOut(ORMModel):
-    id: uuid.UUID
-    name: str
-    homepage_url: str
-    rss_url: str | None = None
-    include_selector: str | None = None
-    exclude_selector: str | None = None
-    bias_score: float | None = None
-    last_scraped_at: datetime | None = None
-    tags: list[str]
-    image_url: str | None = None
-    has_paywall: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-class SourceStatus(BaseModel):
-    """Per-source scraper progress (admin view)."""
-
-    id: uuid.UUID
-    name: str
-    rss_url: str | None = None
-    has_rss: bool
-    image_url: str | None = None
-    last_scraped_at: datetime | None = None
-    story_count: int
-    newest_story_at: datetime | None = None
-
-
-class SourceCreate(BaseModel):
-    # name/homepage are inferred from the RSS feed when omitted; supply an
-    # rss_url, or provide name + homepage_url manually for feed-less sources.
-    name: str | None = None
-    homepage_url: str | None = None
-    rss_url: str | None = None
-    include_selector: str | None = None
-    exclude_selector: str | None = None
-    bias_score: float | None = None
-    tags: list[str] = Field(default_factory=list)
-    image_url: str | None = None
-    has_paywall: bool = False
-
-
-class SourceUpdate(BaseModel):
-    name: str | None = None
-    homepage_url: str | None = None
-    rss_url: str | None = None
-    include_selector: str | None = None
-    exclude_selector: str | None = None
-    bias_score: float | None = None
-    tags: list[str] | None = None
-    image_url: str | None = None
-    has_paywall: bool | None = None
-
-
-# --- Stories --------------------------------------------------------------
 class StoryOut(ORMModel):
     id: uuid.UUID
     article_url: str
@@ -135,14 +78,6 @@ class FriendEngagementOut(BaseModel):
     readers: list[FriendMiniOut] = Field(default_factory=list)
 
 
-class StoryDiscussionOut(BaseModel):
-    """Anonymous social proof for guest cards: photos only, no names or ids."""
-
-    people_count: int = 0
-    avatar_urls: list[str] = Field(default_factory=list)
-    last_comment_at: datetime | None = None
-
-
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
@@ -151,7 +86,6 @@ class StoryWithStatus(StoryOut):
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     # Most recent post about this story the viewer may see (search → detail link).
     post_id: uuid.UUID | None = None
-    discussion: StoryDiscussionOut | None = None
 
 
 class FriendStarOut(BaseModel):
@@ -208,12 +142,6 @@ class RatingSet(BaseModel):
         if round(value * 2) != value * 2:
             raise ValueError("rating must be in 0.5 increments")
         return value
-
-
-class UserSourcesUpdate(BaseModel):
-    """Ordered list of source ids the user follows."""
-
-    source_ids: list[uuid.UUID]
 
 
 # --- Reactions (fixed set on posts and comments) --------------------------
