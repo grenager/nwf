@@ -1,10 +1,11 @@
-"""Import a source catalog into the ``sources`` table.
+"""Import the outlet catalog into the ``sources`` table.
+
+Sources no longer drive a feed of their own — they exist so a posted article
+URL can be attributed to a known outlet (publisher name and logo on post
+cards). This importer therefore loads only that attribution metadata.
 
 Reads a JSON file in the legacy Mongoose export format (camelCase keys) and
 upserts rows on ``homepage_url``. Idempotent: re-running updates existing rows.
-
-``last_scraped_at`` is intentionally left untouched (NULL for new rows) so the
-scraper picks freshly-imported sources first (oldest-first selection).
 
 Usage:
     python scripts/import_sources.py [path/to/sources.json]
@@ -59,9 +60,6 @@ def _map(record: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "name": name,
         "homepage_url": homepage_url,
-        "rss_url": _clean(record.get("rssUrl")),
-        "include_selector": _clean(record.get("includeSelector")),
-        "exclude_selector": _clean(record.get("excludeSelector")),
         "bias_score": _bias(record.get("biasScore")),
         "tags": [str(t) for t in tags],
         "image_url": _clean(record.get("imageUrl")),
@@ -71,14 +69,10 @@ def _map(record: dict[str, Any]) -> dict[str, Any] | None:
 
 UPSERT = """
 insert into public.sources
-    (name, homepage_url, rss_url, include_selector, exclude_selector,
-     bias_score, tags, image_url, has_paywall)
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    (name, homepage_url, bias_score, tags, image_url, has_paywall)
+values ($1, $2, $3, $4, $5, $6)
 on conflict (homepage_url) do update set
     name = excluded.name,
-    rss_url = excluded.rss_url,
-    include_selector = excluded.include_selector,
-    exclude_selector = excluded.exclude_selector,
     bias_score = excluded.bias_score,
     tags = excluded.tags,
     image_url = excluded.image_url,
@@ -102,9 +96,6 @@ async def main(json_path: Path) -> None:
                 UPSERT,
                 src["name"],
                 src["homepage_url"],
-                src["rss_url"],
-                src["include_selector"],
-                src["exclude_selector"],
                 src["bias_score"],
                 src["tags"],
                 src["image_url"],

@@ -119,14 +119,6 @@ export const api = {
     }),
   undismissStory: (storyId: UUID): Promise<void> =>
     request<void>(`/me/dismiss/${storyId}`, { method: "DELETE" }),
-  addStar: (storyId: UUID): Promise<void> =>
-    request<void>("/me/stars", {
-      method: "POST",
-      body: JSON.stringify({ story_id: storyId }),
-    }),
-  removeStar: (storyId: UUID): Promise<void> =>
-    request<void>(`/me/stars/${storyId}`, { method: "DELETE" }),
-  getStarred: (): Promise<StoryList> => request<StoryList>("/me/starred"),
   setRating: (storyId: UUID, rating: number): Promise<void> =>
     request<void>("/me/ratings", {
       method: "PUT",
@@ -136,30 +128,10 @@ export const api = {
     request<void>(`/me/ratings/${storyId}`, { method: "DELETE" }),
 
   // --- stories ---
-  getRecommended: (): Promise<StoryList> =>
-    request<StoryList>("/stories/recommended"),
-  searchStories: (q: string): Promise<StoryList> =>
-    request<StoryList>(`/stories/search?q=${encodeURIComponent(q)}`),
   titleSearchStories: (q: string): Promise<StoryList> =>
     request<StoryList>(`/stories/title-search?q=${encodeURIComponent(q)}`),
-  discoverStories: (opts?: {
-    limit?: number;
-    offset?: number;
-  }): Promise<StoryList> => {
-    const params = new URLSearchParams();
-    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
-    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
-    const qs: string = params.toString();
-    return request<StoryList>(qs ? `/stories/discover?${qs}` : "/stories/discover");
-  },
   getCommunityStats: (): Promise<CommunityStats> =>
     request<CommunityStats>("/community/stats"),
-  addStory: (url: string, kind: StoryKind): Promise<Story> =>
-    request<Story>("/stories", {
-      method: "POST",
-      body: JSON.stringify({ url, kind }),
-    }),
-  getStory: (id: UUID): Promise<Story> => request<Story>(`/stories/${id}`),
 
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),

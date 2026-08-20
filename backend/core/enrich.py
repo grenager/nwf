@@ -299,7 +299,7 @@ async def fetch_url_metadata(url: str) -> UrlMetadata:
         return UrlMetadata()
 
     settings = get_settings()
-    direct = await _fetch_direct(url, settings.scrape_http_timeout_seconds)
+    direct = await _fetch_direct(url, settings.url_fetch_timeout_seconds)
     if direct is not None and _worth_keeping(direct):
         return direct
 

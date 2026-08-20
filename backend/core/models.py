@@ -11,7 +11,6 @@ import enum
 import uuid
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -19,7 +18,6 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    Integer,
     Numeric,
     Text,
     UniqueConstraint,
@@ -130,13 +128,7 @@ class Source(Base):
     id: Mapped[uuid.UUID] = _uuid_col(primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     homepage_url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    rss_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    include_selector: Mapped[str | None] = mapped_column(Text, nullable=True)
-    exclude_selector: Mapped[str | None] = mapped_column(Text, nullable=True)
     bias_score: Mapped[float | None] = mapped_column(Numeric, nullable=True)
-    last_scraped_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default="{}"
     )
@@ -147,7 +139,6 @@ class Source(Base):
         nullable=False,
         default=SourceKind.outlet,
     )
-    prominence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -156,25 +147,6 @@ class Source(Base):
     )
 
     stories: Mapped[list[Story]] = relationship(back_populates="source")
-
-
-class UserSource(Base):
-    __tablename__ = "user_sources"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("profiles.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    source_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True),
-        ForeignKey("sources.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
 
 
 class Story(Base):
@@ -190,7 +162,7 @@ class Story(Base):
     full_headline: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # OpenGraph/Substack-derived attribution (e.g. "Derek Thompson on Substack")
-    # for stories not backed by a curated source we scrape directly.
+    # for stories not backed by a known source.
     publisher: Mapped[str | None] = mapped_column(Text, nullable=True)
     section: Mapped[str | None] = mapped_column(Text, nullable=True)
     type: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -203,10 +175,6 @@ class Story(Base):
         Enum(StoryKind, name="story_kind", create_type=False),
         nullable=False,
         default=StoryKind.news,
-    )
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
-    last_scraped_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

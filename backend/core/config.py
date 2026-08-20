@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration shared by the API and scraper."""
+    """Runtime configuration shared by the API and digest worker."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -87,20 +87,16 @@ class Settings(BaseSettings):
     admin_api_secret: str | None = Field(default=None)
 
     # --- Scraper ----------------------------------------------------------
-    scrape_interval_seconds: int = Field(default=300)
-    scrape_batch_size: int = Field(default=5)
-    scrape_concurrency: int = Field(default=3)
-    scrape_http_timeout_seconds: float = Field(default=20.0)
 
     # ScrapingBee: proxy/JS-render fallback for link-preview enrichment when a
     # direct fetch is blocked (e.g. Economist 403, X/Twitter). Optional — when
     # unset, enrichment only does a direct fetch.
     scrapingbee_api_key: str | None = Field(default=None)
     scrapingbee_timeout_seconds: float = Field(default=40.0)
+    # Timeout for the direct OpenGraph fetch when a user posts a URL.
+    url_fetch_timeout_seconds: float = Field(default=20.0)
 
     # --- Embeddings (OpenAI) ----------------------------------------------
-    embeddings_api_key: str | None = Field(default=None)
-    embeddings_model: str = Field(default="text-embedding-3-small")
 
     # --- Feed -------------------------------------------------------------
     inbox_candidate_days: int = Field(

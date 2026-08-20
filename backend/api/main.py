@@ -24,7 +24,6 @@ from api.routers import (
     notifications,
     posts,
     profiles,
-    sources,
     stories,
 )
 from core.config import get_settings
@@ -62,7 +61,6 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     app.include_router(health.router)
-    app.include_router(sources.router)
     app.include_router(stories.router)
     app.include_router(community.router)
     app.include_router(posts.router)
