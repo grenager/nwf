@@ -5,10 +5,16 @@ export default async function InterceptedPostModal({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ focus?: string }>;
+  searchParams: Promise<{ focus?: string; comment?: string }>;
 }) {
   const { id } = await params;
-  const { focus } = await searchParams;
+  const { focus, comment } = await searchParams;
   const focusUnread: boolean = focus === "unread";
-  return <PostDetailModal postId={id} focusUnread={focusUnread} />;
+  return (
+    <PostDetailModal
+      postId={id}
+      focusUnread={focusUnread}
+      focusCommentId={comment ?? null}
+    />
+  );
 }

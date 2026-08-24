@@ -33,7 +33,12 @@ function hrefFor(item: NotificationItem): string {
   ) {
     return "/friends";
   }
-  if (item.post_id) return `/post/${item.post_id}`;
+  if (item.post_id) {
+    // `comment_id` is always a comment on `post_id`, so anchor straight to it.
+    return item.comment_id
+      ? `/post/${item.post_id}?comment=${item.comment_id}`
+      : `/post/${item.post_id}`;
+  }
   return "/";
 }
 

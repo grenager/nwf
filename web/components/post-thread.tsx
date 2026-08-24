@@ -20,6 +20,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+/** Anchor id for a comment, so `?comment=<id>` can scroll to it. */
+export function commentDomId(commentId: UUID): string {
+  return `comment-${commentId}`;
+}
+
 function dispatchThreadSeen(postId: UUID): void {
   window.dispatchEvent(
     new CustomEvent("nwf:thread-seen", { detail: { postId } }),
@@ -55,6 +60,7 @@ export function PostThread({
   onInvite,
   markSeenOnMount = false,
   focusUnread = false,
+  focusCommentId = null,
   maxTopLevelComments,
   compact = false,
 }: {
@@ -71,6 +77,8 @@ export function PostThread({
   markSeenOnMount?: boolean;
   /** Scroll the "New replies" divider into view once (from ?focus=unread). */
   focusUnread?: boolean;
+  /** Scroll to and highlight one comment (from ?comment=<id>). */
+  focusCommentId?: UUID | null;
   /** Cap top-level comments shown (feed preview). Nested replies stay attached. */
   maxTopLevelComments?: number;
   /** Hide rating row and attach affordances (feed preview). */
@@ -111,6 +119,7 @@ export function PostThread({
   const markedSeenRef = useRef<boolean>(false);
   const unreadDividerRef = useRef<HTMLDivElement | null>(null);
   const scrolledUnreadRef = useRef<boolean>(false);
+  const scrolledCommentRef = useRef<UUID | null>(null);
   const [ratingOpen, setRatingOpen] = useState<boolean>(false);
   const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
   const [shareAfterReply, setShareAfterReply] = useState<boolean>(false);
@@ -229,6 +238,21 @@ export function PostThread({
       });
     });
   }, [focusUnread, firstUnreadTopId]);
+
+  // Land on the comment that produced the link (profile activity, notifications).
+  useEffect(() => {
+    if (focusCommentId === null || scrolledCommentRef.current === focusCommentId) {
+      return;
+    }
+    const target: HTMLElement | null = document.getElementById(
+      commentDomId(focusCommentId),
+    );
+    if (target === null) return;
+    scrolledCommentRef.current = focusCommentId;
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [focusCommentId, post.replies]);
 
   function startReplyTo(comment: Comment): void {
     setDraftParentId(comment.id);
@@ -612,6 +636,8 @@ export function PostThread({
                   <CommentRow
                     comment={r}
                     userId={user?.id ?? null}
+                    anchored={!isPreviewMode}
+                    highlighted={focusCommentId === r.id}
                     reacting={reacting}
                     onReply={() => startReplyTo(r)}
                     onLike={() => void toggleCommentLike(r)}
@@ -641,6 +667,8 @@ export function PostThread({
                           key={child.id}
                           comment={child}
                           userId={user?.id ?? null}
+                          anchored={!isPreviewMode}
+                          highlighted={focusCommentId === child.id}
                           reacting={reacting}
                           onReply={() => startReplyTo(child)}
                           onLike={() => void toggleCommentLike(child)}
@@ -791,6 +819,8 @@ function CommentRow({
   comment,
   userId,
   reacting,
+  anchored = false,
+  highlighted = false,
   onReply,
   onLike,
   onEdit,
@@ -799,6 +829,10 @@ function CommentRow({
   comment: Comment;
   userId: UUID | null;
   reacting: boolean;
+  /** Carry the `#comment-<id>` anchor (full thread only, to keep ids unique). */
+  anchored?: boolean;
+  /** Tint the row when it is the comment the link pointed at. */
+  highlighted?: boolean;
   onReply: () => void;
   onLike: () => void;
   onEdit: (updated: Comment) => void;
@@ -848,7 +882,12 @@ function CommentRow({
   }
 
   return (
-    <div className="flex items-start gap-2">
+    <div
+      id={anchored ? commentDomId(comment.id) : undefined}
+      className={`flex items-start gap-2 scroll-mt-24 ${
+        highlighted ? "-mx-2 bg-zinc-100 px-2 py-1 dark:bg-zinc-800" : ""
+      }`}
+    >
       <Avatar name={comment.author_name} imageUrl={comment.author_image_url} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2 text-xs">

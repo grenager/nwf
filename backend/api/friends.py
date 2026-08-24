@@ -776,6 +776,38 @@ async def visible_post_ids_for_viewer(
     return list((await session.scalars(query(wider))).all())
 
 
+async def viewer_visible_post_ids(
+    session: AsyncSession,
+    viewer_id: uuid.UUID,
+    post_ids: list[uuid.UUID],
+    *,
+    friend_ids: list[uuid.UUID] | None = None,
+) -> set[uuid.UUID]:
+    """Subset of ``post_ids`` the viewer is allowed to open."""
+    if not post_ids:
+        return set()
+
+    friends: list[uuid.UUID] = (
+        friend_ids
+        if friend_ids is not None
+        else await accepted_friend_ids(session, viewer_id)
+    )
+    participant_filter: list[uuid.UUID] = [viewer_id, *friends]
+    rows = await session.scalars(
+        select(Post.id)
+        .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
+        .where(
+            Post.id.in_(post_ids),
+            or_(
+                Post.author_id == viewer_id,
+                PostParticipant.user_id.in_(participant_filter),
+            ),
+        )
+        .group_by(Post.id)
+    )
+    return set(rows.all())
+
+
 async def primary_post_ids_by_story(
     session: AsyncSession,
     viewer_id: uuid.UUID,

@@ -5,6 +5,7 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
+import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -29,6 +30,15 @@ function KindLabel({ kind }: { kind: FriendActivityItem["kind"] }) {
   if (kind === "commented") return <>Commented on</>;
   if (kind === "rated") return <>Rated</>;
   return <>{kind}</>;
+}
+
+/**
+ * Where an activity row goes: the post detail page, anchored at the comment
+ * that produced the row when there is one.
+ */
+function activityHref(item: FriendActivityItem): string {
+  const base: string = `/post/${item.post_id}`;
+  return item.comment_id ? `${base}?comment=${item.comment_id}` : base;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -408,14 +418,24 @@ export function FriendProfileModal({
                       {relativeTime(item.at)}
                     </span>
                   </div>
-                  <a
-                    href={item.article_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
-                  >
-                    {item.headline}
-                  </a>
+                  {item.post_id ? (
+                    <Link
+                      href={activityHref(item)}
+                      onClick={onClose}
+                      className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
+                    >
+                      {item.headline}
+                    </Link>
+                  ) : (
+                    <a
+                      href={item.article_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
+                    >
+                      {item.headline}
+                    </a>
+                  )}
                   {item.comment_text ? (
                     <p className="mt-1 border-l-2 border-slate-200 pl-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
                       {item.comment_text}

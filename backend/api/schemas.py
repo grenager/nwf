@@ -426,6 +426,11 @@ class FriendsOverviewOut(BaseModel):
 class FriendActivityItem(BaseModel):
     kind: str  # "read" | "commented" | "rated"
     story_id: uuid.UUID
+    # The post the viewer can open for this story; None when none is visible.
+    post_id: uuid.UUID | None = None
+    # Present when kind == "commented" and the comment lives on ``post_id``,
+    # so the detail page can scroll straight to it.
+    comment_id: uuid.UUID | None = None
     headline: str
     source_name: str | None = None
     article_url: str
