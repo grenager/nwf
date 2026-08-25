@@ -16,6 +16,11 @@ interface StoryCardProps {
   dense?: boolean;
   exiting?: boolean;
   archivedView?: boolean;
+  /** Inbox semantics: a read story fades out. Wrong in search, where a story
+   *  you have already read is the one you are looking for. */
+  dimRead?: boolean;
+  /** Friend read/star activity on the article — discovery-era chrome. */
+  showEngagement?: boolean;
   onChange?: (story: Story) => void;
   onOpen?: (storyId: UUID) => void;
   onRead?: (storyId: UUID) => void;
@@ -27,6 +32,8 @@ export function StoryCard({
   dense = false,
   exiting = false,
   archivedView = false,
+  dimRead = true,
+  showEngagement = true,
   onChange,
   onOpen,
   onRead,
@@ -84,7 +91,7 @@ export function StoryCard({
       className={`group relative py-4 transition-opacity duration-300 ease-out ${
         exiting
           ? "pointer-events-none opacity-0"
-          : read
+          : read && dimRead
             ? "opacity-45"
             : "opacity-100"
       }`}
@@ -128,10 +135,12 @@ export function StoryCard({
             </div>
           </div>
         </div>
-        {!dense ? (
+        {!dense && (showEngagement || archivedView || onRead || onDismiss) ? (
           <div className="mt-2.5 flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1 overflow-hidden">
-              <EngagementSummary engagement={story.engagement} variant="inline" />
+              {showEngagement ? (
+                <EngagementSummary engagement={story.engagement} variant="inline" />
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2.5">
               {archivedView ? <ReadBadge read={read} /> : null}

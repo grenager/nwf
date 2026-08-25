@@ -100,7 +100,12 @@ function SearchInner() {
           </p>
           <div className="flex flex-col gap-3">
             {results.map((story) => (
-              <StoryCard key={story.id} story={story} />
+              <StoryCard
+                key={story.id}
+                story={story}
+                dimRead={false}
+                showEngagement={false}
+              />
             ))}
           </div>
         </>
