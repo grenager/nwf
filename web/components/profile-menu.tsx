@@ -27,7 +27,9 @@ export function ProfileMenu({ items }: { items: ProfileMenuItem[] }) {
   if (items.length === 0) return null;
 
   return (
-    <div className="relative shrink-0">
+    // Sits on the display name rather than the avatar's midpoint, which is a
+    // good ten pixels lower on a 64px avatar.
+    <div className="relative mt-0.5 shrink-0 self-start">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

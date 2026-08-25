@@ -7,6 +7,7 @@ import { relativeTime } from "@/lib/time";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { InviteButton } from "@/components/invite-button";
 import { ModalShell } from "@/components/modal-shell";
 import { ProfileMenu } from "@/components/profile-menu";
 import { SettingsModal } from "@/components/settings-modal";
@@ -276,6 +277,12 @@ export function FriendProfileModal({
             />
           ) : null}
         </div>
+
+        {isSelf && !editing ? (
+          <div className="mt-4">
+            <InviteButton />
+          </div>
+        ) : null}
 
         {editing ? (
           <div className="mt-4 flex justify-end gap-2">

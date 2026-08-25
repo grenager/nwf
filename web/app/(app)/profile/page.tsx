@@ -3,7 +3,6 @@
 import { useAuth } from "@/components/auth-provider";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { FriendRequests } from "@/components/friend-requests";
-import { InviteButton } from "@/components/invite-button";
 import { useToast } from "@/components/toast";
 import { api } from "@/lib/api";
 import type { Profile } from "@/lib/types";
@@ -73,9 +72,6 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-lg space-y-4">
-      {/* Growth lives or dies on this being findable, so it leads the tab. */}
-      <InviteButton />
-
       {/* Requests are answerable here rather than a tab away; the Friends
           tile below leads to the full People page. */}
       <FriendRequests />
