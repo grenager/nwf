@@ -4,7 +4,7 @@ import { Avatar } from "@/components/avatar";
 import { api, ApiError } from "@/lib/api";
 import type { AudienceMember, PostAudience, UUID } from "@/lib/types";
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { ModalShell } from "@/components/modal-shell";
 
 interface CommentAudienceModalProps {
   postId: UUID;
@@ -100,86 +100,74 @@ export function CommentAudienceModal({
   const groups =
     audience !== null ? groupPeople(audience.people) : new Map<never, never>();
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16 sm:pt-20"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Who will see this comment"
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
-              Conversations on NWF are private.
-            </p>
-            <h2 className="mt-1 font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-              Who will see this?
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-700"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+  return (
+    <ModalShell onClose={onClose} label="Who will see this comment">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
+            Conversations on NWF are private.
+          </p>
+          <h2 className="mt-1 font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+            Who will see this?
+          </h2>
         </div>
-
-        {error !== null ? (
-          <p className="text-sm text-zinc-500">{error}</p>
-        ) : audience === null ? (
-          <p className="text-sm text-zinc-500">Loading…</p>
-        ) : (
-          <>
-            <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-              {summaryLine(audience)}
-            </p>
-
-            {audience.people.length > 0 ? (
-              <div className="mt-4 space-y-4">
-                {[...groups.entries()].map(([relation, members]) => (
-                  <div key={relation}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                      {GROUP_LABELS[relation]}
-                    </p>
-                    <ul className="mt-2 space-y-2">
-                      {members.map((person) => (
-                        <li
-                          key={person.user_id}
-                          className="flex items-center gap-2"
-                        >
-                          <Avatar
-                            name={person.display_name}
-                            imageUrl={person.image_url}
-                          />
-                          <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-200">
-                            {person.display_name}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-zinc-500">
-                No one else can see this conversation yet.
-              </p>
-            )}
-
-            <p className="mt-5 border-t border-zinc-200 pt-4 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-              {futureNote(audience)}
-            </p>
-          </>
-        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-zinc-400 hover:text-zinc-700"
+          aria-label="Close"
+        >
+          ✕
+        </button>
       </div>
-    </div>,
-    document.body,
+
+      {error !== null ? (
+        <p className="text-sm text-zinc-500">{error}</p>
+      ) : audience === null ? (
+        <p className="text-sm text-zinc-500">Loading…</p>
+      ) : (
+        <>
+          <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+            {summaryLine(audience)}
+          </p>
+
+          {audience.people.length > 0 ? (
+            <div className="mt-4 space-y-4">
+              {[...groups.entries()].map(([relation, members]) => (
+                <div key={relation}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                    {GROUP_LABELS[relation]}
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {members.map((person) => (
+                      <li
+                        key={person.user_id}
+                        className="flex items-center gap-2"
+                      >
+                        <Avatar
+                          name={person.display_name}
+                          imageUrl={person.image_url}
+                        />
+                        <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-200">
+                          {person.display_name}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-zinc-500">
+              No one else can see this conversation yet.
+            </p>
+          )}
+
+          <p className="mt-5 border-t border-zinc-200 pt-4 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            {futureNote(audience)}
+          </p>
+        </>
+      )}
+    </ModalShell>
   );
 }

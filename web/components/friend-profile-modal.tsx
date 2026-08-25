@@ -7,7 +7,7 @@ import { relativeTime } from "@/lib/time";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { ModalShell } from "@/components/modal-shell";
 
 interface FriendProfileModalProps {
   friendId: UUID;
@@ -70,12 +70,7 @@ export function FriendProfileModal({
   const [editing, setEditing] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [form, setForm] = useState<EditForm>({ first: "", last: "", image_url: "" });
-  const [mounted, setMounted] = useState<boolean>(false);
   const isPage: boolean = variant === "page";
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (isPage || onClose == null) return;
@@ -453,29 +448,26 @@ export function FriendProfileModal({
     return <div className="mx-auto w-full max-w-lg">{body}</div>;
   }
 
-  if (!mounted) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
-      onClick={onClose}
+  return (
+    <ModalShell
+      onClose={onClose ?? null}
+      mobile="fullscreen"
+      width="lg"
+      label="Profile"
+      padded={false}
     >
-      <div
-        className="relative my-auto w-full max-w-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {onClose ? (
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center text-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+            className="absolute right-2 top-[calc(0.5rem+env(safe-area-inset-top))] z-10 flex h-11 w-11 items-center justify-center text-xl text-slate-500 hover:text-slate-900 sm:right-3 sm:top-3 sm:h-8 sm:w-8 dark:hover:text-slate-100"
           >
             ✕
           </button>
         ) : null}
         {body}
       </div>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }
