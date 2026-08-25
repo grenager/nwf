@@ -131,43 +131,25 @@ function IconAlerts({
   );
 }
 
-function IconPeople({
+function IconSearch({
   className,
   filled = false,
 }: {
   className?: string;
   filled?: boolean;
 }) {
-  if (filled) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className={className}
-        aria-hidden
-      >
-        <circle cx="9" cy="8.5" r="3.5" />
-        <path d="M2.5 19.4c1.2-3.1 3.4-4.65 6.5-4.65s5.3 1.55 6.5 4.65a.75.75 0 0 1-.7 1.02H3.2a.75.75 0 0 1-.7-1.02Z" />
-        <path d="M16.5 6.25a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5Z" />
-        <path d="M16.2 13.5c2.4 0 4.15 1.25 5.25 3.7a.75.75 0 0 1-.68 1.05h-3.44c-.2-1.9-.86-3.48-1.96-4.75Z" />
-      </svg>
-    );
-  }
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth={filled ? "2.5" : "1.75"}
       className={className}
       aria-hidden
     >
-      <circle cx="9" cy="8.5" r="3.25" />
-      <path d="M3.25 19.25c1.1-2.9 3.05-4.35 5.75-4.35s4.65 1.45 5.75 4.35" strokeLinecap="round" />
-      <path d="M16.25 6.75a2.5 2.5 0 0 1 0 5" strokeLinecap="round" />
-      <path d="M17.5 14.15c1.7.35 2.95 1.5 3.75 3.45" strokeLinecap="round" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 4.5 4.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -424,6 +406,29 @@ export function Nav() {
             Feed
           </Link>
           <Link
+            href="/search"
+            className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
+              tabActive("/search")
+                ? "font-semibold text-zinc-900 dark:text-zinc-50"
+                : "font-medium text-zinc-500"
+            }`}
+          >
+            <TabIcon>
+              <IconSearch className="h-5 w-5" filled={tabActive("/search")} />
+            </TabIcon>
+            Search
+          </Link>
+          <button
+            type="button"
+            onClick={openAddStory}
+            aria-label="New post"
+            className="flex flex-col items-center justify-center py-1"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-[9999px] bg-slate-900 text-xl font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+              +
+            </span>
+          </button>
+          <Link
             href="/notifications"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
               tabActive("/notifications")
@@ -438,29 +443,6 @@ export function Nav() {
               />
             </TabIcon>
             Alerts
-          </Link>
-          <button
-            type="button"
-            onClick={openAddStory}
-            aria-label="New post"
-            className="flex flex-col items-center justify-center py-1"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-[9999px] bg-slate-900 text-xl font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-              +
-            </span>
-          </button>
-          <Link
-            href="/friends"
-            className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/friends")
-                ? "font-semibold text-zinc-900 dark:text-zinc-50"
-                : "font-medium text-zinc-500"
-            }`}
-          >
-            <TabIcon badge={incomingCount}>
-              <IconPeople className="h-5 w-5" filled={tabActive("/friends")} />
-            </TabIcon>
-            People
           </Link>
           {isGuest ? (
             <Link
@@ -481,17 +463,20 @@ export function Nav() {
                   : "font-medium text-zinc-500"
               }`}
             >
-              <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-[9999px] bg-zinc-200 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
-                {profile?.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profile.image_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  avatarInitial
-                )}
+              <span className="relative inline-flex">
+                <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-[9999px] bg-zinc-200 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                  {profile?.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={profile.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    avatarInitial
+                  )}
+                </span>
+                <TabBadge count={incomingCount} />
               </span>
               Me
             </Link>
