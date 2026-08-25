@@ -16,7 +16,6 @@ const BADGE_POLL_MS: number = 60_000;
 
 const DESKTOP_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Feed" },
-  { href: "/conversations", label: "Convos" },
   { href: "/notifications", label: "Alerts" },
   { href: "/friends", label: "People" },
 ];
@@ -86,44 +85,6 @@ function IconFeed({
     >
       <path
         d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function IconConvos({
-  className,
-  filled = false,
-}: {
-  className?: string;
-  filled?: boolean;
-}) {
-  if (filled) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className={className}
-        aria-hidden
-      >
-        <path d="M6.5 4A2.5 2.5 0 0 0 4 6.5V20.2a.75.75 0 0 0 1.18.62L9.1 18.5H17.5A2.5 2.5 0 0 0 20 16V6.5A2.5 2.5 0 0 0 17.5 4h-11Z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M7 18.5 4 21V7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v8.5A2.5 2.5 0 0 1 17.5 18.5H7Z"
         strokeLinejoin="round"
       />
     </svg>
@@ -311,8 +272,7 @@ export function Nav() {
   }
 
   function badgeFor(href: string): number {
-    if (href === "/conversations") return convosUnread;
-    if (href === "/notifications") return alertsUnread;
+    if (href === "/notifications") return alertsUnread + convosUnread;
     if (href === "/friends") return incomingCount;
     return 0;
   }
@@ -453,7 +413,7 @@ export function Nav() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-5 items-stretch">
+        <div className="mx-auto grid max-w-lg grid-cols-4 items-stretch">
           <Link
             href="/"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
@@ -468,20 +428,20 @@ export function Nav() {
             Feed
           </Link>
           <Link
-            href="/conversations"
+            href="/notifications"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/conversations")
+              tabActive("/notifications")
                 ? "font-semibold text-zinc-900 dark:text-zinc-50"
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={convosUnread}>
-              <IconConvos
+            <TabIcon badge={alertsUnread + convosUnread}>
+              <IconAlerts
                 className="h-5 w-5"
-                filled={tabActive("/conversations")}
+                filled={tabActive("/notifications")}
               />
             </TabIcon>
-            Convos
+            Alerts
           </Link>
           <button
             type="button"
@@ -493,22 +453,6 @@ export function Nav() {
               +
             </span>
           </button>
-          <Link
-            href="/notifications"
-            className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/notifications")
-                ? "font-semibold text-zinc-900 dark:text-zinc-50"
-                : "font-medium text-zinc-500"
-            }`}
-          >
-            <TabIcon badge={alertsUnread}>
-              <IconAlerts
-                className="h-5 w-5"
-                filled={tabActive("/notifications")}
-              />
-            </TabIcon>
-            Alerts
-          </Link>
           {isGuest ? (
             <Link
               href="/signin"
