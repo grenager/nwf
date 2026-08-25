@@ -263,13 +263,18 @@ export function Nav() {
     void refreshBadges();
   });
 
-  // Replying in the feed stamps the read cursor without a route change.
+  // Replying in the feed stamps the read cursor, and answering a friend
+  // request settles one, both without a route change.
   useEffect(() => {
-    function onThreadSeen(): void {
+    function onStale(): void {
       void refreshBadges();
     }
-    window.addEventListener("nwf:thread-seen", onThreadSeen);
-    return () => window.removeEventListener("nwf:thread-seen", onThreadSeen);
+    window.addEventListener("nwf:thread-seen", onStale);
+    window.addEventListener("nwf:connections-changed", onStale);
+    return () => {
+      window.removeEventListener("nwf:thread-seen", onStale);
+      window.removeEventListener("nwf:connections-changed", onStale);
+    };
   }, [refreshBadges]);
 
   const links: { href: string; label: string }[] = profile?.is_admin
