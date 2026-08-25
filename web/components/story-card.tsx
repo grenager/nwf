@@ -1,5 +1,6 @@
 "use client";
 
+import { Avatar } from "@/components/avatar";
 import { api } from "@/lib/api";
 import { EngagementSummary } from "@/components/engagement-summary";
 import { InboxCardActions } from "@/components/inbox-card-actions";
@@ -25,6 +26,11 @@ interface StoryCardProps {
   onOpen?: (storyId: UUID) => void;
   onRead?: (storyId: UUID) => void;
   onDismiss?: (storyId: UUID) => void;
+}
+
+function replyLabel(count: number): string {
+  if (count === 0) return "no replies yet";
+  return `${count} ${count === 1 ? "reply" : "replies"}`;
 }
 
 export function StoryCard({
@@ -118,13 +124,29 @@ export function StoryCard({
           ) : null}
           <div className="min-w-0 flex-1">
             {headline}
-            {!dense && story.summary ? (
+            {!dense && (story.post_take || story.summary) ? (
               <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-                {stripHtml(story.summary).slice(0, 280)}
+                {story.post_take
+                  ? story.post_take
+                  : stripHtml(story.summary ?? "").slice(0, 280)}
               </p>
             ) : null}
             <div className="mt-1.5 flex items-center gap-2 text-[12px]">
-              {story.author_names.length > 0 ? (
+              {story.post_author_name ? (
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <Avatar
+                    name={story.post_author_name}
+                    imageUrl={story.post_author_image_url ?? null}
+                    size="sm"
+                  />
+                  <span className="min-w-0 truncate font-semibold text-zinc-900 dark:text-zinc-100">
+                    {story.post_author_name}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap text-zinc-500">
+                    {replyLabel(story.post_reply_count ?? 0)}
+                  </span>
+                </span>
+              ) : story.author_names.length > 0 ? (
                 <span className="min-w-0 truncate font-semibold text-zinc-900 dark:text-zinc-100">
                   {story.author_names.join(", ")}
                 </span>

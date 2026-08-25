@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -33,7 +34,7 @@ from api.schemas import (
     StoryWithStatus,
 )
 from core.attribution import resolve_attribution
-from core.models import Post, PostParticipant, Source, Story, StoryStatus
+from core.models import Comment, Post, PostParticipant, Profile, Source, Story, StoryStatus
 
 router = APIRouter(prefix="/stories", tags=["stories"])
 
@@ -76,6 +77,50 @@ def _rows_to_stories(
             model.friend_stars = friend_map.get(story.id, [])
         items.append(model)
     return items
+
+
+@dataclass(frozen=True)
+class _PostSummary:
+    """The parts of a post a search result needs to read as a conversation."""
+
+    author_name: str
+    author_image_url: str | None
+    take: str | None
+    reply_count: int
+
+
+async def _post_summaries(
+    session: SessionDep, post_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, _PostSummary]:
+    if not post_ids:
+        return {}
+
+    rows = (
+        await session.execute(
+            select(Post.id, Post.take, Profile)
+            .join(Profile, Profile.id == Post.author_id)
+            .where(Post.id.in_(post_ids))
+        )
+    ).all()
+    count_rows = (
+        await session.execute(
+            select(Comment.post_id, func.count(Comment.id))
+            .where(Comment.post_id.in_(post_ids))
+            .group_by(Comment.post_id)
+        )
+    ).all()
+    counts: dict[uuid.UUID, int] = {
+        post_id: total for post_id, total in count_rows if post_id is not None
+    }
+    return {
+        post_id: _PostSummary(
+            author_name=display_name(author),
+            author_image_url=author.image_url,
+            take=take,
+            reply_count=counts.get(post_id, 0),
+        )
+        for post_id, take, author in rows
+    }
 
 
 @router.get("/title-search", response_model=StoryList)
@@ -151,8 +196,16 @@ async def title_search(
         post_by_story = await primary_post_ids_by_story(
             session, user.id, story_ids, friend_ids=friends
         )
+        summaries = await _post_summaries(session, list(post_by_story.values()))
         for item in items:
-            item.post_id = post_by_story.get(item.id)
+            post_id = post_by_story.get(item.id)
+            item.post_id = post_id
+            summary = summaries.get(post_id) if post_id else None
+            if summary is not None:
+                item.post_author_name = summary.author_name
+                item.post_author_image_url = summary.author_image_url
+                item.post_take = summary.take
+                item.post_reply_count = summary.reply_count
 
     source_ids = {story.source_id for story, _, _ in ranked_rows if story.source_id}
     if source_ids:
