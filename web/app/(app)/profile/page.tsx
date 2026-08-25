@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
+import { FriendRequests } from "@/components/friend-requests";
 import { useToast } from "@/components/toast";
 import { api } from "@/lib/api";
 import type { Profile } from "@/lib/types";
@@ -70,12 +71,17 @@ export default function ProfilePage() {
   }
 
   return (
-    <FriendProfileModal
-      friendId={me.id}
-      variant="page"
-      onSignOut={() => {
-        void handleSignOut();
-      }}
-    />
+    <div className="mx-auto w-full max-w-lg space-y-4">
+      {/* Requests are answerable here rather than a tab away; the Friends
+          tile below leads to the full People page. */}
+      <FriendRequests />
+      <FriendProfileModal
+        friendId={me.id}
+        variant="page"
+        onSignOut={() => {
+          void handleSignOut();
+        }}
+      />
+    </div>
   );
 }

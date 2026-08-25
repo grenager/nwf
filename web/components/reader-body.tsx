@@ -92,7 +92,7 @@ export function ReaderBody({
       <div className="relative">
         <div
           ref={bodyRef}
-          className="space-y-4 font-serif text-[1.05rem] leading-8 text-zinc-800 dark:text-zinc-200"
+          className="space-y-4 font-serif text-[1.05rem] leading-8 text-zinc-800 [overflow-wrap:anywhere] dark:text-zinc-200"
           style={
             clamped
               ? { maxHeight: COLLAPSED_MAX_HEIGHT_PX, overflow: "hidden" }

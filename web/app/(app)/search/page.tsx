@@ -82,7 +82,7 @@ function SearchInner() {
           autoFocus
           value={query}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search recent article titles…"
+          placeholder="Search posts from you and your friends…"
           className="w-full border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
       </div>
@@ -91,7 +91,7 @@ function SearchInner() {
         <p className="py-8 text-center text-sm text-slate-400">Searching…</p>
       ) : searched && results.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">
-          No matching titles found.
+          No matching posts found.
         </p>
       ) : results.length > 0 ? (
         <>
@@ -100,13 +100,18 @@ function SearchInner() {
           </p>
           <div className="flex flex-col gap-3">
             {results.map((story) => (
-              <StoryCard key={story.id} story={story} />
+              <StoryCard
+                key={story.id}
+                story={story}
+                dimRead={false}
+                showEngagement={false}
+              />
             ))}
           </div>
         </>
       ) : (
         <p className="py-8 text-center text-sm text-slate-400">
-          Type to search recent article titles.
+          Type to search posts from you and your friends.
         </p>
       )}
     </div>

@@ -84,8 +84,13 @@ class StoryWithStatus(StoryOut):
     dismissed: bool = False
     friend_stars: list[FriendStarOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
-    # Most recent post about this story the viewer may see (search → detail link).
+    # Most recent post about this story the viewer may see (search → detail link),
+    # with enough of the conversation to recognise it in a result list.
     post_id: uuid.UUID | None = None
+    post_author_name: str | None = None
+    post_author_image_url: str | None = None
+    post_take: str | None = None
+    post_reply_count: int = 0
 
 
 class FriendStarOut(BaseModel):

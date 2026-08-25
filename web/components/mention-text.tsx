@@ -49,5 +49,9 @@ export function MentionText({
     nodes.push(<Fragment key={`t${key}`}>{text.slice(lastIndex)}</Fragment>);
   }
 
-  return <span className={className}>{nodes}</span>;
+  return (
+    <span className={`[overflow-wrap:anywhere] ${className ?? ""}`}>
+      {nodes}
+    </span>
+  );
 }

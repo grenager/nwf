@@ -16,7 +16,6 @@ const BADGE_POLL_MS: number = 60_000;
 
 const DESKTOP_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Feed" },
-  { href: "/conversations", label: "Convos" },
   { href: "/notifications", label: "Alerts" },
   { href: "/friends", label: "People" },
 ];
@@ -92,44 +91,6 @@ function IconFeed({
   );
 }
 
-function IconConvos({
-  className,
-  filled = false,
-}: {
-  className?: string;
-  filled?: boolean;
-}) {
-  if (filled) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className={className}
-        aria-hidden
-      >
-        <path d="M6.5 4A2.5 2.5 0 0 0 4 6.5V20.2a.75.75 0 0 0 1.18.62L9.1 18.5H17.5A2.5 2.5 0 0 0 20 16V6.5A2.5 2.5 0 0 0 17.5 4h-11Z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M7 18.5 4 21V7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v8.5A2.5 2.5 0 0 1 17.5 18.5H7Z"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function IconAlerts({
   className,
   filled = false,
@@ -166,6 +127,29 @@ function IconAlerts({
         strokeLinejoin="round"
       />
       <path d="M10 19a2 2 0 0 0 4 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconSearch({
+  className,
+  filled = false,
+}: {
+  className?: string;
+  filled?: boolean;
+}) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={filled ? "2.5" : "1.75"}
+      className={className}
+      aria-hidden
+    >
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 4.5 4.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -279,13 +263,18 @@ export function Nav() {
     void refreshBadges();
   });
 
-  // Replying in the feed stamps the read cursor without a route change.
+  // Replying in the feed stamps the read cursor, and answering a friend
+  // request settles one, both without a route change.
   useEffect(() => {
-    function onThreadSeen(): void {
+    function onStale(): void {
       void refreshBadges();
     }
-    window.addEventListener("nwf:thread-seen", onThreadSeen);
-    return () => window.removeEventListener("nwf:thread-seen", onThreadSeen);
+    window.addEventListener("nwf:thread-seen", onStale);
+    window.addEventListener("nwf:connections-changed", onStale);
+    return () => {
+      window.removeEventListener("nwf:thread-seen", onStale);
+      window.removeEventListener("nwf:connections-changed", onStale);
+    };
   }, [refreshBadges]);
 
   const links: { href: string; label: string }[] = profile?.is_admin
@@ -311,8 +300,7 @@ export function Nav() {
   }
 
   function badgeFor(href: string): number {
-    if (href === "/conversations") return convosUnread;
-    if (href === "/notifications") return alertsUnread;
+    if (href === "/notifications") return alertsUnread + convosUnread;
     if (href === "/friends") return incomingCount;
     return 0;
   }
@@ -324,7 +312,7 @@ export function Nav() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+      <header className="sticky top-0 z-40 hidden border-b border-zinc-200 bg-white/95 backdrop-blur sm:block dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <BrandLink
             className="text-zinc-900 dark:text-zinc-50"
@@ -400,51 +388,6 @@ export function Nav() {
               </>
             )}
           </div>
-
-          {/* Mobile: compact top actions; primary tabs live in the bottom bar. */}
-          <div className="flex items-center gap-1 sm:hidden">
-            {isGuest ? (
-              <Link
-                href="/signin"
-                className="bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-              >
-                Sign up
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/friends"
-                  aria-label="People"
-                  title="People"
-                  className="relative flex h-9 items-center px-2 text-sm font-medium text-slate-600 dark:text-slate-300"
-                >
-                  People
-                  {incomingCount > 0 ? (
-                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-[9999px] bg-emerald-600 px-1 text-[9px] font-bold text-white">
-                      {incomingCount > 99 ? "99+" : incomingCount}
-                    </span>
-                  ) : null}
-                </Link>
-                <Link
-                  href="/search"
-                  aria-label="Search"
-                  className="flex h-9 w-9 items-center justify-center text-slate-600 dark:text-slate-300"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="h-4 w-4"
-                  >
-                    <circle cx="9" cy="9" r="6" />
-                    <path d="m14 14 4 4" strokeLinecap="round" />
-                  </svg>
-                </Link>
-              </>
-            )}
-          </div>
         </div>
       </header>
 
@@ -468,20 +411,17 @@ export function Nav() {
             Feed
           </Link>
           <Link
-            href="/conversations"
+            href="/search"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/conversations")
+              tabActive("/search")
                 ? "font-semibold text-zinc-900 dark:text-zinc-50"
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={convosUnread}>
-              <IconConvos
-                className="h-5 w-5"
-                filled={tabActive("/conversations")}
-              />
+            <TabIcon>
+              <IconSearch className="h-5 w-5" filled={tabActive("/search")} />
             </TabIcon>
-            Convos
+            Search
           </Link>
           <button
             type="button"
@@ -501,7 +441,7 @@ export function Nav() {
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={alertsUnread}>
+            <TabIcon badge={alertsUnread + convosUnread}>
               <IconAlerts
                 className="h-5 w-5"
                 filled={tabActive("/notifications")}
@@ -528,17 +468,20 @@ export function Nav() {
                   : "font-medium text-zinc-500"
               }`}
             >
-              <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-[9999px] bg-zinc-200 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
-                {profile?.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profile.image_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  avatarInitial
-                )}
+              <span className="relative inline-flex">
+                <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-[9999px] bg-zinc-200 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                  {profile?.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={profile.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    avatarInitial
+                  )}
+                </span>
+                <TabBadge count={incomingCount} />
               </span>
               Me
             </Link>
