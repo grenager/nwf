@@ -15,6 +15,8 @@ interface PostDetailProps {
   onDeleted?: () => void;
   /** Scroll to the "New replies" divider when opened via ?focus=unread. */
   focusUnread?: boolean;
+  /** Scroll to and highlight one comment, from ?comment=<id>. */
+  focusCommentId?: UUID | null;
 }
 
 /**
@@ -26,6 +28,7 @@ export function PostDetail({
   postId,
   onDeleted,
   focusUnread = false,
+  focusCommentId = null,
 }: PostDetailProps) {
   const { user } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
@@ -146,6 +149,7 @@ export function PostDetail({
         onInvite={() => setInviteOpen(true)}
         markSeenOnMount
         focusUnread={focusUnread}
+        focusCommentId={focusCommentId}
       />
       {inviteOpen ? (
         <SharePostModal

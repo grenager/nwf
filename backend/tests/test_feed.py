@@ -15,7 +15,11 @@ from typing import Any
 
 import pytest
 
-from api.friends import primary_post_ids_by_story, visible_post_ids_for_viewer
+from api.friends import (
+    primary_post_ids_by_story,
+    viewer_visible_post_ids,
+    visible_post_ids_for_viewer,
+)
 from api.routers.feed import (
     FEED_SHARED_TEXT_MAX_CHARS,
     _build_post_outs,
@@ -359,3 +363,40 @@ async def test_primary_post_ids_by_story_empty_when_no_stories() -> None:
     )
     assert result == {}
     assert session.execute_calls == 0
+
+
+class _ScalarsSession:
+    def __init__(self, rows: list[uuid.UUID]) -> None:
+        self._rows = rows
+        self.scalars_calls: int = 0
+
+    async def scalars(self, *_args: Any, **_kwargs: Any) -> _FakeScalarResult:
+        self.scalars_calls += 1
+        return _FakeScalarResult(self._rows)
+
+
+@pytest.mark.asyncio
+async def test_viewer_visible_post_ids_returns_the_allowed_subset() -> None:
+    visible = uuid.uuid4()
+    hidden = uuid.uuid4()
+    session = _ScalarsSession([visible])
+    result = await viewer_visible_post_ids(
+        session,  # type: ignore[arg-type]
+        uuid.uuid4(),
+        [visible, hidden],
+        friend_ids=[],
+    )
+    assert result == {visible}
+    assert session.scalars_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_viewer_visible_post_ids_skips_the_query_when_empty() -> None:
+    session = _ScalarsSession([])
+    result = await viewer_visible_post_ids(
+        session,  # type: ignore[arg-type]
+        uuid.uuid4(),
+        [],
+    )
+    assert result == set()
+    assert session.scalars_calls == 0

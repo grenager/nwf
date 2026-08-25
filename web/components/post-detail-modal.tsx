@@ -9,6 +9,8 @@ import { createPortal } from "react-dom";
 interface PostDetailModalProps {
   postId: UUID;
   focusUnread?: boolean;
+  /** Scroll to and highlight one comment, from ?comment=<id>. */
+  focusCommentId?: UUID | null;
 }
 
 /**
@@ -18,6 +20,7 @@ interface PostDetailModalProps {
 export function PostDetailModal({
   postId,
   focusUnread = false,
+  focusCommentId = null,
 }: PostDetailModalProps) {
   const router = useRouter();
 
@@ -56,6 +59,7 @@ export function PostDetailModal({
             postId={postId}
             onDeleted={() => router.back()}
             focusUnread={focusUnread}
+            focusCommentId={focusCommentId}
           />
         </div>
       </div>

@@ -327,6 +327,10 @@ export type FriendActivityKind = "read" | "commented" | "rated";
 export interface FriendActivityItem {
   kind: FriendActivityKind;
   story_id: UUID;
+  /** Post the viewer can open for this story; null when none is visible. */
+  post_id: UUID | null;
+  /** Comment to scroll to on that post (kind === "commented"). */
+  comment_id: UUID | null;
   headline: string;
   source_name: string | null;
   article_url: string;

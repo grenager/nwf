@@ -17,6 +17,8 @@ from api.friends import (
     email_for_user,
     ensure_friend_capacity,
     friend_slots_used,
+    primary_post_ids_by_story,
+    viewer_visible_post_ids,
 )
 from api.schemas import (
     ConnectionCreate,
@@ -507,12 +509,27 @@ async def friend_profile(
         )
     ).all()
 
+    # Each activity row links to the post the viewer can actually open — the
+    # comment's own post when it is visible, otherwise the story's primary one.
+    story_ids: list[uuid.UUID] = list(
+        {row[0].id for row in status_rows}
+        | {story.id for _, story, _ in comment_rows}
+        | {story.id for _, story, _ in rating_rows}
+    )
+    post_by_story = await primary_post_ids_by_story(session, user.id, story_ids)
+    visible_comment_posts = await viewer_visible_post_ids(
+        session,
+        user.id,
+        [comment.post_id for comment, _, _ in comment_rows if comment.post_id],
+    )
+
     items: list[FriendActivityItem] = []
     for story, source, updated_at in status_rows:
         items.append(
             FriendActivityItem(
                 kind="read",
                 story_id=story.id,
+                post_id=post_by_story.get(story.id),
                 headline=story.full_headline,
                 source_name=source.name if source else None,
                 article_url=story.article_url,
@@ -520,10 +537,14 @@ async def friend_profile(
             )
         )
     for comment, story, source in comment_rows:
+        on_own_post: bool = comment.post_id in visible_comment_posts
         items.append(
             FriendActivityItem(
                 kind="commented",
                 story_id=story.id,
+                post_id=comment.post_id if on_own_post else post_by_story.get(story.id),
+                # Only anchor when the comment is rendered on the linked post.
+                comment_id=comment.id if on_own_post else None,
                 headline=story.full_headline,
                 source_name=source.name if source else None,
                 article_url=story.article_url,
@@ -536,6 +557,7 @@ async def friend_profile(
             FriendActivityItem(
                 kind="rated",
                 story_id=story.id,
+                post_id=post_by_story.get(story.id),
                 headline=story.full_headline,
                 source_name=source.name if source else None,
                 article_url=story.article_url,
