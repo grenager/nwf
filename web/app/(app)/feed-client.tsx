@@ -6,10 +6,9 @@ import { FeedSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
+import { useAwayRefresh } from "@/lib/use-away-refresh";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
-
-const AWAY_RELOAD_MS: number = 10 * 60 * 1000;
 
 function formatNewSince(iso: string): string {
   const date: Date = new Date(iso);
@@ -125,22 +124,11 @@ export function FeedClient() {
       window.removeEventListener("nwf:post-created", onPostCreated);
   }, [load]);
 
-  useEffect(() => {
-    let hiddenAt: number | null = null;
-    function onVisibilityChange(): void {
-      if (document.visibilityState === "hidden") {
-        hiddenAt = Date.now();
-        return;
-      }
-      if (hiddenAt !== null && Date.now() - hiddenAt >= AWAY_RELOAD_MS) {
-        void load();
-      }
-      hiddenAt = null;
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [load]);
+  // Coming back after a long break, the feed on screen is stale — pull the
+  // posts and unread counts that landed while the user was gone.
+  useAwayRefresh(() => {
+    void load({ silent: true });
+  });
 
   function onCardChange(updated: FeedCard): void {
     setData((prev) => {

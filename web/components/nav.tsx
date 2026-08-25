@@ -7,6 +7,7 @@ import { useAuthGate } from "@/components/auth-gate";
 import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { api } from "@/lib/api";
 import type { Profile, UUID } from "@/lib/types";
+import { useAwayRefresh } from "@/lib/use-away-refresh";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -271,6 +272,12 @@ export function Nav() {
     if (!user?.id) return;
     void refreshBadges();
   }, [pathname, user?.id, refreshBadges]);
+
+  // Background tabs throttle the poll above, so the badges the user sees on
+  // returning can be minutes old.
+  useAwayRefresh(() => {
+    void refreshBadges();
+  });
 
   // Replying in the feed stamps the read cursor without a route change.
   useEffect(() => {

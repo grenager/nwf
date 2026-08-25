@@ -6,6 +6,7 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import type { NotificationItem, NotificationKind, NotificationList } from "@/lib/types";
+import { useAwayRefresh } from "@/lib/use-away-refresh";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -84,6 +85,12 @@ export function NotificationsClient() {
     }
     void load();
   }, [authLoading, session, load]);
+
+  // Alerts that arrived while the user was away should be waiting for them.
+  useAwayRefresh(() => {
+    if (!session) return;
+    void load();
+  });
 
   if (authLoading || loading) {
     return (
