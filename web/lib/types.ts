@@ -66,6 +66,11 @@ export interface Story {
   engagement: FriendEngagement;
   /** Most recent viewer-visible post about this story, when one exists. */
   post_id?: UUID | null;
+  /** The post `post_id` opens, so a result reads as a conversation. */
+  post_author_name?: string | null;
+  post_author_image_url?: string | null;
+  post_take?: string | null;
+  post_reply_count?: number;
   /** Anonymous comment activity for guest discover cards. */
 }
 

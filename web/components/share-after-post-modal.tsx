@@ -10,7 +10,7 @@ import {
 } from "@/lib/email-recipients";
 import type { PostAudience, UUID } from "@/lib/types";
 import { useEffect, useState, type FormEvent } from "react";
-import { createPortal } from "react-dom";
+import { ModalShell } from "@/components/modal-shell";
 
 /** Which thing the viewer just published, for the confirmation copy. */
 export type PublishedKind = "post" | "comment";
@@ -146,123 +146,111 @@ export function ShareAfterPostModal({
   const overflow: number =
     audience !== null ? audience.people.length - shownPeople.length : 0;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16 sm:pt-20"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Shared"
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
-              Conversations on NWF are private.
-            </p>
-            <h2 className="mt-1 font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-              {headlineFor(audience, kind)}
-            </h2>
-          </div>
+  return (
+    <ModalShell onClose={onClose} label="Shared">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
+            Conversations on NWF are private.
+          </p>
+          <h2 className="mt-1 font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+            {headlineFor(audience, kind)}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-zinc-400 hover:text-zinc-700"
+          aria-label="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      {shownPeople.length > 0 ? (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          {shownPeople.map((person) => (
+            <span
+              key={person.user_id}
+              className="flex items-center gap-1.5 rounded-full border border-zinc-200 py-0.5 pl-0.5 pr-2.5 dark:border-zinc-800"
+              title={person.display_name}
+            >
+              <Avatar
+                name={person.display_name}
+                imageUrl={person.image_url}
+              />
+              <span className="max-w-[9rem] truncate text-xs text-zinc-600 dark:text-zinc-300">
+                {person.display_name}
+              </span>
+            </span>
+          ))}
+          {overflow > 0 ? (
+            <span className="text-xs text-zinc-500">+{overflow} more</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <form onSubmit={(e) => void send(e)} className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+        <label className="block">
+          <span className="font-serif text-base font-semibold text-zinc-900 dark:text-zinc-50">
+            Anyone else you&apos;d like to share this with?
+          </span>
+          {nudge !== null ? (
+            <span className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300">
+              {nudge}
+            </span>
+          ) : null}
+          <span className="mt-1 block text-xs text-zinc-500">
+            Paste emails separated by commas or spaces. Names are welcome too,
+            like Teg Grenager &lt;teg@example.com&gt;.
+          </span>
+          <input
+            value={entry}
+            onChange={(e) => setEntry(e.target.value)}
+            placeholder="friend@example.com, Ada Lovelace <ada@example.com>"
+            autoFocus
+            className="mt-2 w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+          />
+        </label>
+
+        {recipients.length > 0 ? (
+          <p className="mt-2 text-xs text-zinc-500">
+            Inviting:{" "}
+            {recipients
+              .map((r) => (r.name !== null ? `${r.name} (${r.email})` : r.email))
+              .join(", ")}
+          </p>
+        ) : null}
+        {invalid.length > 0 ? (
+          <p className="mt-2 text-xs text-red-600">
+            Not a valid email: {invalid.join(", ")}
+          </p>
+        ) : null}
+
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={!canSend}
+            className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            {sending ? "Sending…" : "Send invites"}
+          </button>
           <button
             type="button"
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-700"
-            aria-label="Close"
+            className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
           >
-            ✕
+            {sentCount > 0 ? "Done" : "No thanks"}
           </button>
         </div>
+      </form>
 
-        {shownPeople.length > 0 ? (
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            {shownPeople.map((person) => (
-              <span
-                key={person.user_id}
-                className="flex items-center gap-1.5 rounded-full border border-zinc-200 py-0.5 pl-0.5 pr-2.5 dark:border-zinc-800"
-                title={person.display_name}
-              >
-                <Avatar
-                  name={person.display_name}
-                  imageUrl={person.image_url}
-                />
-                <span className="max-w-[9rem] truncate text-xs text-zinc-600 dark:text-zinc-300">
-                  {person.display_name}
-                </span>
-              </span>
-            ))}
-            {overflow > 0 ? (
-              <span className="text-xs text-zinc-500">+{overflow} more</span>
-            ) : null}
-          </div>
-        ) : null}
-
-        <form onSubmit={(e) => void send(e)} className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-          <label className="block">
-            <span className="font-serif text-base font-semibold text-zinc-900 dark:text-zinc-50">
-              Anyone else you&apos;d like to share this with?
-            </span>
-            {nudge !== null ? (
-              <span className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300">
-                {nudge}
-              </span>
-            ) : null}
-            <span className="mt-1 block text-xs text-zinc-500">
-              Paste emails separated by commas or spaces. Names are welcome too,
-              like Teg Grenager &lt;teg@example.com&gt;.
-            </span>
-            <input
-              value={entry}
-              onChange={(e) => setEntry(e.target.value)}
-              placeholder="friend@example.com, Ada Lovelace <ada@example.com>"
-              autoFocus
-              className="mt-2 w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
-            />
-          </label>
-
-          {recipients.length > 0 ? (
-            <p className="mt-2 text-xs text-zinc-500">
-              Inviting:{" "}
-              {recipients
-                .map((r) => (r.name !== null ? `${r.name} (${r.email})` : r.email))
-                .join(", ")}
-            </p>
-          ) : null}
-          {invalid.length > 0 ? (
-            <p className="mt-2 text-xs text-red-600">
-              Not a valid email: {invalid.join(", ")}
-            </p>
-          ) : null}
-
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={!canSend}
-              className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-            >
-              {sending ? "Sending…" : "Send invites"}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-            >
-              {sentCount > 0 ? "Done" : "No thanks"}
-            </button>
-          </div>
-        </form>
-
-        {sentCount > 0 ? (
-          <p className="mt-3 text-xs text-zinc-500">
-            {sentCount} {sentCount === 1 ? "invite" : "invites"} sent. They join
-            this conversation as your friend.
-          </p>
-        ) : null}
-      </div>
-    </div>,
-    document.body,
+      {sentCount > 0 ? (
+        <p className="mt-3 text-xs text-zinc-500">
+          {sentCount} {sentCount === 1 ? "invite" : "invites"} sent. They join
+          this conversation as your friend.
+        </p>
+      ) : null}
+    </ModalShell>
   );
 }

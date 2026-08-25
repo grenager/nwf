@@ -104,7 +104,7 @@ export function PostCard({
           short teaser; "More" opens the post's reader/details view. */}
       {post.shared_text && post.shared_text.trim() ? (
         <div className="border-l-2 border-zinc-200 pl-3 dark:border-zinc-800">
-          <p className="line-clamp-5 whitespace-pre-line font-serif text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
+          <p className="line-clamp-5 whitespace-pre-line font-serif text-sm leading-relaxed text-zinc-600 [overflow-wrap:anywhere] dark:text-zinc-300">
             {stripHtml(post.shared_text)}
           </p>
           <Link

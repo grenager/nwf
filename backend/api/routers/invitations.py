@@ -53,6 +53,11 @@ _DEFAULT_SHARE_PREFIX = (
     "I'm using NewsWithFriends to discuss articles privately with friends. "
     "I'd like to invite you to my private discussion about this article."
 )
+# A standalone invite has no article to point at, so it invites to the app.
+_DEFAULT_INVITE_PREFIX = (
+    "I'm using NewsWithFriends to discuss articles privately with friends. "
+    "Come join me."
+)
 
 
 def _new_token() -> str:
@@ -69,7 +74,8 @@ def _share_message(
 ) -> str:
     # The link renders a rich preview (headline + image) in messaging apps, so
     # keep the text itself to a short note plus the invite URL.
-    body: str = (personal or "").strip() or _DEFAULT_SHARE_PREFIX
+    default: str = _DEFAULT_SHARE_PREFIX if headline else _DEFAULT_INVITE_PREFIX
+    body: str = (personal or "").strip() or default
     return f"{body}\n{invite_url}"
 
 
@@ -412,13 +418,10 @@ async def create_invitation(
     inviter = await session.get(Profile, user.id)
     inviter_name: str = display_name(inviter) if inviter else "A friend"
 
-    # Open reusable share link (no email target).
+    # Open reusable share link (no email target). Without a post this is a
+    # standalone invitation to the app, which is the only invite a user with
+    # nothing posted yet can offer.
     if raw_email is None:
-        if payload.post_id is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "post_id is required for open share links",
-            )
         token: str = _new_token()
         invitation = Invitation(
             token=token,

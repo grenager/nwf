@@ -271,13 +271,23 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     <>
       <InviteHeader />
       <main className="mx-auto min-h-dvh max-w-2xl overflow-x-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] pt-6 sm:px-6">
+      {/* A standalone invite has no article behind it, so "discuss this" would
+          be pointing at nothing. */}
       <div className="mb-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-          Shared with you
+          {headline ? "Shared with you" : "You're invited"}
         </p>
         <h1 className="mt-1 font-serif text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50 sm:text-xl">
-          {preview.inviter_name} wanted to discuss this with you
+          {headline
+            ? `${preview.inviter_name} wanted to discuss this with you`
+            : `${preview.inviter_name} invited you to NewsWithFriends`}
         </h1>
+        {!headline ? (
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+            A quiet place to read the news and talk about it with a handful of
+            friends — no feeds full of strangers.
+          </p>
+        ) : null}
         {preview.message ? (
           <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">
             {preview.message}

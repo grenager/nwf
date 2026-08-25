@@ -12,10 +12,13 @@ from fastapi.testclient import TestClient
 from api.friends import ensure_friend_capacity, friend_slots_used
 from api.main import create_app
 from api.routers.invitations import (
+    _DEFAULT_INVITE_PREFIX,
     _DEFAULT_SHARE_PREFIX,
     _share_message,
     accept_invitation_for_user,
+    create_invitation,
 )
+from api.schemas import InvitationCreate
 from core.email import InviteEmailContent, _html_body, _plain_text, send_invite_email
 from core.models import Invitation, InvitationStatus
 from core.supabase_admin import generate_magic_link
@@ -58,6 +61,55 @@ def test_share_message_falls_back_to_default_prefix() -> None:
         "I'd like to invite you to my private discussion about this article."
     )
     assert msg.rstrip().endswith("https://nwf.example/invite/abc")
+
+
+def test_share_message_invites_to_the_app_without_an_article() -> None:
+    """A standalone invite has no article, so it must not point at one."""
+    msg = _share_message(
+        inviter_name="Ada",
+        headline=None,
+        take=None,
+        personal=None,
+        invite_url="https://nwf.example/invite/abc",
+    )
+    assert msg.startswith(_DEFAULT_INVITE_PREFIX)
+    assert "this article" not in msg
+    assert msg.rstrip().endswith("https://nwf.example/invite/abc")
+
+
+@pytest.mark.asyncio
+async def test_create_invitation_mints_a_link_without_a_post() -> None:
+    """Someone who has posted nothing yet still needs an invite to hand out."""
+    from core.models import Profile
+
+    user_id = uuid.uuid4()
+    session = AsyncMock()
+    session.get = AsyncMock(
+        return_value=Profile(id=user_id, first="Ada", last="Lovelace")
+    )
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+
+    settings = MagicMock()
+    settings.app_base_url = "https://nwf.example"
+
+    result = await create_invitation(
+        InvitationCreate(email=None, post_id=None, become_friend=True),
+        session,
+        MagicMock(id=user_id),
+        settings,
+    )
+
+    assert result.status == "invited"
+    assert result.invite_url is not None
+    assert result.invite_url.startswith("https://nwf.example/invite/")
+    assert result.email_sent is False
+    assert "this article" not in result.share_message
+
+    invitation = session.add.call_args.args[0]
+    assert invitation.post_id is None
+    assert invitation.reusable is True
+    assert invitation.become_friend is True
 
 
 def test_invite_email_html_and_plain() -> None:

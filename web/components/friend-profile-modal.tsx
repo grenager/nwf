@@ -7,7 +7,9 @@ import { relativeTime } from "@/lib/time";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { ModalShell } from "@/components/modal-shell";
+import { ProfileMenu } from "@/components/profile-menu";
+import { SettingsModal } from "@/components/settings-modal";
 
 interface FriendProfileModalProps {
   friendId: UUID;
@@ -41,16 +43,35 @@ function activityHref(item: FriendActivityItem): string {
   return item.comment_id ? `${base}?comment=${item.comment_id}` : base;
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex-1 border border-slate-200 p-3 text-center dark:border-slate-800">
+function Stat({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: number;
+  href?: string;
+}) {
+  const inner: ReactNode = (
+    <>
       <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
         {value}
       </div>
       <div className="text-[11px] uppercase tracking-wide text-slate-400">
         {label}
       </div>
-    </div>
+    </>
+  );
+  const className: string =
+    "block border border-slate-200 p-3 text-center dark:border-slate-800";
+  if (href === undefined) return <div className={className}>{inner}</div>;
+  return (
+    <Link
+      href={href}
+      className={`${className} transition hover:border-slate-400 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-900/50`}
+    >
+      {inner}
+    </Link>
   );
 }
 
@@ -64,18 +85,13 @@ export function FriendProfileModal({
   const { notify } = useToast();
   const [profile, setProfile] = useState<FriendProfile | null>(null);
   const [me, setMe] = useState<Profile | null>(null);
-  const [savingDigest, setSavingDigest] = useState<boolean>(false);
-  const [savingInstant, setSavingInstant] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [editing, setEditing] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [form, setForm] = useState<EditForm>({ first: "", last: "", image_url: "" });
-  const [mounted, setMounted] = useState<boolean>(false);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
   const isPage: boolean = variant === "page";
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (isPage || onClose == null) return;
@@ -127,60 +143,19 @@ export function FriendProfileModal({
 
   const isSelf: boolean = me != null && me.id === friendId;
 
-  async function toggleDigest(): Promise<void> {
-    if (!me) return;
-    const next: boolean = !me.digest_opt_out;
-    setSavingDigest(true);
-    // Optimistic update; revert on failure.
-    setMe({ ...me, digest_opt_out: next });
-    try {
-      const updated: Profile = await api.updatePreferences({
-        digest_opt_out: next,
-      });
-      setMe(updated);
-      notify(
-        next
-          ? "Daily digest emails turned off"
-          : "Daily digest emails turned on",
-        "success",
-      );
-    } catch (err) {
-      setMe({ ...me, digest_opt_out: !next });
-      notify(
-        err instanceof ApiError ? err.message : "Could not update preference",
-        "error",
-      );
-    } finally {
-      setSavingDigest(false);
-    }
-  }
-
-  async function toggleInstantEmails(): Promise<void> {
-    if (!me) return;
-    const next: boolean = !me.instant_email_opt_out;
-    setSavingInstant(true);
-    setMe({ ...me, instant_email_opt_out: next });
-    try {
-      const updated: Profile = await api.updatePreferences({
-        instant_email_opt_out: next,
-      });
-      setMe(updated);
-      notify(
-        next
-          ? "Instant activity emails turned off"
-          : "Instant activity emails turned on",
-        "success",
-      );
-    } catch (err) {
-      setMe({ ...me, instant_email_opt_out: !next });
-      notify(
-        err instanceof ApiError ? err.message : "Could not update preference",
-        "error",
-      );
-    } finally {
-      setSavingInstant(false);
-    }
-  }
+  useEffect(() => {
+    if (!isSelf) return;
+    let cancelled = false;
+    void api
+      .getFriends()
+      .then((overview) => {
+        if (!cancelled) setFriendCount(overview.total);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [isSelf]);
 
   function startEdit(): void {
     if (!profile) return;
@@ -280,25 +255,25 @@ export function FriendProfileModal({
               </p>
             </div>
           )}
-          {!editing && (profile.can_edit || onSignOut) ? (
-            <div className="mt-8 flex shrink-0 items-center gap-2 self-start">
-              {profile.can_edit ? (
-                <button
-                  onClick={startEdit}
-                  className="border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Edit
-                </button>
-              ) : null}
-              {onSignOut ? (
-                <button
-                  onClick={onSignOut}
-                  className="border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Sign out
-                </button>
-              ) : null}
-            </div>
+          {!editing ? (
+            <ProfileMenu
+              items={[
+                ...(profile.can_edit
+                  ? [{ label: "Edit profile", onSelect: startEdit }]
+                  : []),
+                ...(isSelf
+                  ? [
+                      {
+                        label: "Settings",
+                        onSelect: () => setSettingsOpen(true),
+                      },
+                    ]
+                  : []),
+                ...(onSignOut
+                  ? [{ label: "Sign out", onSelect: onSignOut }]
+                  : []),
+              ]}
+            />
           ) : null}
         </div>
 
@@ -320,81 +295,18 @@ export function FriendProfileModal({
           </div>
         ) : null}
 
-        <div className="mt-5 flex gap-2">
+        <div
+          className={`mt-5 grid gap-2 ${
+            isSelf ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+          }`}
+        >
+          {isSelf ? (
+            <Stat label="Friends" value={friendCount ?? 0} href="/friends" />
+          ) : null}
           <Stat label="Read" value={profile.reads} />
           <Stat label="Rated" value={profile.ratings} />
           <Stat label="Comments" value={profile.comments} />
         </div>
-
-        {isSelf && me ? (
-          <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              Email notifications
-            </h3>
-            <div className="mt-3 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Daily digest
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  A once-daily email with new posts and activity from your
-                  friends.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={!me.digest_opt_out}
-                aria-label="Toggle daily digest emails"
-                disabled={savingDigest}
-                onClick={() => void toggleDigest()}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-[9999px] transition-colors disabled:opacity-60 ${
-                  me.digest_opt_out
-                    ? "bg-slate-300 dark:bg-slate-700"
-                    : "bg-emerald-500"
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-[9999px] bg-white shadow transition-transform ${
-                    me.digest_opt_out ? "translate-x-0.5" : "translate-x-[22px]"
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Instant activity emails
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Get an email right away when a friend posts, comments on your
-                  article, or replies to you.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={!me.instant_email_opt_out}
-                aria-label="Toggle instant activity emails"
-                disabled={savingInstant}
-                onClick={() => void toggleInstantEmails()}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-[9999px] transition-colors disabled:opacity-60 ${
-                  me.instant_email_opt_out
-                    ? "bg-slate-300 dark:bg-slate-700"
-                    : "bg-emerald-500"
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-[9999px] bg-white shadow transition-transform ${
-                    me.instant_email_opt_out
-                      ? "translate-x-0.5"
-                      : "translate-x-[22px]"
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-        ) : null}
 
         <div className="mt-6">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -449,33 +361,40 @@ export function FriendProfileModal({
       </div>
     );
 
+  const settings: ReactNode = settingsOpen ? (
+    <SettingsModal onClose={() => setSettingsOpen(false)} />
+  ) : null;
+
   if (isPage) {
-    return <div className="mx-auto w-full max-w-lg">{body}</div>;
+    return (
+      <div className="mx-auto w-full max-w-lg">
+        {body}
+        {settings}
+      </div>
+    );
   }
 
-  if (!mounted) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
-      onClick={onClose}
+  return (
+    <ModalShell
+      onClose={onClose ?? null}
+      mobile="fullscreen"
+      width="lg"
+      label="Profile"
+      padded={false}
     >
-      <div
-        className="relative my-auto w-full max-w-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {onClose ? (
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center text-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+            className="absolute right-2 top-[calc(0.5rem+env(safe-area-inset-top))] z-10 flex h-11 w-11 items-center justify-center text-xl text-slate-500 hover:text-slate-900 sm:right-3 sm:top-3 sm:h-8 sm:w-8 dark:hover:text-slate-100"
           >
             ✕
           </button>
         ) : null}
         {body}
       </div>
-    </div>,
-    document.body,
+      {settings}
+    </ModalShell>
   );
 }

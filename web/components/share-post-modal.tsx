@@ -5,7 +5,8 @@ import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { InvitationCreateResult, UUID } from "@/lib/types";
 import { useEffect, useState, type FormEvent } from "react";
-import { createPortal } from "react-dom";
+import { ModalShell } from "@/components/modal-shell";
+import { canUseWebShare } from "@/lib/share";
 
 const DEFAULT_SHARE_NOTE =
   "I'm using NewsWithFriends to discuss articles privately with friends. I'd like to invite you to my private discussion about this article.";
@@ -18,17 +19,6 @@ interface SharePostModalProps {
   sourceName: string | null;
   take: string | null;
   onClose: () => void;
-}
-
-function canUseWebShare(): boolean {
-  return (
-    typeof navigator !== "undefined" &&
-    typeof navigator.share === "function" &&
-    // Prefer native share tray on coarse pointers (phones/tablets).
-    (typeof window === "undefined" ||
-      window.matchMedia("(pointer: coarse)").matches ||
-      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent))
-  );
 }
 
 function composeShareMessage(note: string, inviteUrl: string): string {
@@ -167,159 +157,150 @@ export function SharePostModal({
     }
   }
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16 sm:pt-20"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-              Share
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Send this conversation to a friend.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-700"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+  return (
+    <ModalShell onClose={onClose} label="Share">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+            Share
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Send this conversation to a friend.
+          </p>
         </div>
-
-        <div className="mb-4 overflow-hidden border border-zinc-200 dark:border-zinc-800">
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt="" className="h-32 w-full object-cover" />
-          ) : null}
-          <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
-            {sourceName ? (
-              <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-                {sourceName}
-              </p>
-            ) : null}
-            <a
-              href={articleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-0.5 block font-serif text-base font-semibold leading-snug text-zinc-900 hover:underline dark:text-zinc-50"
-            >
-              {headline}
-            </a>
-            {take ? (
-              <p className="mt-2 border-l-2 border-zinc-900 pl-3 text-sm text-zinc-600 dark:border-zinc-100 dark:text-zinc-300">
-                {take}
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        <label className="mb-4 block">
-          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            What do you want to say?
-          </span>
-          <textarea
-            value={shareNote}
-            onChange={(e) => setShareNote(e.target.value)}
-            required
-            rows={3}
-            placeholder="Add a short note for your friend…"
-            className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
-          />
-        </label>
-
-        <label className="mb-5 flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300">
-          <input
-            type="checkbox"
-            checked={becomeFriend}
-            onChange={(e) => setBecomeFriend(e.target.checked)}
-            className="mt-0.5 h-4 w-4 accent-zinc-900 dark:accent-zinc-100"
-          />
-          <span>
-            Make the recipient a friend so they can join the discussion
-          </span>
-        </label>
-
         <button
           type="button"
-          onClick={() => void share()}
-          disabled={sharing || !canShare}
-          className="w-full bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          onClick={onClose}
+          className="text-zinc-400 hover:text-zinc-700"
+          aria-label="Close"
         >
-          {sharing
-            ? "Preparing…"
-            : canUseWebShare()
-              ? "Share…"
-              : "Copy share message"}
+          ✕
         </button>
+      </div>
 
-        {result?.invite_url ? (
-          <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <p className="break-all text-xs text-zinc-500">{result.invite_url}</p>
-            <button
-              type="button"
-              onClick={() => void copyAgain()}
-              disabled={!canShare}
-              className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 disabled:opacity-40 dark:text-emerald-400"
-            >
-              {copied ? "Copied!" : "Copy again"}
-            </button>
-          </div>
+      <div className="mb-4 overflow-hidden border border-zinc-200 dark:border-zinc-800">
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt="" className="h-32 w-full object-cover" />
         ) : null}
-
-        <div className="mt-5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-          {showEmail ? (
-            <form onSubmit={sendEmail} className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                Or invite by email
-              </p>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="friend@email.com"
-                className="w-full border-b border-zinc-300 bg-transparent px-0 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
-              />
-              <div className="flex items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={
-                    sendingEmail || email.trim().length === 0 || !canShare
-                  }
-                  className="bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  {sendingEmail ? "Sending…" : "Send email"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowEmail(false)}
-                  className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowEmail(true)}
-              className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              Invite by email instead
-            </button>
-          )}
+        <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+          {sourceName ? (
+            <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+              {sourceName}
+            </p>
+          ) : null}
+          <a
+            href={articleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-0.5 block font-serif text-base font-semibold leading-snug text-zinc-900 hover:underline dark:text-zinc-50"
+          >
+            {headline}
+          </a>
+          {take ? (
+            <p className="mt-2 border-l-2 border-zinc-900 pl-3 text-sm text-zinc-600 dark:border-zinc-100 dark:text-zinc-300">
+              {take}
+            </p>
+          ) : null}
         </div>
       </div>
-    </div>,
-    document.body,
+
+      <label className="mb-4 block">
+        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          What do you want to say?
+        </span>
+        <textarea
+          value={shareNote}
+          onChange={(e) => setShareNote(e.target.value)}
+          required
+          rows={3}
+          placeholder="Add a short note for your friend…"
+          className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
+        />
+      </label>
+
+      <label className="mb-5 flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+        <input
+          type="checkbox"
+          checked={becomeFriend}
+          onChange={(e) => setBecomeFriend(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-zinc-900 dark:accent-zinc-100"
+        />
+        <span>
+          Make the recipient a friend so they can join the discussion
+        </span>
+      </label>
+
+      <button
+        type="button"
+        onClick={() => void share()}
+        disabled={sharing || !canShare}
+        className="w-full bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+      >
+        {sharing
+          ? "Preparing…"
+          : canUseWebShare()
+            ? "Share…"
+            : "Copy share message"}
+      </button>
+
+      {result?.invite_url ? (
+        <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <p className="break-all text-xs text-zinc-500">{result.invite_url}</p>
+          <button
+            type="button"
+            onClick={() => void copyAgain()}
+            disabled={!canShare}
+            className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 disabled:opacity-40 dark:text-emerald-400"
+          >
+            {copied ? "Copied!" : "Copy again"}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="mt-5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+        {showEmail ? (
+          <form onSubmit={sendEmail} className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+              Or invite by email
+            </p>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="friend@email.com"
+              className="w-full border-b border-zinc-300 bg-transparent px-0 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
+            />
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={
+                  sendingEmail || email.trim().length === 0 || !canShare
+                }
+                className="bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {sendingEmail ? "Sending…" : "Send email"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowEmail(false)}
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowEmail(true)}
+            className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            Invite by email instead
+          </button>
+        )}
+      </div>
+    </ModalShell>
   );
 }
