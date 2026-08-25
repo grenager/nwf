@@ -163,6 +163,29 @@ export function FeedClient() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
+      {/* Mobile has no top bar, so search rides at the top of the feed and
+          scrolls away with it. */}
+      {isSignedIn ? (
+        <Link
+          href="/search"
+          className="flex items-center gap-2 border border-zinc-200 px-3 py-2 text-sm text-zinc-500 sm:hidden dark:border-zinc-800 dark:text-zinc-400"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="h-4 w-4 shrink-0"
+            aria-hidden
+          >
+            <circle cx="9" cy="9" r="6" />
+            <path d="m14 14 4 4" strokeLinecap="round" />
+          </svg>
+          Search stories
+        </Link>
+      ) : null}
+
       {!isSignedIn && postItems.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">

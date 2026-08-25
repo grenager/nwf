@@ -131,6 +131,47 @@ function IconAlerts({
   );
 }
 
+function IconPeople({
+  className,
+  filled = false,
+}: {
+  className?: string;
+  filled?: boolean;
+}) {
+  if (filled) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+        aria-hidden
+      >
+        <circle cx="9" cy="8.5" r="3.5" />
+        <path d="M2.5 19.4c1.2-3.1 3.4-4.65 6.5-4.65s5.3 1.55 6.5 4.65a.75.75 0 0 1-.7 1.02H3.2a.75.75 0 0 1-.7-1.02Z" />
+        <path d="M16.5 6.25a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5Z" />
+        <path d="M16.2 13.5c2.4 0 4.15 1.25 5.25 3.7a.75.75 0 0 1-.68 1.05h-3.44c-.2-1.9-.86-3.48-1.96-4.75Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      className={className}
+      aria-hidden
+    >
+      <circle cx="9" cy="8.5" r="3.25" />
+      <path d="M3.25 19.25c1.1-2.9 3.05-4.35 5.75-4.35s4.65 1.45 5.75 4.35" strokeLinecap="round" />
+      <path d="M16.25 6.75a2.5 2.5 0 0 1 0 5" strokeLinecap="round" />
+      <path d="M17.5 14.15c1.7.35 2.95 1.5 3.75 3.45" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IconMe({
   className,
   filled = false,
@@ -284,7 +325,7 @@ export function Nav() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+      <header className="sticky top-0 z-40 hidden border-b border-zinc-200 bg-white/95 backdrop-blur sm:block dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <BrandLink
             className="text-zinc-900 dark:text-zinc-50"
@@ -360,51 +401,6 @@ export function Nav() {
               </>
             )}
           </div>
-
-          {/* Mobile: compact top actions; primary tabs live in the bottom bar. */}
-          <div className="flex items-center gap-1 sm:hidden">
-            {isGuest ? (
-              <Link
-                href="/signin"
-                className="bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-              >
-                Sign up
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/friends"
-                  aria-label="People"
-                  title="People"
-                  className="relative flex h-9 items-center px-2 text-sm font-medium text-slate-600 dark:text-slate-300"
-                >
-                  People
-                  {incomingCount > 0 ? (
-                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-[9999px] bg-emerald-600 px-1 text-[9px] font-bold text-white">
-                      {incomingCount > 99 ? "99+" : incomingCount}
-                    </span>
-                  ) : null}
-                </Link>
-                <Link
-                  href="/search"
-                  aria-label="Search"
-                  className="flex h-9 w-9 items-center justify-center text-slate-600 dark:text-slate-300"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="h-4 w-4"
-                  >
-                    <circle cx="9" cy="9" r="6" />
-                    <path d="m14 14 4 4" strokeLinecap="round" />
-                  </svg>
-                </Link>
-              </>
-            )}
-          </div>
         </div>
       </header>
 
@@ -413,7 +409,7 @@ export function Nav() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-4 items-stretch">
+        <div className="mx-auto grid max-w-lg grid-cols-5 items-stretch">
           <Link
             href="/"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
@@ -453,6 +449,19 @@ export function Nav() {
               +
             </span>
           </button>
+          <Link
+            href="/friends"
+            className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
+              tabActive("/friends")
+                ? "font-semibold text-zinc-900 dark:text-zinc-50"
+                : "font-medium text-zinc-500"
+            }`}
+          >
+            <TabIcon badge={incomingCount}>
+              <IconPeople className="h-5 w-5" filled={tabActive("/friends")} />
+            </TabIcon>
+            People
+          </Link>
           {isGuest ? (
             <Link
               href="/signin"
