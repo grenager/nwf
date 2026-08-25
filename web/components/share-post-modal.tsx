@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import type { InvitationCreateResult, UUID } from "@/lib/types";
 import { useEffect, useState, type FormEvent } from "react";
 import { ModalShell } from "@/components/modal-shell";
+import { canUseWebShare } from "@/lib/share";
 
 const DEFAULT_SHARE_NOTE =
   "I'm using NewsWithFriends to discuss articles privately with friends. I'd like to invite you to my private discussion about this article.";
@@ -18,17 +19,6 @@ interface SharePostModalProps {
   sourceName: string | null;
   take: string | null;
   onClose: () => void;
-}
-
-function canUseWebShare(): boolean {
-  return (
-    typeof navigator !== "undefined" &&
-    typeof navigator.share === "function" &&
-    // Prefer native share tray on coarse pointers (phones/tablets).
-    (typeof window === "undefined" ||
-      window.matchMedia("(pointer: coarse)").matches ||
-      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent))
-  );
 }
 
 function composeShareMessage(note: string, inviteUrl: string): string {
