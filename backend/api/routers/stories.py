@@ -14,6 +14,7 @@ from sqlalchemy.sql import ColumnElement
 
 from api.deps import CurrentUser, OptionalUser, SessionDep
 from api.friends import (
+    accepted_friend_ids,
     aggregate_engagement,
     display_name,
     friend_activity_by_story,
@@ -32,7 +33,7 @@ from api.schemas import (
     StoryWithStatus,
 )
 from core.attribution import resolve_attribution
-from core.models import Source, Story, StoryStatus
+from core.models import Post, PostParticipant, Source, Story, StoryStatus
 
 router = APIRouter(prefix="/stories", tags=["stories"])
 
@@ -84,14 +85,39 @@ async def title_search(
     q: str = Query(min_length=1),
     limit: int = Query(default=50, le=200, ge=1),
 ) -> StoryList:
-    """Search recent article titles, ranked by a simple match-count heuristic."""
+    """Search titles of posts the viewer can see, by a match-count heuristic.
+
+    Restricted to stories someone actually posted to the viewer. The stories
+    table still holds articles ingested by the retired discovery scraper, and
+    those have no post to open and no conversation to read — surfacing them
+    makes search look like it is searching the wrong corpus.
+    """
     terms: list[str] = [t for t in q.lower().split() if t]
     if not terms:
         return StoryList(items=[], total=0, limit=limit, offset=0)
 
+    friends: list[uuid.UUID] = await accepted_friend_ids(session, user.id)
+    participant_filter: list[uuid.UUID] = [user.id, *friends]
+    # Mirrors the feed's visibility rule: the viewer's own posts, plus posts
+    # they or a friend participate in.
+    has_visible_post = (
+        select(Post.id)
+        .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
+        .where(
+            Post.story_id == Story.id,
+            or_(
+                Post.author_id == user.id,
+                PostParticipant.user_id.in_(participant_filter),
+            ),
+        )
+        .exists()
+    )
+
     headline = func.lower(Story.full_headline)
     conds: list[ColumnElement[bool]] = [headline.like(f"%{t}%") for t in terms]
-    base = select(Story).where(or_(*conds), Story.archived.is_(False))
+    base = select(Story).where(
+        or_(*conds), Story.archived.is_(False), has_visible_post
+    )
     # Scan a recent candidate window, then rank in Python by match count.
     stmt = (
         _with_status_columns(base, user.id)
@@ -123,7 +149,7 @@ async def title_search(
 
     if story_ids:
         post_by_story = await primary_post_ids_by_story(
-            session, user.id, story_ids
+            session, user.id, story_ids, friend_ids=friends
         )
         for item in items:
             item.post_id = post_by_story.get(item.id)

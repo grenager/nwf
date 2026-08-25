@@ -67,6 +67,10 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
 
     with (
         patch(
+            "api.routers.stories.accepted_friend_ids",
+            AsyncMock(return_value=[]),
+        ),
+        patch(
             "api.routers.stories.friend_stars_by_story",
             mock_friend_stars,
         ),
@@ -88,7 +92,7 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
 
 
 @pytest.mark.asyncio
-async def test_title_search_leaves_post_id_null_when_none_visible() -> None:
+async def test_title_search_filters_to_stories_with_a_visible_post() -> None:
     from core.models import Story, StoryKind
 
     user_id = uuid.uuid4()
@@ -121,6 +125,10 @@ async def test_title_search_leaves_post_id_null_when_none_visible() -> None:
 
     with (
         patch(
+            "api.routers.stories.accepted_friend_ids",
+            AsyncMock(return_value=[]),
+        ),
+        patch(
             "api.routers.stories.friend_stars_by_story",
             mock_friend_stars,
         ),
@@ -138,3 +146,9 @@ async def test_title_search_leaves_post_id_null_when_none_visible() -> None:
 
     assert len(result.items) == 1
     assert result.items[0].post_id is None
+
+    # A story with no post the viewer can open should never reach the ranking
+    # step: the query filters those out before they are scored.
+    sql: str = str(session.last_stmt)
+    assert "EXISTS" in sql.upper()
+    assert "posts" in sql
