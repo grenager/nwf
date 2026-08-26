@@ -18,6 +18,13 @@ body {
 body {
   @apply bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
   font-family: var(--font-sans);
+  /* Below lg, <main> no longer clips horizontal overflow itself (see
+     (app)/layout.tsx) so the document can be the one that scrolls
+     vertically on mobile Safari; guard against horizontal overflow here
+     instead. Overflow on <body> propagates to the viewport rather than
+     making body its own scroll container, so this doesn't reintroduce
+     the inner-scroller problem. */
+  overflow-x: hidden;
 }
 
 .font-serif {
