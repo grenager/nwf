@@ -12,12 +12,17 @@
 
 html,
 body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   @apply bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
   font-family: var(--font-sans);
+  /* Guards against horizontal overflow now that <main> below lg no
+     longer clips it itself (see (app)/layout.tsx). Safe here: overflow
+     on <body> propagates to the viewport instead of making body its
+     own scroll container. */
+  overflow-x: hidden;
 }
 
 .font-serif {
