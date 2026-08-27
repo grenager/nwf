@@ -53,9 +53,13 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        # Frontend-only PR previews point at this production API rather than
-        # deploying their own backend, so allow that Railway naming pattern.
-        allow_origin_regex=r"^https://nwf-web-nwf-pr-\d+\.up\.railway\.app$",
+        # PR previews now always get their own nwf-api instance (Railway
+        # deploys one per environment because NEXT_PUBLIC_API_URL is a
+        # ${{nwf-api.RAILWAY_PUBLIC_DOMAIN}} reference variable, which pulls
+        # in nwf-api as an implicit dependency even for frontend-only PRs).
+        # Match Railway's actual PR-environment domain shape, e.g.
+        # nwf-web-pr-049002-52.up.railway.app.
+        allow_origin_regex=r"^https://nwf-web-pr-\d+-\d+\.up\.railway\.app$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
