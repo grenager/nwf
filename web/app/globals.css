@@ -29,6 +29,18 @@ body {
   font-family: var(--font-serif);
 }
 
+/* iOS Safari zooms the whole page on focus into any input/textarea/select
+   rendered under 16px, regardless of viewport-meta settings. Below sm, force
+   form controls to 16px so focusing one doesn't zoom the page (their
+   Tailwind text-sm/text-xs sizing is left alone above that breakpoint). */
+@media (max-width: 639px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
