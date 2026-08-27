@@ -57,9 +57,12 @@ def create_app() -> FastAPI:
         # deploys one per environment because NEXT_PUBLIC_API_URL is a
         # ${{nwf-api.RAILWAY_PUBLIC_DOMAIN}} reference variable, which pulls
         # in nwf-api as an implicit dependency even for frontend-only PRs).
-        # Match Railway's actual PR-environment domain shape, e.g.
-        # nwf-web-pr-049002-52.up.railway.app.
-        allow_origin_regex=r"^https://nwf-web-pr-\d+-\d+\.up\.railway\.app$",
+        # Railway's PR-environment naming has already changed shape once
+        # (nwf-web-nwf-pr-<n> -> nwf-web-pr-<id>-<n>), so match any
+        # nwf-web-<label> subdomain rather than a specific segment structure
+        # - DNS labels can only contain letters/digits/hyphens, so this can't
+        # be tricked into matching an unrelated host.
+        allow_origin_regex=r"^https://nwf-web-[a-z0-9-]+\.up\.railway\.app$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
