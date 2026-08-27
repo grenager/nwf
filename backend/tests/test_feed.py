@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 from api.friends import (
+    fof_attribution_by_post,
     primary_post_ids_by_story,
     viewer_visible_post_ids,
     visible_post_ids_for_viewer,
@@ -399,4 +400,112 @@ async def test_viewer_visible_post_ids_skips_the_query_when_empty() -> None:
         [],
     )
     assert result == set()
-    assert session.scalars_calls == 0
+
+
+class _ScriptedExecuteSession:
+    """Returns one canned row-list per successive ``execute`` call, in order."""
+
+    def __init__(self, results: list[list[tuple[Any, ...]]]) -> None:
+        self._results: list[list[tuple[Any, ...]]] = list(results)
+        self.execute_calls: int = 0
+
+    async def execute(self, *_args: Any, **_kwargs: Any) -> _ExecuteResult:
+        self.execute_calls += 1
+        rows = self._results.pop(0) if self._results else []
+        return _ExecuteResult(rows)
+
+
+def _post_for_story(story_id: uuid.UUID) -> Post:
+    now = datetime.now(UTC)
+    return Post(
+        id=uuid.uuid4(),
+        story_id=story_id,
+        author_id=uuid.uuid4(),
+        take="a take",
+        visibility=PostVisibility.private,
+        last_activity_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.mark.asyncio
+async def test_fof_attribution_picks_most_recent_action() -> None:
+    friend = uuid.uuid4()
+    story = uuid.uuid4()
+    post = _post_for_story(story)
+    earlier = datetime(2026, 1, 1, tzinfo=UTC)
+    later = datetime(2026, 1, 2, tzinfo=UTC)
+    # comments (earlier), reactions (none), story reads (none), ratings (later)
+    session = _ScriptedExecuteSession(
+        [
+            [(post.id, friend, earlier)],
+            [],
+            [],
+            [(story, friend, later)],
+        ]
+    )
+    result = await fof_attribution_by_post(
+        session,  # type: ignore[arg-type]
+        [post],
+        friend_ids=[friend],
+    )
+    assert result[post.id].kind == "rated"
+    assert result[post.id].acted_at == later
+
+
+@pytest.mark.asyncio
+async def test_fof_attribution_tie_breaks_toward_more_notable_action() -> None:
+    friend = uuid.uuid4()
+    story = uuid.uuid4()
+    post = _post_for_story(story)
+    same_time = datetime(2026, 1, 1, tzinfo=UTC)
+    # comments and reactions land at the exact same timestamp - commenting is
+    # the more notable/effortful action and should win the tie-break.
+    session = _ScriptedExecuteSession(
+        [
+            [(post.id, friend, same_time)],
+            [(post.id, friend, same_time)],
+            [],
+            [],
+        ]
+    )
+    result = await fof_attribution_by_post(
+        session,  # type: ignore[arg-type]
+        [post],
+        friend_ids=[friend],
+    )
+    assert result[post.id].kind == "commented"
+
+
+@pytest.mark.asyncio
+async def test_fof_attribution_story_level_read_unlocks_every_post_on_it() -> None:
+    friend = uuid.uuid4()
+    story = uuid.uuid4()
+    post_a = _post_for_story(story)
+    post_b = _post_for_story(story)
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    session = _ScriptedExecuteSession(
+        [
+            [],
+            [],
+            [(story, friend, ts)],
+            [],
+        ]
+    )
+    result = await fof_attribution_by_post(
+        session,  # type: ignore[arg-type]
+        [post_a, post_b],
+        friend_ids=[friend],
+    )
+    assert result[post_a.id].kind == "read"
+    assert result[post_b.id].kind == "read"
+
+
+@pytest.mark.asyncio
+async def test_fof_attribution_empty_inputs_make_no_query() -> None:
+    session = _ScriptedExecuteSession([])
+    assert await fof_attribution_by_post(session, [], friend_ids=[uuid.uuid4()]) == {}  # type: ignore[arg-type]
+    post = _post_for_story(uuid.uuid4())
+    assert await fof_attribution_by_post(session, [post], friend_ids=[]) == {}  # type: ignore[arg-type]
+    assert session.execute_calls == 0

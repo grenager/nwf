@@ -78,6 +78,19 @@ class FriendEngagementOut(BaseModel):
     readers: list[FriendMiniOut] = Field(default_factory=list)
 
 
+FofActionKind = Literal["commented", "rated", "reacted", "read"]
+
+
+class FofReasonOut(BaseModel):
+    """Why a post the viewer has no direct connection to appears in their feed."""
+
+    friend_id: uuid.UUID
+    friend_name: str
+    friend_image_url: str | None = None
+    action: FofActionKind
+    acted_at: datetime
+
+
 class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
@@ -371,6 +384,10 @@ class FeedCardOut(BaseModel):
     posts: list[PostOut] = Field(default_factory=list)
     score: float = 0.0
     unread_reply_count: int = 0
+    # Set only when the viewer has no other path to this post (not the author,
+    # not a direct friend of the author, not already a participant) - explains
+    # why a stranger's post is showing up, via the friend who engaged with it.
+    fof_reason: FofReasonOut | None = None
 
 
 class FeedOut(BaseModel):

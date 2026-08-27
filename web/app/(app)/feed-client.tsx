@@ -98,6 +98,7 @@ export function FeedClient() {
         ],
         score: Number.MAX_SAFE_INTEGER,
         unread_reply_count: 0,
+        fof_reason: null,
       };
       setData((prev) => {
         if (!prev) {
