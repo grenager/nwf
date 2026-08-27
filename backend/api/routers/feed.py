@@ -21,6 +21,7 @@ from api.friends import (
     aggregate_engagement,
     audience_label,
     display_name,
+    fof_attribution_by_post,
     friend_activity_by_story,
     friend_profiles_map,
     ratings_for_users_by_story,
@@ -33,6 +34,7 @@ from api.schemas import (
     CommentOut,
     FeedCardOut,
     FeedOut,
+    FofReasonOut,
     FriendEngagementOut,
     FriendMiniOut,
     PostOut,
@@ -103,6 +105,45 @@ async def _participants_by_post(
     out: dict[uuid.UUID, list[uuid.UUID]] = {}
     for post_id, user_id in rows:
         out.setdefault(post_id, []).append(user_id)
+    return out
+
+
+async def _fof_reasons_by_post(
+    session: SessionDep,
+    posts: list[Post],
+    *,
+    viewer_id: uuid.UUID,
+    friends: list[uuid.UUID],
+    participants_by_post: dict[uuid.UUID, list[uuid.UUID]],
+    profiles: dict[uuid.UUID, Profile],
+) -> dict[uuid.UUID, FofReasonOut]:
+    """Attribution tag for posts the viewer has no other path to: not the
+    author, not a direct friend of the author, not already a participant.
+    Everything else is already explained by the byline, so skip those - it's
+    also the expensive case to compute, keep it scoped to what needs it."""
+    friend_set = set(friends)
+    stranger_posts = [
+        p
+        for p in posts
+        if p.author_id != viewer_id
+        and p.author_id not in friend_set
+        and viewer_id not in participants_by_post.get(p.id, [])
+    ]
+    actions = await fof_attribution_by_post(
+        session, stranger_posts, friend_ids=friends
+    )
+    out: dict[uuid.UUID, FofReasonOut] = {}
+    for post_id, action in actions.items():
+        profile = profiles.get(action.friend_id)
+        if profile is None:
+            continue
+        out[post_id] = FofReasonOut(
+            friend_id=action.friend_id,
+            friend_name=display_name(profile),
+            friend_image_url=profile.image_url,
+            action=action.kind,
+            acted_at=action.acted_at,
+        )
     return out
 
 
@@ -500,6 +541,7 @@ async def get_feed(
     status_by_story: dict[uuid.UUID, StoryStatus] = {}
     activity: dict[uuid.UUID, StoryActivity] = {}
     profiles: dict[uuid.UUID, Profile] = {}
+    fof_reasons: dict[uuid.UUID, FofReasonOut] = {}
     unread_reply_counts: dict[uuid.UUID, int] = {}
     last_seen_by_post: dict[uuid.UUID, datetime] = {}
     if viewer_id is not None and story_ids:
@@ -517,6 +559,14 @@ async def get_feed(
         )
         profiles = await friend_profiles_map(
             session, viewer_id, friend_ids=friends
+        )
+        fof_reasons = await _fof_reasons_by_post(
+            session,
+            ordered_posts,
+            viewer_id=viewer_id,
+            friends=friends,
+            participants_by_post=participants_by_post,
+            profiles=profiles,
         )
         participant_post_ids: set[uuid.UUID] = {
             pid
@@ -609,6 +659,7 @@ async def get_feed(
                 posts=[out],
                 score=0.0,
                 unread_reply_count=out.unread_reply_count,
+                fof_reason=fof_reasons.get(post.id),
             )
         )
 

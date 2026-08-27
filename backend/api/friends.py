@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, bindparam, func, or_, select, text
+from sqlalchemy import ColumnElement, Select, bindparam, exists, func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,7 @@ from core.models import (
     InvitationStatus,
     Post,
     PostParticipant,
+    PostReaction,
     PostVisibility,
     Profile,
     StoryRating,
@@ -635,6 +638,113 @@ async def friend_profiles_map(
     return {p.id: p for p in rows.all()}
 
 
+FofActionKind = Literal["commented", "rated", "reacted", "read"]
+
+# Tie-break priority when a post has actions from multiple friends at the same
+# timestamp; primary sort is always most-recent-first.
+_FOF_ACTION_PRIORITY: dict[FofActionKind, int] = {
+    "commented": 0,  # most effortful/notable
+    "rated": 1,
+    "reacted": 2,
+    "read": 3,  # lightest signal
+}
+
+
+@dataclass(frozen=True)
+class FofAction:
+    """A direct friend's engagement that explains why a post is visible."""
+
+    friend_id: uuid.UUID
+    kind: FofActionKind
+    acted_at: datetime
+
+
+async def fof_attribution_by_post(
+    session: AsyncSession,
+    posts: list[Post],
+    *,
+    friend_ids: Sequence[uuid.UUID],
+) -> dict[uuid.UUID, FofAction]:
+    """Most-recent (tie-break: most notable) friend action that explains why
+    each of `posts` is visible to the viewer.
+
+    Callers should pre-filter `posts` to ones the viewer has no other path to
+    (not the author, not a direct friend of the author, not a participant) -
+    that's the only case that needs explaining, and the only case this is
+    cheap to run for.
+    """
+    if not posts or not friend_ids:
+        return {}
+
+    post_ids = [p.id for p in posts]
+    story_to_posts: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for p in posts:
+        story_to_posts[p.story_id].append(p.id)
+    story_ids = list(story_to_posts)
+
+    candidates: dict[uuid.UUID, list[FofAction]] = defaultdict(list)
+
+    comment_rows = (
+        await session.execute(
+            select(Comment.post_id, Comment.user_id, Comment.created_at).where(
+                Comment.post_id.in_(post_ids), Comment.user_id.in_(friend_ids)
+            )
+        )
+    ).all()
+    for post_id, uid, ts in comment_rows:
+        candidates[post_id].append(FofAction(uid, "commented", ts))
+
+    reaction_rows = (
+        await session.execute(
+            select(
+                PostReaction.post_id, PostReaction.user_id, PostReaction.updated_at
+            ).where(
+                PostReaction.post_id.in_(post_ids),
+                PostReaction.user_id.in_(friend_ids),
+            )
+        )
+    ).all()
+    for post_id, uid, ts in reaction_rows:
+        candidates[post_id].append(FofAction(uid, "reacted", ts))
+
+    read_rows = (
+        await session.execute(
+            select(
+                StoryStatus.story_id,
+                StoryStatus.user_id,
+                func.coalesce(StoryStatus.read_at, StoryStatus.updated_at),
+            ).where(
+                StoryStatus.story_id.in_(story_ids),
+                StoryStatus.read.is_(True),
+                StoryStatus.user_id.in_(friend_ids),
+            )
+        )
+    ).all()
+    for story_id, uid, ts in read_rows:
+        for post_id in story_to_posts[story_id]:
+            candidates[post_id].append(FofAction(uid, "read", ts))
+
+    rating_rows = (
+        await session.execute(
+            select(
+                StoryRating.story_id, StoryRating.user_id, StoryRating.updated_at
+            ).where(
+                StoryRating.story_id.in_(story_ids),
+                StoryRating.user_id.in_(friend_ids),
+            )
+        )
+    ).all()
+    for story_id, uid, ts in rating_rows:
+        for post_id in story_to_posts[story_id]:
+            candidates[post_id].append(FofAction(uid, "rated", ts))
+
+    best: dict[uuid.UUID, FofAction] = {}
+    for post_id, actions in candidates.items():
+        actions.sort(key=lambda a: (a.acted_at, -_FOF_ACTION_PRIORITY[a.kind]))
+        best[post_id] = actions[-1]
+    return best
+
+
 def top_readers(
     read_ids: set[uuid.UUID],
     profiles: dict[uuid.UUID, Profile],
@@ -670,6 +780,40 @@ async def post_participant_ids(
     return list(rows.all())
 
 
+def _fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
+    """True when any of `user_ids` engaged with Post (via post_participants /
+    post_reactions) or its Story (via story_statuses.read / story_ratings).
+
+    Story-level engagement (reading, rating) unlocks every Post tied to that
+    story_id, not just one - a friend reading/rating an article is vouching
+    for the article, not for any one person's take on it, and there's often
+    no single post to narrow to (e.g. a friend who read but never posted or
+    replied). Post-level engagement (replying, reacting) stays scoped to that
+    one post. Uses EXISTS (a semi-join) rather than outerjoin so combining
+    four engagement types doesn't fan out result rows.
+    """
+    ids = list(user_ids)
+    return or_(
+        exists().where(
+            PostParticipant.post_id == Post.id,
+            PostParticipant.user_id.in_(ids),
+        ),
+        exists().where(
+            PostReaction.post_id == Post.id,
+            PostReaction.user_id.in_(ids),
+        ),
+        exists().where(
+            StoryStatus.story_id == Post.story_id,
+            StoryStatus.read.is_(True),
+            StoryStatus.user_id.in_(ids),
+        ),
+        exists().where(
+            StoryRating.story_id == Post.story_id,
+            StoryRating.user_id.in_(ids),
+        ),
+    )
+
+
 async def can_see_post(
     session: AsyncSession,
     viewer_id: uuid.UUID | None,
@@ -678,7 +822,9 @@ async def can_see_post(
     friend_ids: list[uuid.UUID] | None = None,
     participant_ids: list[uuid.UUID] | None = None,
 ) -> bool:
-    """True if viewer may see the post (participant or FoF of participant)."""
+    """True if viewer may see the post (author, participant, or a direct
+    friend engaged with the post/its story - reply, reaction, rating, or
+    marking the story read)."""
     if viewer_id is None:
         return False
     if post.author_id == viewer_id:
@@ -696,7 +842,28 @@ async def can_see_post(
         else await accepted_friend_ids(session, viewer_id)
     )
     friend_set = set(friends)
-    return any(pid in friend_set for pid in participants)
+    if any(pid in friend_set for pid in participants):
+        return True
+    if not friends:
+        return False
+    stmt = select(
+        or_(
+            exists().where(
+                PostReaction.post_id == post.id,
+                PostReaction.user_id.in_(friends),
+            ),
+            exists().where(
+                StoryStatus.story_id == post.story_id,
+                StoryStatus.read.is_(True),
+                StoryStatus.user_id.in_(friends),
+            ),
+            exists().where(
+                StoryRating.story_id == post.story_id,
+                StoryRating.user_id.in_(friends),
+            ),
+        )
+    )
+    return bool(await session.scalar(stmt))
 
 
 def audience_label(visibility: PostVisibility, participant_count: int) -> str:
@@ -718,14 +885,18 @@ async def visible_post_ids_for_viewer(
 ) -> list[uuid.UUID]:
     """Candidate post ids the viewer may see, newest-posted first.
 
-    Authenticated users see private posts where they are a participant or a
-    friend of any participant. Guests see nothing.
-    Sorted by ``created_at`` so a new reply does not bump a post to the top.
+    Authenticated users see private posts where they are the author or a
+    direct friend engaged with the post or its story (participant, reaction,
+    reading, or rating). Guests see nothing.
+    Sorted by ``created_at`` so a new reply - or a friend's later engagement -
+    does not bump a post to the top.
 
     ``since_days`` keeps the common case cheap by only scanning recent posts. If
     that window yields fewer than ``min_results`` posts, the lookback widens to
     ``max_since_days`` (``None`` for no cutoff) so a quiet week still produces a
-    full feed instead of a near-empty one.
+    full feed instead of a near-empty one. Note this windows on the post's own
+    ``created_at``, not on when a friend engaged with it - a friend engaging
+    with a post outside the lookback window does not resurrect it.
     """
     if viewer_id is None:
         return []
@@ -738,23 +909,15 @@ async def visible_post_ids_for_viewer(
 
     def query(since: datetime | None) -> Select[tuple[uuid.UUID]]:
         participant_filter = [viewer_id, *friends]
-        stmt = (
-            select(Post.id)
-            .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
-            .where(
-                or_(
-                    Post.author_id == viewer_id,
-                    PostParticipant.user_id.in_(participant_filter),
-                ),
-            )
+        stmt = select(Post.id).where(
+            or_(
+                Post.author_id == viewer_id,
+                _fof_engagement_clause(participant_filter),
+            ),
         )
         if since is not None:
             stmt = stmt.where(Post.created_at >= since)
-        return (
-            stmt.group_by(Post.id, Post.created_at)
-            .order_by(Post.created_at.desc())
-            .limit(limit)
-        )
+        return stmt.order_by(Post.created_at.desc()).limit(limit)
 
     now = datetime.now(UTC)
     recent = await session.scalars(query(now - timedelta(days=since_days)))
@@ -794,16 +957,13 @@ async def viewer_visible_post_ids(
     )
     participant_filter: list[uuid.UUID] = [viewer_id, *friends]
     rows = await session.scalars(
-        select(Post.id)
-        .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
-        .where(
+        select(Post.id).where(
             Post.id.in_(post_ids),
             or_(
                 Post.author_id == viewer_id,
-                PostParticipant.user_id.in_(participant_filter),
+                _fof_engagement_clause(participant_filter),
             ),
         )
-        .group_by(Post.id)
     )
     return set(rows.all())
 
@@ -828,15 +988,13 @@ async def primary_post_ids_by_story(
     rows = (
         await session.execute(
             select(Post.id, Post.story_id, Post.created_at)
-            .outerjoin(PostParticipant, PostParticipant.post_id == Post.id)
             .where(
                 Post.story_id.in_(story_ids),
                 or_(
                     Post.author_id == viewer_id,
-                    PostParticipant.user_id.in_(participant_filter),
+                    _fof_engagement_clause(participant_filter),
                 ),
             )
-            .group_by(Post.id, Post.story_id, Post.created_at)
             .order_by(Post.created_at.desc())
         )
     ).all()

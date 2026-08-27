@@ -43,6 +43,16 @@ export interface FriendEngagement {
   readers: FriendMini[];
 }
 
+export type FofActionKind = "commented" | "rated" | "reacted" | "read";
+
+export interface FofReason {
+  friend_id: UUID;
+  friend_name: string;
+  friend_image_url: string | null;
+  action: FofActionKind;
+  acted_at: string;
+}
+
 export interface Story {
   id: UUID;
   article_url: string;
@@ -235,6 +245,7 @@ export interface FeedCard {
   posts: Post[];
   score: number;
   unread_reply_count: number;
+  fof_reason: FofReason | null;
 }
 
 export interface FeedPayload {

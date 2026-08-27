@@ -49,3 +49,64 @@ def test_post_create_schema_has_no_visibility_field() -> None:
 def test_post_update_schema_has_no_visibility_field() -> None:
     fields = PostUpdate.model_fields
     assert "visibility" not in fields
+
+
+class _ScalarBoolSession:
+    """Fake session whose ``scalar`` returns a fixed value; records calls."""
+
+    def __init__(self, value: bool) -> None:
+        self._value = value
+        self.scalar_calls: int = 0
+
+    async def scalar(self, *_args: object, **_kwargs: object) -> bool:
+        self.scalar_calls += 1
+        return self._value
+
+
+@pytest.mark.asyncio
+async def test_can_see_post_true_when_friend_engaged_via_reaction_read_or_rating() -> None:
+    post = _post()
+    viewer = uuid.uuid4()
+    friend = uuid.uuid4()
+    session = _ScalarBoolSession(True)
+    result = await can_see_post(
+        session,  # type: ignore[arg-type]
+        viewer,
+        post,
+        friend_ids=[friend],
+        participant_ids=[],
+    )
+    assert result is True
+    assert session.scalar_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_can_see_post_false_when_no_friend_engagement_found() -> None:
+    post = _post()
+    viewer = uuid.uuid4()
+    friend = uuid.uuid4()
+    session = _ScalarBoolSession(False)
+    result = await can_see_post(
+        session,  # type: ignore[arg-type]
+        viewer,
+        post,
+        friend_ids=[friend],
+        participant_ids=[],
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_can_see_post_skips_engagement_query_with_no_friends() -> None:
+    post = _post()
+    viewer = uuid.uuid4()
+    session = _ScalarBoolSession(True)
+    result = await can_see_post(
+        session,  # type: ignore[arg-type]
+        viewer,
+        post,
+        friend_ids=[],
+        participant_ids=[],
+    )
+    assert result is False
+    assert session.scalar_calls == 0
