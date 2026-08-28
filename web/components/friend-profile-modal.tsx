@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { InviteButton } from "@/components/invite-button";
 import { ModalShell } from "@/components/modal-shell";
-import { ProfileMenu } from "@/components/profile-menu";
+import { ProfileMenu, type ProfileMenuItem } from "@/components/profile-menu";
 import { SettingsModal } from "@/components/settings-modal";
 
 interface FriendProfileModalProps {
@@ -188,13 +188,56 @@ export function FriendProfileModal({
     }
   }
 
+  async function addFriend(): Promise<void> {
+    try {
+      await api.createConnection(friendId);
+      notify("Friend request sent", "success");
+      await load();
+      onUpdated?.();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Failed to add friend", "error");
+    }
+  }
+
+  async function removeFriend(): Promise<void> {
+    try {
+      await api.deleteConnection(friendId);
+      notify("Friend removed", "info");
+      await load();
+      onUpdated?.();
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : "Failed to remove friend",
+        "error",
+      );
+    }
+  }
+
+  const menuItems: ProfileMenuItem[] = profile
+    ? [
+        ...(profile.can_edit ? [{ label: "Edit profile", onSelect: startEdit }] : []),
+        ...(!isSelf
+          ? [
+              {
+                label: profile.is_friend ? "Remove friend" : "Add friend",
+                onSelect: () => void (profile.is_friend ? removeFriend() : addFriend()),
+              },
+            ]
+          : []),
+        ...(isSelf
+          ? [{ label: "Settings", onSelect: () => setSettingsOpen(true) }]
+          : []),
+        ...(onSignOut ? [{ label: "Sign out", onSelect: onSignOut }] : []),
+      ]
+    : [];
+
   const body: ReactNode =
     loading || !profile ? (
       <div className={isPage ? "py-16 text-center text-slate-400" : "p-10 text-center text-slate-400"}>
         Loading…
       </div>
     ) : (
-      <div className={isPage ? "py-4 sm:py-6" : "max-h-[85vh] overflow-y-auto p-6"}>
+      <div className={isPage ? "py-4 sm:py-6" : "p-6"}>
         <div className="flex items-center gap-4">
           {(editing ? form.image_url : profile.image_url) ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -256,26 +299,9 @@ export function FriendProfileModal({
               </p>
             </div>
           )}
-          {!editing ? (
-            <ProfileMenu
-              items={[
-                ...(profile.can_edit
-                  ? [{ label: "Edit profile", onSelect: startEdit }]
-                  : []),
-                ...(isSelf
-                  ? [
-                      {
-                        label: "Settings",
-                        onSelect: () => setSettingsOpen(true),
-                      },
-                    ]
-                  : []),
-                ...(onSignOut
-                  ? [{ label: "Sign out", onSelect: onSignOut }]
-                  : []),
-              ]}
-            />
-          ) : null}
+          {/* In the modal variant this lives in the header bar instead, next
+              to the close button, so the two controls don't collide. */}
+          {!editing && isPage ? <ProfileMenu items={menuItems} /> : null}
         </div>
 
         {isSelf && !editing ? (
@@ -389,16 +415,19 @@ export function FriendProfileModal({
       label="Profile"
       padded={false}
     >
-      <div className="relative min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+      <div className="flex shrink-0 items-center justify-end gap-1 border-b border-slate-200 px-1 pb-1 pt-[calc(0.25rem+env(safe-area-inset-top))] sm:px-3 sm:py-1.5 dark:border-slate-800">
+        {!editing && !loading && profile ? <ProfileMenu items={menuItems} /> : null}
         {onClose ? (
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute right-2 top-[calc(0.5rem+env(safe-area-inset-top))] z-10 flex h-11 w-11 items-center justify-center text-xl text-slate-500 hover:text-slate-900 sm:right-3 sm:top-3 sm:h-8 sm:w-8 dark:hover:text-slate-100"
+            className="flex h-11 w-11 items-center justify-center text-xl text-slate-500 hover:text-slate-900 sm:h-9 sm:w-9 sm:text-lg dark:hover:text-slate-100"
           >
             ✕
           </button>
         ) : null}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {body}
       </div>
       {settings}
