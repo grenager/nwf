@@ -1,16 +1,29 @@
-"use client";
-
 import { FriendsSidebar } from "@/components/friends-sidebar";
 import { Nav } from "@/components/nav";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ReactNode } from "react";
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
   modal,
 }: {
   children: ReactNode;
   modal: ReactNode;
 }) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <>
+        {children}
+        {modal}
+      </>
+    );
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-white lg:h-screen lg:overflow-hidden dark:bg-zinc-950">
       <Nav />
