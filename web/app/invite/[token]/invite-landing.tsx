@@ -16,7 +16,6 @@ import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import type { InvitePreview, Post, Profile } from "@/lib/types";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 function InviteHeader() {
@@ -50,7 +49,6 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const { session, user } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
-  const router = useRouter();
   const autoAcceptStarted = useRef<boolean>(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -140,7 +138,11 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
           notify(`You're now friends with ${inviterName}`, "success");
           const destination: string =
             result.post_id !== null ? `/post/${result.post_id}` : "/";
-          router.replace(destination);
+          // A soft client-side transition here lands on /post/[id], which
+          // sits under a layout with an @modal parallel slot this page has
+          // never rendered — Next 15 can 404 instead of falling back to
+          // that slot's default.tsx. A full navigation sidesteps it.
+          window.location.href = destination;
           return true;
         }
         notify(result.message, "info");
@@ -156,7 +158,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         setAccepting(false);
       }
     },
-    [accepting, notify, preview, router, token],
+    [accepting, notify, preview, token],
   );
 
   // Auto-friend email invites and share links that opted into friendship.
