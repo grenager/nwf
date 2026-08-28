@@ -69,13 +69,24 @@ class FriendMiniOut(BaseModel):
     image_url: str | None = None
 
 
+class StoryReaderOut(BaseModel):
+    """A reader avatar for a story, with the timestamp of their most recent
+    read - lets the client show "reading now" (within the live window) vs.
+    settled "read" styling for the same entry, without a second field."""
+
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    last_read_at: datetime
+
+
 class FriendEngagementOut(BaseModel):
     """Counts of *friends* (accepted connections) who engaged with a story/event."""
 
     read: int = 0
     commented: int = 0
     # A few reader avatars (subset of `read`) for display.
-    readers: list[FriendMiniOut] = Field(default_factory=list)
+    readers: list[StoryReaderOut] = Field(default_factory=list)
 
 
 FofActionKind = Literal["commented", "rated", "reacted", "read"]
@@ -138,6 +149,13 @@ class StoryCreate(BaseModel):
 class ReadMark(BaseModel):
     story_id: uuid.UUID
     read: bool = True
+
+
+class ReadingPing(BaseModel):
+    """Refresh the live 'reading now' timestamp. Fired on every open, unlike
+    ReadMark which only matters on first-ever read."""
+
+    story_id: uuid.UUID
 
 
 class StarMark(BaseModel):
@@ -355,7 +373,7 @@ class PostOut(ORMModel):
     rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
-    readers: list[FriendMiniOut] = Field(default_factory=list)
+    readers: list[StoryReaderOut] = Field(default_factory=list)
     unread_replies_for_viewer: bool = False
     # Replies after the viewer's per-thread read cursor (excludes own).
     unread_reply_count: int = 0

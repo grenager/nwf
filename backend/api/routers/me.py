@@ -15,6 +15,7 @@ from api.schemas import (
     PreferencesUpdate,
     ProfileOut,
     RatingSet,
+    ReadingPing,
     ReadMark,
     StarMark,
     StoryList,
@@ -80,6 +81,26 @@ async def mark_read(
                 "read_at": read_at,
                 "updated_at": func.now(),
             },
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.post("/reading-ping", status_code=status.HTTP_204_NO_CONTENT)
+async def ping_reading(
+    payload: ReadingPing, session: SessionDep, user: CurrentUser
+) -> None:
+    """Refresh the live 'reading now' timestamp, unconditionally, every open."""
+    stmt = (
+        pg_insert(StoryStatus)
+        .values(
+            user_id=user.id,
+            story_id=payload.story_id,
+            last_read_at=func.now(),
+        )
+        .on_conflict_do_update(
+            index_elements=[StoryStatus.user_id, StoryStatus.story_id],
+            set_={"last_read_at": func.now()},
         )
     )
     await session.execute(stmt)

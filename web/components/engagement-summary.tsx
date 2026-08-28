@@ -1,4 +1,9 @@
-import type { FriendEngagement, FriendMini } from "@/lib/types";
+import type { FriendEngagement, StoryReader } from "@/lib/types";
+
+/** A reader with `isLive` known (from `useStoryReaders`); plain `StoryReader`
+ * entries (e.g. search-result cards not wired to live updates) render as
+ * settled - `isLive` defaults to false rather than being required. */
+type DisplayReader = StoryReader & { isLive?: boolean };
 
 interface EngagementSummaryProps {
   engagement: FriendEngagement;
@@ -16,11 +21,12 @@ function ReaderAvatars({
   readers,
   read,
 }: {
-  readers: FriendMini[];
+  readers: DisplayReader[];
   read: number;
 }) {
-  const shown: FriendMini[] = readers.slice(0, 3);
+  const shown: DisplayReader[] = readers.slice(0, 3);
   const others: number = read - shown.length;
+  const liveReader: DisplayReader | undefined = readers.find((r) => r.isLive);
   return (
     <span className="flex items-center gap-1.5">
       <span className="flex -space-x-2">
@@ -31,21 +37,31 @@ function ReaderAvatars({
               key={r.user_id}
               src={r.image_url}
               alt={r.display_name}
-              title={r.display_name}
-              className="h-5 w-5 rounded-[9999px] object-cover ring-2 ring-white dark:ring-slate-900"
+              title={r.isLive ? `${r.display_name} · reading now` : r.display_name}
+              className={`h-5 w-5 rounded-[9999px] object-cover ring-2 ring-white dark:ring-slate-900 ${
+                r.isLive ? "animate-pulse ring-emerald-400 dark:ring-emerald-400" : ""
+              }`}
             />
           ) : (
             <span
               key={r.user_id}
-              title={r.display_name}
-              className="flex h-5 w-5 items-center justify-center rounded-[9999px] bg-slate-300 text-[9px] font-bold text-slate-700 ring-2 ring-white dark:bg-slate-600 dark:text-slate-100 dark:ring-slate-900"
+              title={r.isLive ? `${r.display_name} · reading now` : r.display_name}
+              className={`flex h-5 w-5 items-center justify-center rounded-[9999px] bg-slate-300 text-[9px] font-bold text-slate-700 ring-2 ring-white dark:bg-slate-600 dark:text-slate-100 dark:ring-slate-900 ${
+                r.isLive ? "animate-pulse ring-emerald-400 dark:ring-emerald-400" : ""
+              }`}
             >
               {r.display_name.charAt(0).toUpperCase()}
             </span>
           ),
         )}
       </span>
-      <span>{others > 0 ? `+ ${others} others` : `${read} read`}</span>
+      <span>
+        {liveReader
+          ? `${liveReader.display_name} reading now`
+          : others > 0
+            ? `+ ${others} others`
+            : `${read} read`}
+      </span>
     </span>
   );
 }

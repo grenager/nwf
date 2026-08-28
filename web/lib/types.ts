@@ -37,10 +37,23 @@ export interface FriendMini {
   image_url: string | null;
 }
 
+/**
+ * A reader avatar with the timestamp of their most recent read - lets the
+ * client show "reading now" (within the live window) vs. settled "read"
+ * styling for the same entry. `isLive` is computed client-side against that
+ * window (see `useStoryReaders`), not part of the wire payload.
+ */
+export interface StoryReader {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  last_read_at: string;
+}
+
 export interface FriendEngagement {
   read: number;
   commented: number;
-  readers: FriendMini[];
+  readers: StoryReader[];
 }
 
 export type FofActionKind = "commented" | "rated" | "reacted" | "read";
@@ -177,7 +190,7 @@ export interface Post {
   rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
-  readers: FriendMini[];
+  readers: StoryReader[];
   unread_replies_for_viewer: boolean;
   unread_reply_count: number;
   last_seen_at: string | null;

@@ -38,7 +38,6 @@ from api.schemas import (
     AudienceRelation,
     CommentOut,
     FriendEngagementOut,
-    FriendMiniOut,
     PostAudienceOut,
     PostCreate,
     PostOut,
@@ -47,6 +46,7 @@ from api.schemas import (
     PreviewOut,
     ReactionSet,
     ReactionSummary,
+    StoryReaderOut,
 )
 from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
@@ -392,7 +392,7 @@ async def serialize_post(
     rating_avg: float | None = None
     rating_count = 0
     engagement = FriendEngagementOut()
-    readers: list[FriendMiniOut] = []
+    readers: list[StoryReaderOut] = []
     unread_replies = False
     friends: list[uuid.UUID] = []
 
@@ -409,21 +409,26 @@ async def serialize_post(
             if friend_ids is not None
             else await accepted_friend_ids(session, viewer_id)
         )
+        # Self-inclusive: the "reading now"/"read" avatar stack shows the
+        # viewer's own entry too, as confirmation their open registered.
         activity = await friend_activity_by_story(
-            session, viewer_id, [story.id], friend_ids=friends
+            session, viewer_id, [story.id], friend_ids=[*friends, viewer_id]
         )
-        read_ids, commented_n = aggregate_engagement(activity, [story.id])
+        read_map, commented_n = aggregate_engagement(activity, [story.id])
         profiles = await friend_profiles_map(
-            session, viewer_id, friend_ids=friends
+            session, viewer_id, friend_ids=friends, include_self=True
         )
         readers = [
-            FriendMiniOut(
-                user_id=p.id, display_name=display_name(p), image_url=p.image_url
+            StoryReaderOut(
+                user_id=p.id,
+                display_name=display_name(p),
+                image_url=p.image_url,
+                last_read_at=read_at,
             )
-            for p in top_readers(read_ids, profiles)
+            for p, read_at in top_readers(read_map, profiles)
         ]
         engagement = FriendEngagementOut(
-            read=len(read_ids),
+            read=len(read_map),
             commented=commented_n,
             readers=readers,
         )

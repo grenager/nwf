@@ -2,12 +2,14 @@
 
 import { ArticleCard } from "@/components/article-card";
 import { useAuth } from "@/components/auth-provider";
+import { EngagementSummary } from "@/components/engagement-summary";
 import { PostThread } from "@/components/post-thread";
 import { ReaderBody } from "@/components/reader-body";
 import { SharePostModal } from "@/components/share-post-modal";
 import { api, ApiError } from "@/lib/api";
-import type { Post, Profile, UUID } from "@/lib/types";
-import { useEffect, useState, type ReactNode } from "react";
+import { useStoryReaders } from "@/lib/use-story-readers";
+import type { Post, Profile, StoryReader, UUID } from "@/lib/types";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 interface PostDetailProps {
   postId: UUID;
@@ -73,6 +75,22 @@ export function PostDetail({
     void api.getMe().then(setMe).catch(() => undefined);
   }, [user]);
 
+  const emptyReaders: StoryReader[] = [];
+  const { readers: liveReaders, ping } = useStoryReaders(
+    post?.story_id ?? "",
+    post?.readers ?? emptyReaders,
+  );
+
+  // Landing on the detail page *is* opening the article, so ping once per
+  // post regardless of prior read state (unlike the feed card's first-open guard).
+  const pingedPostId = useRef<UUID | null>(null);
+  useEffect(() => {
+    if (!post || !me) return;
+    if (pingedPostId.current === post.id) return;
+    pingedPostId.current = post.id;
+    ping(me);
+  }, [post, me, ping]);
+
   function handleRate(next: number | null): void {
     setPost((prev) => {
       if (!prev) return prev;
@@ -111,6 +129,10 @@ export function PostDetail({
     );
   }
 
+  const engagement = { ...post.engagement, readers: liveReaders };
+  const hasEngagement: boolean =
+    engagement.read > 0 || engagement.commented > 0 || liveReaders.length > 0;
+
   const preview: ReactNode = (
     <>
       <ArticleCard
@@ -132,6 +154,8 @@ export function PostDetail({
           />
         </div>
       ) : null}
+
+      {hasEngagement ? <EngagementSummary engagement={engagement} /> : null}
     </>
   );
 

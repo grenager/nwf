@@ -29,6 +29,7 @@ import type {
   Story,
   StoryKind,
   StoryList,
+  StoryReader,
   UUID,
 } from "@/lib/types";
 
@@ -107,6 +108,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ story_id: storyId, read }),
     }),
+  /** Refresh the live "reading now" timestamp - fired on every open. */
+  pingReading: (storyId: UUID): Promise<void> =>
+    request<void>("/me/reading-ping", {
+      method: "POST",
+      body: JSON.stringify({ story_id: storyId }),
+    }),
   setTake: (storyId: UUID, take: string | null): Promise<void> =>
     request<void>("/me/take", {
       method: "POST",
@@ -132,6 +139,10 @@ export const api = {
     request<StoryList>(`/stories/title-search?q=${encodeURIComponent(q)}`),
   getCommunityStats: (): Promise<CommunityStats> =>
     request<CommunityStats>("/community/stats"),
+  /** Self + friend readers of a story, most recent first - refetch target
+   * for the live "reading now" indicator. */
+  getStoryReaders: (storyId: UUID): Promise<StoryReader[]> =>
+    request<StoryReader[]>(`/stories/${storyId}/readers`),
 
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),

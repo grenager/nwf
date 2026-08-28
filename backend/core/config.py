@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # Shared secret guarding internal/admin scrape endpoints.
     admin_api_secret: str | None = Field(default=None)
 
+    # How long a reader stays shown as "reading now" after opening a story,
+    # before settling into the plain "read" state.
+    reading_now_window_minutes: int = Field(default=12, ge=1)
+
     # --- Scraper ----------------------------------------------------------
 
     # ScrapingBee: proxy/JS-render fallback for link-preview enrichment when a

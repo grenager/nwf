@@ -394,6 +394,13 @@ class StoryStatus(Base):
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Refreshed on every open (unlike read_at, which is set once on first
+    # read) - drives the live "reading now" indicator. Kept separate from
+    # read_at/updated_at so casual reopens don't distort FoF attribution
+    # timestamps or friend "last active" ordering, which key off those.
+    last_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     starred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dismissed_at: Mapped[datetime | None] = mapped_column(

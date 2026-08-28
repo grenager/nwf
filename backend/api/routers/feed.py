@@ -36,9 +36,9 @@ from api.schemas import (
     FeedOut,
     FofReasonOut,
     FriendEngagementOut,
-    FriendMiniOut,
     PostOut,
     ReactionSummary,
+    StoryReaderOut,
 )
 from core.attribution import resolve_attribution
 from core.config import get_settings
@@ -356,19 +356,20 @@ async def _build_post_outs(
             my_take = status_row.take
 
         engagement = FriendEngagementOut()
-        readers: list[FriendMiniOut] = []
+        readers: list[StoryReaderOut] = []
         if viewer_id is not None:
-            read_ids, commented_n = aggregate_engagement(activity, [story.id])
+            read_map, commented_n = aggregate_engagement(activity, [story.id])
             readers = [
-                FriendMiniOut(
+                StoryReaderOut(
                     user_id=p.id,
                     display_name=display_name(p),
                     image_url=p.image_url,
+                    last_read_at=read_at,
                 )
-                for p in top_readers(read_ids, friend_profiles)
+                for p, read_at in top_readers(read_map, friend_profiles)
             ]
             engagement = FriendEngagementOut(
-                read=len(read_ids),
+                read=len(read_map),
                 commented=commented_n,
                 readers=readers,
             )
@@ -554,11 +555,13 @@ async def get_feed(
             )
         ).all()
         status_by_story = {r.story_id: r for r in status_rows}
+        # Self-inclusive: the "reading now"/"read" avatar stack shows the
+        # viewer's own entry too, as confirmation their open registered.
         activity = await friend_activity_by_story(
-            session, viewer_id, story_ids, friend_ids=friends
+            session, viewer_id, story_ids, friend_ids=[*friends, viewer_id]
         )
         profiles = await friend_profiles_map(
-            session, viewer_id, friend_ids=friends
+            session, viewer_id, friend_ids=friends, include_self=True
         )
         fof_reasons = await _fof_reasons_by_post(
             session,
@@ -617,17 +620,18 @@ async def get_feed(
 
         engagement = FriendEngagementOut()
         if viewer_id is not None:
-            read_ids, commented_n = aggregate_engagement(activity, [sid])
+            read_map, commented_n = aggregate_engagement(activity, [sid])
             engagement = FriendEngagementOut(
-                read=len(read_ids),
+                read=len(read_map),
                 commented=commented_n,
                 readers=[
-                    FriendMiniOut(
+                    StoryReaderOut(
                         user_id=p.id,
                         display_name=display_name(p),
                         image_url=p.image_url,
+                        last_read_at=read_at,
                     )
-                    for p in top_readers(read_ids, profiles)
+                    for p, read_at in top_readers(read_map, profiles)
                 ],
             )
 
