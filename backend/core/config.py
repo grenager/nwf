@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     # before settling into the plain "read" state.
     reading_now_window_minutes: int = Field(default=12, ge=1)
 
+    # How long a "typing" ping keeps someone shown as actively typing on a
+    # post's comments, absent a newer ping.
+    typing_indicator_window_seconds: int = Field(default=90, ge=10)
+
     # --- Scraper ----------------------------------------------------------
 
     # ScrapingBee: proxy/JS-render fallback for link-preview enrichment when a

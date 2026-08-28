@@ -56,6 +56,14 @@ export interface FriendEngagement {
   readers: StoryReader[];
 }
 
+/** Someone currently typing on a post's comments - already window-filtered
+ * server side, unlike `StoryReader` there's no timestamp to reason about. */
+export interface PostTyper {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+}
+
 export type FofActionKind = "commented" | "rated" | "reacted" | "read";
 
 export interface FofReason {

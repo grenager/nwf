@@ -20,6 +20,7 @@ import type {
   NotificationList,
   Post,
   PostAudience,
+  PostTyper,
   PreferencesUpdate,
   PreviewCard,
   Profile,
@@ -149,6 +150,15 @@ export const api = {
   getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
   getPostAudience: (id: UUID): Promise<PostAudience> =>
     request<PostAudience>(`/posts/${id}/audience`),
+  /** Refresh the live "typing" timestamp - fired on a throttled keystroke. */
+  pingTyping: (postId: UUID): Promise<void> =>
+    request<void>(`/posts/${postId}/typing-ping`, {
+      method: "POST",
+      body: JSON.stringify({ post_id: postId }),
+    }),
+  /** Everyone else currently typing on this post's comments. */
+  getTypers: (postId: UUID): Promise<PostTyper[]> =>
+    request<PostTyper[]>(`/posts/${postId}/typers`),
   getConversations: (): Promise<ConversationList> =>
     request<ConversationList>("/conversations"),
   markThreadSeen: (postId: UUID): Promise<void> =>

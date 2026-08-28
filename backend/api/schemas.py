@@ -158,6 +158,22 @@ class ReadingPing(BaseModel):
     story_id: uuid.UUID
 
 
+class TypingPing(BaseModel):
+    """Refresh the live 'typing' timestamp for a post's comment composer."""
+
+    post_id: uuid.UUID
+
+
+class PostTyperOut(BaseModel):
+    """Someone currently typing on a post - already window-filtered server
+    side, so unlike StoryReaderOut there's no timestamp for the client to
+    reason about."""
+
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+
+
 class StarMark(BaseModel):
     story_id: uuid.UUID
 

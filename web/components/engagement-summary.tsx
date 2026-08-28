@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 import type { FriendEngagement, StoryReader } from "@/lib/types";
 
 /** A reader with `isLive` known (from `useStoryReaders`); plain `StoryReader`
@@ -17,6 +21,9 @@ interface EngagementSummaryProps {
   variant?: "spread" | "inline";
 }
 
+/** Just the avatar stack - no summary sentence. Tap an avatar for its name
+ * (a hover title doesn't work on touch), and the overflow count gets its
+ * own plain "+N" circle rather than trailing text. */
 function ReaderAvatars({
   readers,
   read,
@@ -24,44 +31,56 @@ function ReaderAvatars({
   readers: DisplayReader[];
   read: number;
 }) {
+  const [revealed, setRevealed] = useState<string | null>(null);
   const shown: DisplayReader[] = readers.slice(0, 3);
   const others: number = read - shown.length;
-  const liveReader: DisplayReader | undefined = readers.find((r) => r.isLive);
+
   return (
-    <span className="flex items-center gap-1.5">
-      <span className="flex -space-x-2">
-        {shown.map((r) =>
-          r.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={r.user_id}
-              src={r.image_url}
-              alt={r.display_name}
-              title={r.isLive ? `${r.display_name} · reading now` : r.display_name}
-              className={`h-5 w-5 rounded-[9999px] object-cover ring-2 ring-white dark:ring-slate-900 ${
-                r.isLive ? "animate-pulse ring-emerald-400 dark:ring-emerald-400" : ""
-              }`}
-            />
-          ) : (
-            <span
-              key={r.user_id}
-              title={r.isLive ? `${r.display_name} · reading now` : r.display_name}
-              className={`flex h-5 w-5 items-center justify-center rounded-[9999px] bg-slate-300 text-[9px] font-bold text-slate-700 ring-2 ring-white dark:bg-slate-600 dark:text-slate-100 dark:ring-slate-900 ${
-                r.isLive ? "animate-pulse ring-emerald-400 dark:ring-emerald-400" : ""
-              }`}
-            >
-              {r.display_name.charAt(0).toUpperCase()}
+    <span className="flex -space-x-2">
+      {shown.map((r) => (
+        <span key={r.user_id} className="relative">
+          <button
+            type="button"
+            onClick={() =>
+              setRevealed((prev) => (prev === r.user_id ? null : r.user_id))
+            }
+            className="block"
+          >
+            {r.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={r.image_url}
+                alt={r.display_name}
+                className={`h-7 w-7 rounded-[9999px] object-cover ring-2 ring-white dark:ring-slate-900 ${
+                  r.isLive ? "animate-pulse ring-emerald-400 dark:ring-emerald-400" : ""
+                }`}
+              />
+            ) : (
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-[9999px] bg-slate-300 text-[11px] font-bold text-slate-700 ring-2 ring-white dark:bg-slate-600 dark:text-slate-100 dark:ring-slate-900 ${
+                  r.isLive ? "animate-pulse ring-emerald-400 dark:ring-emerald-400" : ""
+                }`}
+              >
+                {r.display_name.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </button>
+          {revealed === r.user_id ? (
+            <span className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
+              {r.display_name}
+              {r.isLive ? " · reading now" : ""}
             </span>
-          ),
-        )}
-      </span>
-      <span>
-        {liveReader
-          ? `${liveReader.display_name} reading now`
-          : others > 0
-            ? `+ ${others} others`
-            : `${read} read`}
-      </span>
+          ) : null}
+        </span>
+      ))}
+      {others > 0 ? (
+        <span
+          title={`${others} more`}
+          className="flex h-7 w-7 items-center justify-center rounded-[9999px] bg-slate-200 text-[10px] font-bold text-slate-600 ring-2 ring-white dark:bg-slate-700 dark:text-slate-300 dark:ring-slate-900"
+        >
+          +{others}
+        </span>
+      ) : null}
     </span>
   );
 }

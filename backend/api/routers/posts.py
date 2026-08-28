@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -41,15 +41,18 @@ from api.schemas import (
     PostAudienceOut,
     PostCreate,
     PostOut,
+    PostTyperOut,
     PostUpdate,
     PreviewCreate,
     PreviewOut,
     ReactionSet,
     ReactionSummary,
     StoryReaderOut,
+    TypingPing,
 )
 from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
+from core.config import get_settings
 from core.enrich import (
     UrlMetadata,
     fetch_url_metadata,
@@ -65,6 +68,7 @@ from core.models import (
     PostMention,
     PostParticipant,
     PostRead,
+    PostTyping,
     PostVisibility,
     Profile,
     Source,
@@ -771,6 +775,62 @@ async def get_post_audience(
         author_friend_count=len(author_friends),
         average_friend_count=await average_friend_count_for_active_users(session),
     )
+
+
+@router.post("/{post_id}/typing-ping", status_code=status.HTTP_204_NO_CONTENT)
+async def ping_typing(
+    post_id: uuid.UUID, payload: TypingPing, session: SessionDep, user: CurrentUser
+) -> None:
+    """Refresh the live 'typing' timestamp - fired on a throttled keystroke,
+    left to expire rather than cleared on blur/send."""
+    if payload.post_id != post_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "post_id mismatch")
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+
+    stmt = (
+        pg_insert(PostTyping)
+        .values(post_id=post_id, user_id=user.id, updated_at=func.now())
+        .on_conflict_do_update(
+            index_elements=[PostTyping.post_id, PostTyping.user_id],
+            set_={"updated_at": func.now()},
+        )
+    )
+    await session.execute(stmt)
+
+
+@router.get("/{post_id}/typers", response_model=list[PostTyperOut])
+async def get_typers(
+    post_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> list[PostTyperOut]:
+    """Everyone else currently typing on this post's comments."""
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+
+    cutoff = datetime.now(UTC) - timedelta(
+        seconds=get_settings().typing_indicator_window_seconds
+    )
+    profiles = (
+        await session.scalars(
+            select(Profile)
+            .join(PostTyping, PostTyping.user_id == Profile.id)
+            .where(
+                PostTyping.post_id == post_id,
+                PostTyping.user_id != user.id,
+                PostTyping.updated_at > cutoff,
+            )
+        )
+    ).all()
+    return [
+        PostTyperOut(user_id=p.id, display_name=display_name(p), image_url=p.image_url)
+        for p in profiles
+    ]
 
 
 @router.patch("/{post_id}", response_model=PostOut)
