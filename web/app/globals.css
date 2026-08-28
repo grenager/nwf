@@ -32,12 +32,15 @@ body {
 /* iOS Safari zooms the whole page on focus into any input/textarea/select
    rendered under 16px, regardless of viewport-meta settings. Below sm, force
    form controls to 16px so focusing one doesn't zoom the page (their
-   Tailwind text-sm/text-xs sizing is left alone above that breakpoint). */
+   Tailwind text-sm/text-xs sizing is left alone above that breakpoint).
+   !important is required: a bare element selector is lower specificity than
+   the text-sm/text-xs utility classes already on these inputs, so without it
+   this rule compiles but never actually wins the cascade. */
 @media (max-width: 639px) {
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 
