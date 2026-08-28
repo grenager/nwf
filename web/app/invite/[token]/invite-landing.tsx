@@ -46,7 +46,7 @@ interface InviteLandingClientProps {
 const REPLY_MAX_HEIGHT_PX: number = 144;
 
 export function InviteLandingClient({ token }: InviteLandingClientProps) {
-  const { session, user } = useAuth();
+  const { session, user, loading: authLoading } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const autoAcceptStarted = useRef<boolean>(false);
@@ -61,6 +61,10 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   const [joined, setJoined] = useState<boolean>(false);
   const [friendPromptDismissed, setFriendPromptDismissed] =
     useState<boolean>(false);
+  // Safety net: if a predicted auto-accept doesn't actually redirect (e.g.
+  // the inviter's friend list is full), fall back to the full landing page
+  // instead of leaving the visitor stuck on the "Joining…" state.
+  const [autoAcceptFallback, setAutoAcceptFallback] = useState<boolean>(false);
   const {
     text: draft,
     setText: setDraft,
@@ -134,8 +138,9 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         const result = await api.acceptInvite(token, addFriend);
         if (result.became_friend || result.status === "already_accepted") {
           setJoined(true);
-          const inviterName: string = preview?.inviter_name ?? "your friend";
-          notify(`You're now friends with ${inviterName}`, "success");
+          // No toast here: this is either an invisible auto-accept (about to
+          // hard-navigate away) or the visitor was already friends/already
+          // redeemed this link, so "You're now friends" would be misleading.
           const destination: string =
             result.post_id !== null ? `/post/${result.post_id}` : "/";
           // A soft client-side transition here lands on /post/[id], which
@@ -158,21 +163,31 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         setAccepting(false);
       }
     },
-    [accepting, notify, preview, token],
+    [accepting, notify, token],
   );
 
-  // Auto-friend email invites and share links that opted into friendship.
+  // True when this visit is going to silently friend the inviter (or is
+  // already friends / already redeemed this link) and hard-navigate to the
+  // post — email invites and reusable share links that opted into
+  // friendship. Shared by the effect below and the render decision so they
+  // can never drift out of sync.
+  const willAutoAccept: boolean =
+    session != null &&
+    preview != null &&
+    preview.status !== "revoked" &&
+    preview.status !== "expired" &&
+    (!preview.reusable || preview.become_friend) &&
+    !isOwnInvite &&
+    !autoAcceptFallback;
+
   useEffect(() => {
-    if (!session || !preview || preview.status === "revoked") return;
-    if (preview.status === "expired") return;
-    const shouldAutoAccept: boolean =
-      !preview.reusable || preview.become_friend;
-    if (!shouldAutoAccept) return;
-    if (user != null && user.id === preview.inviter_id) return;
+    if (authLoading || !willAutoAccept) return;
     if (joined || autoAcceptStarted.current) return;
     autoAcceptStarted.current = true;
-    void accept(true);
-  }, [session, preview, user, joined, accept]);
+    void accept(true).then((redirected) => {
+      if (!redirected) setAutoAcceptFallback(true);
+    });
+  }, [authLoading, willAutoAccept, joined, accept]);
 
   const showFriendPrompt: boolean =
     !isGuest &&
@@ -226,7 +241,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     setPost({ ...post, my_rating: value });
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <>
         <InviteHeader />
@@ -252,6 +267,20 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
           >
             Sign in
           </Link>
+        </main>
+      </>
+    );
+  }
+
+  if (willAutoAccept) {
+    // This visit is going to be friended-and-redirected (or is already
+    // joined) without any choice to make here — skip painting the full
+    // landing page (article, replies, composer) it's about to leave.
+    return (
+      <>
+        <InviteHeader />
+        <main className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6">
+          <p className="text-sm text-zinc-500">Joining the conversation…</p>
         </main>
       </>
     );
