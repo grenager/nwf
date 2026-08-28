@@ -1,5 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import { getSupabaseEnv } from "@/lib/supabase/env";
 
@@ -27,3 +29,19 @@ export async function createSupabaseServerClient(): Promise<ServerClient> {
     },
   });
 }
+
+/**
+ * Memoized per-request. A Server Component can't persist a refreshed
+ * session back to cookies (see the catch above), so two independent
+ * `createSupabaseServerClient()` + `getUser()` calls in the same request
+ * can race a token refresh and disagree on whether there's a user.
+ * Callers within one request must share this instead of calling
+ * `getUser()` directly, so layout and page always agree.
+ */
+export const getServerUser = cache(async (): Promise<User | null> => {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
