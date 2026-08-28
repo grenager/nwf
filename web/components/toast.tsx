@@ -54,14 +54,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-end gap-2 max-sm:bottom-[calc(4.5rem+env(safe-area-inset-bottom)+1rem)] sm:inset-x-auto sm:right-4 sm:max-w-sm">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg ${KIND_STYLES[t.kind]}`}
+            className={`pointer-events-auto flex max-w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-lg ${KIND_STYLES[t.kind]}`}
             role="status"
           >
-            <span className="flex-1">{t.message}</span>
+            <span className="min-w-0 flex-1 break-words">{t.message}</span>
             {t.action ? (
               <button
                 type="button"
