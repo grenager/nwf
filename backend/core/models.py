@@ -298,6 +298,32 @@ class PostRead(Base):
     )
 
 
+class PostTyping(Base):
+    """Live "typing now" signal for a post's comment composer.
+
+    Upserted on every debounced keystroke and left to go stale - there is no
+    "stopped typing" write, a row just ages out of the window a reader
+    queries for (see ``typing_indicator_window_seconds``), the same
+    ping-and-expire mechanism as ``story_statuses.last_read_at``.
+    """
+
+    __tablename__ = "post_typing"
+
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Notification(Base):
     """Directed alert for a recipient (mention, reaction, friend event)."""
 
@@ -392,6 +418,13 @@ class StoryStatus(Base):
     )
     read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Refreshed on every open (unlike read_at, which is set once on first
+    # read) - drives the live "reading now" indicator. Kept separate from
+    # read_at/updated_at so casual reopens don't distort FoF attribution
+    # timestamps or friend "last active" ordering, which key off those.
+    last_read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     starred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

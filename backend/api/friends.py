@@ -245,9 +245,15 @@ async def load_activity_email_recipients(
 
 @dataclass
 class StoryActivity:
-    """Sets of friend user-ids who read/commented on a single story."""
+    """Friend user-ids who read/commented on a single story.
 
-    read: set[uuid.UUID] = field(default_factory=set)
+    ``read`` maps to the reader's most-recent read timestamp (last_read_at,
+    falling back to read_at for rows predating that column) rather than being
+    a bare set, so avatar displays can show the most recent readers first and
+    distinguish a just-now read from an old one.
+    """
+
+    read: dict[uuid.UUID, datetime] = field(default_factory=dict)
     commented: set[uuid.UUID] = field(default_factory=set)
 
 
@@ -263,16 +269,27 @@ async def global_activity_by_story(
 
     status_rows = (
         await session.execute(
-            select(StoryStatus.story_id, StoryStatus.user_id, StoryStatus.read).where(
+            select(
+                StoryStatus.story_id,
+                StoryStatus.user_id,
+                func.coalesce(StoryStatus.last_read_at, StoryStatus.read_at),
+            ).where(
                 StoryStatus.story_id.in_(story_ids),
-                StoryStatus.read.is_(True),
+                # read=True catches historical rows predating last_read_at;
+                # last_read_at catches a fresh reading-ping that lands before
+                # the separate /me/read call flips `read` (no ordering
+                # guarantee between the two independent requests).
+                or_(
+                    StoryStatus.read.is_(True),
+                    StoryStatus.last_read_at.is_not(None),
+                ),
             )
         )
     ).all()
-    for story_id, user_id, read in status_rows:
+    for story_id, user_id, read_at in status_rows:
         entry = activity.setdefault(story_id, StoryActivity())
-        if read:
-            entry.read.add(user_id)
+        if read_at is not None:
+            entry.read[user_id] = read_at
 
     comment_rows = (
         await session.execute(
@@ -559,8 +576,11 @@ async def friend_activity_by_story(
 ) -> dict[uuid.UUID, StoryActivity]:
     """Map story_id -> which friends read/commented on it.
 
-    Only accepted connections (friends) are counted; the current user is
-    excluded so counts reflect *friends'* engagement.
+    Only accounts in ``friend_ids`` (or the caller's accepted connections, if
+    not given) are counted; the current user is excluded by default so counts
+    reflect *friends'* engagement. Pass ``friend_ids=[*friends, user_id]`` for
+    a self-inclusive result (e.g. "reading now" avatars) - self-exclusion is
+    caller-controlled, not hardcoded here.
     """
     if not story_ids:
         return {}
@@ -577,18 +597,24 @@ async def friend_activity_by_story(
 
     status_rows = (
         await session.execute(
-            select(StoryStatus.story_id, StoryStatus.user_id, StoryStatus.read)
-            .where(
+            select(
+                StoryStatus.story_id,
+                StoryStatus.user_id,
+                func.coalesce(StoryStatus.last_read_at, StoryStatus.read_at),
+            ).where(
                 StoryStatus.story_id.in_(story_ids),
                 StoryStatus.user_id.in_(friends),
-                StoryStatus.read.is_(True),
+                or_(
+                    StoryStatus.read.is_(True),
+                    StoryStatus.last_read_at.is_not(None),
+                ),
             )
         )
     ).all()
-    for story_id, friend_id, read in status_rows:
+    for story_id, friend_id, read_at in status_rows:
         entry = activity.setdefault(story_id, StoryActivity())
-        if read:
-            entry.read.add(friend_id)
+        if read_at is not None:
+            entry.read[friend_id] = read_at
 
     comment_rows = (
         await session.execute(
@@ -607,15 +633,19 @@ async def friend_activity_by_story(
 def aggregate_engagement(
     activity: dict[uuid.UUID, StoryActivity],
     story_ids: Iterable[uuid.UUID],
-) -> tuple[set[uuid.UUID], int]:
-    """Distinct friend readers and comment count across the given stories."""
-    read: set[uuid.UUID] = set()
+) -> tuple[dict[uuid.UUID, datetime], int]:
+    """Distinct friend readers (with most-recent read timestamp) and comment
+    count across the given stories."""
+    read: dict[uuid.UUID, datetime] = {}
     commented: set[uuid.UUID] = set()
     for sid in story_ids:
         entry = activity.get(sid)
         if entry is None:
             continue
-        read |= entry.read
+        for uid, read_at in entry.read.items():
+            existing = read.get(uid)
+            if existing is None or read_at > existing:
+                read[uid] = read_at
         commented |= entry.commented
     return read, len(commented)
 
@@ -625,16 +655,24 @@ async def friend_profiles_map(
     user_id: uuid.UUID,
     *,
     friend_ids: list[uuid.UUID] | None = None,
+    include_self: bool = False,
 ) -> dict[uuid.UUID, Profile]:
-    """Map friend user-id -> Profile for all accepted connections."""
+    """Map friend user-id -> Profile for all accepted connections.
+
+    ``include_self`` also includes ``user_id``'s own profile - for callers
+    building a self-inclusive display (e.g. "reading now" avatars) that would
+    otherwise silently drop the viewer's own entry since they're not in their
+    own friend list.
+    """
     friends: list[uuid.UUID] = (
         friend_ids
         if friend_ids is not None
         else await accepted_friend_ids(session, user_id)
     )
-    if not friends:
+    ids: list[uuid.UUID] = [*friends, user_id] if include_self else friends
+    if not ids:
         return {}
-    rows = await session.scalars(select(Profile).where(Profile.id.in_(friends)))
+    rows = await session.scalars(select(Profile).where(Profile.id.in_(ids)))
     return {p.id: p for p in rows.all()}
 
 
@@ -746,17 +784,18 @@ async def fof_attribution_by_post(
 
 
 def top_readers(
-    read_ids: set[uuid.UUID],
+    read: dict[uuid.UUID, datetime],
     profiles: dict[uuid.UUID, Profile],
     limit: int = 3,
-) -> list[Profile]:
-    """Return up to `limit` reader profiles for avatar display."""
-    out: list[Profile] = []
-    for rid in read_ids:
+) -> list[tuple[Profile, datetime]]:
+    """Return up to `limit` (profile, last_read_at) pairs, most recent first."""
+    ranked = sorted(read.items(), key=lambda item: item[1], reverse=True)
+    out: list[tuple[Profile, datetime]] = []
+    for rid, read_at in ranked:
         profile = profiles.get(rid)
         if profile is None:
             continue
-        out.append(profile)
+        out.append((profile, read_at))
         if len(out) >= limit:
             break
     return out

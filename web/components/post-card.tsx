@@ -8,6 +8,7 @@ import { StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { stripHtml } from "@/lib/html";
 import { api } from "@/lib/api";
+import { useStoryReaders } from "@/lib/use-story-readers";
 import type { FeedCard, FofActionKind, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
@@ -63,15 +64,22 @@ export function PostCard({
   const { user } = useAuth();
   const [inviteOpen, setInviteOpen] = useState<boolean>(false);
 
-  const engagement = card.engagement;
+  const { readers: liveReaders, ping } = useStoryReaders(
+    card.story_id,
+    card.engagement.readers,
+  );
+  const engagement = { ...card.engagement, readers: liveReaders };
   const hasEngagement: boolean =
-    engagement.read > 0 || engagement.commented > 0;
+    engagement.read > 0 || engagement.commented > 0 || liveReaders.length > 0;
   const post: Post | undefined = card.posts[0];
 
   function markReadOnOpen(): void {
-    if (!user || card.read) return;
-    onCardChange({ ...card, read: true });
-    void api.markRead(card.story_id, true).catch(() => undefined);
+    if (!user) return;
+    if (!card.read) {
+      onCardChange({ ...card, read: true });
+      void api.markRead(card.story_id, true).catch(() => undefined);
+    }
+    if (me) ping(me);
   }
 
   function onPostChange(updated: Post): void {

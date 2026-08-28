@@ -27,10 +27,10 @@ from api.friends import (
 )
 from api.schemas import (
     FriendEngagementOut,
-    FriendMiniOut,
     FriendStarOut,
     StoryCreate,
     StoryList,
+    StoryReaderOut,
     StoryWithStatus,
 )
 from core.attribution import resolve_attribution
@@ -295,9 +295,9 @@ async def get_story(
         )
 
         activity = await global_activity_by_story(session, [story.id])
-        read_ids, commented_n = aggregate_engagement(activity, [story.id])
+        read_map, commented_n = aggregate_engagement(activity, [story.id])
         model.engagement = FriendEngagementOut(
-            read=len(read_ids),
+            read=len(read_map),
             commented=commented_n,
             readers=[],
         )
@@ -330,19 +330,52 @@ async def get_story(
         for p in friend_profiles.get(story.id, [])
     ]
     activity = await friend_activity_by_story(session, user.id, [story.id])
-    read_ids, commented_n = aggregate_engagement(activity, [story.id])
+    read_map, commented_n = aggregate_engagement(activity, [story.id])
     profiles = await friend_profiles_map(session, user.id)
     model.engagement = FriendEngagementOut(
-        read=len(read_ids),
+        read=len(read_map),
         commented=commented_n,
         readers=[
-            FriendMiniOut(
-                user_id=p.id, display_name=display_name(p), image_url=p.image_url
+            StoryReaderOut(
+                user_id=p.id,
+                display_name=display_name(p),
+                image_url=p.image_url,
+                last_read_at=read_at,
             )
-            for p in top_readers(read_ids, profiles)
+            for p, read_at in top_readers(read_map, profiles)
         ],
     )
     return model
+
+
+@router.get("/{story_id}/readers", response_model=list[StoryReaderOut])
+async def get_story_readers(
+    story_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> list[StoryReaderOut]:
+    """Self + friend readers of a story, most recent first.
+
+    Used as a Realtime-triggered refetch target for the live "reading now"
+    indicator - not for initial load, which already rides on the feed/post
+    response.
+    """
+    friends = await accepted_friend_ids(session, user.id)
+    friend_ids = [*friends, user.id]
+    activity = await friend_activity_by_story(
+        session, user.id, [story_id], friend_ids=friend_ids
+    )
+    read_map, _commented_n = aggregate_engagement(activity, [story_id])
+    profiles = await friend_profiles_map(
+        session, user.id, friend_ids=friends, include_self=True
+    )
+    return [
+        StoryReaderOut(
+            user_id=p.id,
+            display_name=display_name(p),
+            image_url=p.image_url,
+            last_read_at=read_at,
+        )
+        for p, read_at in top_readers(read_map, profiles, limit=len(read_map))
+    ]
 
 
 __all__ = ["router"]

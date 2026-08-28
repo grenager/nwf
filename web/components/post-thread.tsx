@@ -15,7 +15,8 @@ import { draftScopeKey } from "@/lib/drafts";
 import { commentWasEdited } from "@/lib/comments";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
-import type { Comment, Post, Profile, UUID } from "@/lib/types";
+import { useTypingIndicator } from "@/lib/use-typing-indicator";
+import type { Comment, Post, PostTyper, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -35,6 +36,14 @@ function profileName(me: Profile | null): string {
   if (!me) return "You";
   const full = [me.first, me.last].filter(Boolean).join(" ").trim();
   return full || "You";
+}
+
+function typingLabel(typers: PostTyper[]): string | null {
+  if (typers.length === 0) return null;
+  const names: string[] = typers.map((t) => t.display_name.split(/\s+/)[0] ?? t.display_name);
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} others are typing…`;
 }
 
 /**
@@ -123,6 +132,7 @@ export function PostThread({
   const [ratingOpen, setRatingOpen] = useState<boolean>(false);
   const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
   const [shareAfterReply, setShareAfterReply] = useState<boolean>(false);
+  const { typers, notifyTyping } = useTypingIndicator(post.id);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
   const isPreviewMode: boolean =
@@ -723,6 +733,11 @@ export function PostThread({
                   </button>
                 </div>
               ) : null}
+              {typingLabel(typers) ? (
+                <p className="text-xs italic text-zinc-400 dark:text-zinc-500">
+                  {typingLabel(typers)}
+                </p>
+              ) : null}
               <div className="flex items-end gap-2">
                 <div
                   className="nwf-mentions--grow min-w-0 flex-1"
@@ -731,7 +746,10 @@ export function PostThread({
                   <MentionInput
                     inputRef={composerRef}
                     value={draft}
-                    onChange={setDraft}
+                    onChange={(text) => {
+                      setDraft(text);
+                      notifyTyping();
+                    }}
                     rows={1}
                     placeholder={
                       replyTo
