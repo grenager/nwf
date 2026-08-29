@@ -60,7 +60,7 @@ _ONLINE_WINDOW = timedelta(minutes=5)
 _RECOMMENDED_LIMIT = 12
 
 
-async def _notify_friend_event(
+async def notify_friend_event(
     session: AsyncSession,
     *,
     recipient_id: uuid.UUID,
@@ -629,7 +629,7 @@ async def invite_by_email(
             await ensure_friend_capacity(session, user.id)
             existing.status = ConnectionStatus.accepted
             await session.flush()
-            await _notify_friend_event(
+            await notify_friend_event(
                 session, recipient_id=existing.first_id, actor=actor, kind="accepted"
             )
             return InviteResult(
@@ -656,7 +656,7 @@ async def invite_by_email(
         )
     )
     await session.flush()
-    await _notify_friend_event(
+    await notify_friend_event(
         session, recipient_id=target_id, actor=actor, kind="request"
     )
     return InviteResult(
@@ -683,7 +683,7 @@ async def create_connection(
             existing.status = ConnectionStatus.accepted
             await session.flush()
             await session.refresh(existing)
-            await _notify_friend_event(
+            await notify_friend_event(
                 session, recipient_id=existing.first_id, actor=actor, kind="accepted"
             )
         return existing
@@ -697,7 +697,7 @@ async def create_connection(
     session.add(connection)
     await session.flush()
     await session.refresh(connection)
-    await _notify_friend_event(
+    await notify_friend_event(
         session,
         recipient_id=payload.target_user_id,
         actor=actor,
@@ -735,7 +735,7 @@ async def update_connection(
             if connection.second_id == user.id
             else connection.second_id
         )
-        await _notify_friend_event(
+        await notify_friend_event(
             session, recipient_id=other_id, actor=actor, kind="accepted"
         )
     return connection
