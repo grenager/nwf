@@ -69,11 +69,12 @@ async def notify_friend_event(
 ) -> None:
     """In-app alert + best-effort immediate email; never raises to the caller."""
     if actor is not None:
-        alert_kind = (
-            NotificationKind.friend_accepted
-            if kind == "accepted"
-            else NotificationKind.friend_request
-        )
+        if kind == "accepted":
+            alert_kind = NotificationKind.friend_accepted
+        elif kind == "connected":
+            alert_kind = NotificationKind.friend_connected
+        else:
+            alert_kind = NotificationKind.friend_request
         try:
             await create_notification(
                 session,

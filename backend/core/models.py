@@ -77,6 +77,7 @@ class NotificationKind(enum.StrEnum):
     comment_reaction = "comment_reaction"
     friend_request = "friend_request"
     friend_accepted = "friend_accepted"
+    friend_connected = "friend_connected"
 
 
 def _uuid_col(primary_key: bool = False) -> Mapped[uuid.UUID]:

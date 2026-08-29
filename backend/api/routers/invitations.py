@@ -164,14 +164,20 @@ async def _inviter_has_room(session: SessionDep, inviter_id: uuid.UUID) -> bool:
 async def _notify_new_friendship(
     session: SessionDep, inviter_id: uuid.UUID, invitee_id: uuid.UUID
 ) -> None:
-    """Alert + best-effort email to both sides of a freshly formed friendship."""
+    """Alert + best-effort email to both sides of a freshly formed friendship.
+
+    An invite forms the connection in one step -- there's no separate
+    pending request either side "sent" or "accepted" -- so both parties get
+    the same symmetric "connected" notice rather than the request/accept
+    flow's directional wording.
+    """
     inviter = await session.get(Profile, inviter_id)
     invitee = await session.get(Profile, invitee_id)
     await notify_friend_event(
-        session, recipient_id=inviter_id, actor=invitee, kind="accepted"
+        session, recipient_id=inviter_id, actor=invitee, kind="connected"
     )
     await notify_friend_event(
-        session, recipient_id=invitee_id, actor=inviter, kind="accepted"
+        session, recipient_id=invitee_id, actor=inviter, kind="connected"
     )
 
 

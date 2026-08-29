@@ -71,6 +71,8 @@ function actionText(kind: NotificationKind): string {
       return "sent you a friend request";
     case "friend_accepted":
       return "accepted your friend request";
+    case "friend_connected":
+      return "is now your friend";
     default:
       return "notified you";
   }
@@ -79,7 +81,8 @@ function actionText(kind: NotificationKind): string {
 function hrefFor(item: NotificationItem): string {
   if (
     item.kind === "friend_request" ||
-    item.kind === "friend_accepted"
+    item.kind === "friend_accepted" ||
+    item.kind === "friend_connected"
   ) {
     return "/friends";
   }
