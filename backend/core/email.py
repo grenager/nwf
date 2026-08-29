@@ -558,18 +558,23 @@ class FriendNoticeEmailContent:
     actor_image_url: str | None
     action_url: str
     unsubscribe_url: str
-    kind: str  # "request" | "accepted"
+    kind: str  # "request" | "accepted" | "connected"
 
 
 def _friend_notice_subject(content: FriendNoticeEmailContent) -> str:
     if content.kind == "accepted":
         return f"{content.actor_name} accepted your friend request"
+    if content.kind == "connected":
+        return f"You're now friends with {content.actor_name}"
     return f"{content.actor_name} sent you a friend request"
 
 
 def _friend_notice_plain(content: FriendNoticeEmailContent) -> str:
     if content.kind == "accepted":
         lead = f"{content.actor_name} accepted your friend request on NewsWithFriends."
+        cta = "See your friends"
+    elif content.kind == "connected":
+        lead = f"You're now friends with {content.actor_name} on NewsWithFriends."
         cta = "See your friends"
     else:
         lead = f"{content.actor_name} sent you a friend request on NewsWithFriends."
@@ -585,6 +590,9 @@ def _friend_notice_html(content: FriendNoticeEmailContent) -> str:
         lead = (
             f"<strong>{actor}</strong> accepted your friend request on NewsWithFriends."
         )
+        button = "See your friends"
+    elif content.kind == "connected":
+        lead = f"You're now friends with <strong>{actor}</strong> on NewsWithFriends."
         button = "See your friends"
     else:
         lead = f"<strong>{actor}</strong> sent you a friend request on NewsWithFriends."

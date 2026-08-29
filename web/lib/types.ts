@@ -308,7 +308,8 @@ export type NotificationKind =
   | "post_reaction"
   | "comment_reaction"
   | "friend_request"
-  | "friend_accepted";
+  | "friend_accepted"
+  | "friend_connected";
 
 export interface NotificationItem {
   id: UUID;

@@ -18,6 +18,7 @@ from api.friends import (
     friend_slots_used,
     is_email_suppressed,
 )
+from api.routers.connections import notify_friend_event
 from api.routers.posts import serialize_post
 from api.schemas import (
     InvitationAcceptRequest,
@@ -160,6 +161,26 @@ async def _inviter_has_room(session: SessionDep, inviter_id: uuid.UUID) -> bool:
     return used < settings.max_friends
 
 
+async def _notify_new_friendship(
+    session: SessionDep, inviter_id: uuid.UUID, invitee_id: uuid.UUID
+) -> None:
+    """Alert + best-effort email to both sides of a freshly formed friendship.
+
+    An invite forms the connection in one step -- there's no separate
+    pending request either side "sent" or "accepted" -- so both parties get
+    the same symmetric "connected" notice rather than the request/accept
+    flow's directional wording.
+    """
+    inviter = await session.get(Profile, inviter_id)
+    invitee = await session.get(Profile, invitee_id)
+    await notify_friend_event(
+        session, recipient_id=inviter_id, actor=invitee, kind="connected"
+    )
+    await notify_friend_event(
+        session, recipient_id=invitee_id, actor=inviter, kind="connected"
+    )
+
+
 async def accept_invitation_for_user(
     session: SessionDep,
     invitation: Invitation,
@@ -241,6 +262,7 @@ async def accept_invitation_for_user(
         if invitation.post_id is not None:
             await _add_participant(session, invitation.post_id, user_id)
         await _record_redemption(session, invitation.id, user_id, became_friend=True)
+        await _notify_new_friendship(session, invitation.inviter_id, user_id)
         return InvitationAcceptResult(
             status="accepted",
             inviter_id=invitation.inviter_id,
@@ -284,6 +306,7 @@ async def accept_invitation_for_user(
     invitation.accepted_user_id = user_id
     invitation.accepted_at = datetime.now(UTC)
     await session.flush()
+    await _notify_new_friendship(session, invitation.inviter_id, user_id)
 
     return InvitationAcceptResult(
         status="accepted",
