@@ -419,7 +419,11 @@ export default function PeoplePage() {
       )}
 
       {openId ? (
-        <FriendProfileModal friendId={openId} onClose={() => setOpenId(null)} />
+        <FriendProfileModal
+          friendId={openId}
+          onClose={() => setOpenId(null)}
+          onUpdated={load}
+        />
       ) : null}
     </div>
   );
