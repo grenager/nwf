@@ -263,17 +263,21 @@ export function Nav() {
     void refreshBadges();
   });
 
-  // Replying in the feed stamps the read cursor, and answering a friend
-  // request settles one, both without a route change.
+  // Replying in the feed stamps the read cursor, answering a friend request
+  // settles one, and visiting the Alerts tab clears its own unread state —
+  // all without a route change, so the badge needs telling directly instead
+  // of waiting for the next poll or pathname change.
   useEffect(() => {
     function onStale(): void {
       void refreshBadges();
     }
     window.addEventListener("nwf:thread-seen", onStale);
     window.addEventListener("nwf:connections-changed", onStale);
+    window.addEventListener("nwf:alerts-viewed", onStale);
     return () => {
       window.removeEventListener("nwf:thread-seen", onStale);
       window.removeEventListener("nwf:connections-changed", onStale);
+      window.removeEventListener("nwf:alerts-viewed", onStale);
     };
   }, [refreshBadges]);
 
