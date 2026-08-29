@@ -3,6 +3,7 @@
 import { ModalShell } from "@/components/modal-shell";
 import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -28,6 +29,7 @@ export function useAuthGate(): AuthGateContextValue {
 
 export function AuthGateProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
+  const pathname = usePathname();
   const [actionLabel, setActionLabel] = useState<string | null>(null);
 
   const requireAuth = useCallback(
@@ -71,7 +73,8 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
               Not now
             </button>
             <Link
-              href="/signin"
+              href={`/signin?next=${encodeURIComponent(pathname)}`}
+              onClick={() => setActionLabel(null)}
               className="bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
               Create free account
