@@ -1,6 +1,6 @@
 import { FriendsSidebar } from "@/components/friends-sidebar";
 import { Nav } from "@/components/nav";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import type { ReactNode } from "react";
 
 export default async function AppLayout({
@@ -10,10 +10,7 @@ export default async function AppLayout({
   children: ReactNode;
   modal: ReactNode;
 }) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   if (!user) {
     return (
