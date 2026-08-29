@@ -444,13 +444,17 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
 async def friend_profile(
     friend_id: uuid.UUID, session: SessionDep, user: CurrentUser
 ) -> FriendProfileOut:
-    """Detailed profile + recent activity for an accepted friend or yourself."""
+    """Detailed profile + recent activity for a connection or yourself."""
     is_self: bool = friend_id == user.id
     viewer = await session.get(Profile, user.id)
     is_admin: bool = user.is_admin or bool(viewer and viewer.is_admin)
-    if not is_self and not is_admin:
-        friend_ids = await accepted_friend_ids(session, user.id)
-        if friend_id not in friend_ids:
+    is_friend: bool = False
+    if not is_self:
+        connection = await _find_between(session, user.id, friend_id)
+        is_friend = (
+            connection is not None and connection.status == ConnectionStatus.accepted
+        )
+        if not is_admin and connection is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "not your friend")
 
     profile = await session.get(Profile, friend_id)
@@ -583,6 +587,7 @@ async def friend_profile(
         comments=int(comments or 0),
         ratings=int(ratings or 0),
         can_edit=is_self or is_admin,
+        is_friend=is_friend,
         recent=items[:15],
     )
 

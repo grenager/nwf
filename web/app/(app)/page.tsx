@@ -1,5 +1,10 @@
+import { Landing } from "@/components/landing";
+import { getServerUser } from "@/lib/supabase/server";
+
 import { FeedClient } from "./feed-client";
 
-export default function FeedPage() {
-  return <FeedClient />;
+export default async function FeedPage() {
+  const user = await getServerUser();
+
+  return user ? <FeedClient /> : <Landing />;
 }
