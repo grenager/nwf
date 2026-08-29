@@ -508,6 +508,9 @@ class FriendProfileOut(BaseModel):
     comments: int = 0
     ratings: int = 0
     can_edit: bool = False
+    # True when the viewer and this user are accepted friends (always False
+    # for your own profile — there's no "remove friend" on yourself).
+    is_friend: bool = False
     recent: list[FriendActivityItem] = Field(default_factory=list)
 
 

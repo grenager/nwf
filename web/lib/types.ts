@@ -388,6 +388,8 @@ export interface FriendProfile {
   comments: number;
   ratings: number;
   can_edit: boolean;
+  /** True when the viewer and this user are accepted friends. */
+  is_friend: boolean;
   recent: FriendActivityItem[];
 }
 
