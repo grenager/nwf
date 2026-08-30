@@ -22,6 +22,8 @@ import { useCallback, useEffect, useState } from "react";
  * the notifications table records. The two come from separate endpoints and are
  * interleaved by recency here — a thread row stands for every reply since the
  * viewer last read it, so a busy thread stays one line instead of many.
+ * Visiting this page marks everything listed as seen (both halves), so the
+ * Alerts tab's badge clears the way the rest of the list already implies.
  */
 type ActivityRow =
   | { readonly type: "thread"; readonly at: number; readonly thread: ConversationItem }
@@ -119,14 +121,26 @@ export function NotificationsClient() {
       const unreadIds: Set<string> = new Set(
         alerts.items.filter((n) => n.read_at === null).map((n) => n.id),
       );
+      const unreadThreadIds: string[] = conversations.items
+        .filter((t) => t.unread_count > 0)
+        .map((t) => t.post_id);
       setInitiallyUnread(unreadIds);
       setRows(mergeActivity(alerts, conversations));
       setLoaded(true);
+      // Keep the rendered rows/highlight as fetched (they still reflect the
+      // pre-clear state) while stamping both halves as seen server-side, so
+      // the tab's badge — and not just the directed-alert count — clears
+      // once the user has viewed this list.
+      const markSeen: Promise<unknown>[] = [];
       if (alerts.unread_count > 0) {
-        await api.markNotificationsRead();
-        // Keep local rows; badge clears via nav poll. Preserve highlight via
-        // initiallyUnread for this visit. Thread rows clear their own unread
-        // counts when the viewer opens the thread.
+        markSeen.push(api.markNotificationsRead());
+      }
+      for (const postId of unreadThreadIds) {
+        markSeen.push(api.markThreadSeen(postId));
+      }
+      if (markSeen.length > 0) {
+        await Promise.all(markSeen);
+        window.dispatchEvent(new CustomEvent("nwf:alerts-viewed"));
       }
     } catch (err) {
       notify(
