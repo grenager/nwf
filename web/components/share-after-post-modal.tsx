@@ -3,13 +3,9 @@
 import { Avatar } from "@/components/avatar";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import {
-  invalidEmailEntries,
-  parseEmailRecipients,
-  type EmailRecipient,
-} from "@/lib/email-recipients";
-import type { PostAudience, UUID } from "@/lib/types";
-import { useEffect, useState, type FormEvent } from "react";
+import { canUseWebShare, shareOrCopyLink } from "@/lib/share";
+import type { InvitationCreateResult, PostAudience, UUID } from "@/lib/types";
+import { useEffect, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
 
 /** Which thing the viewer just published, for the confirmation copy. */
@@ -65,9 +61,9 @@ export function ShareAfterPostModal({
 }: ShareAfterPostModalProps) {
   const { notify } = useToast();
   const [audience, setAudience] = useState<PostAudience | null>(null);
-  const [entry, setEntry] = useState<string>("");
-  const [sending, setSending] = useState<boolean>(false);
-  const [sentCount, setSentCount] = useState<number>(0);
+  const [sharing, setSharing] = useState<boolean>(false);
+  const [result, setResult] = useState<InvitationCreateResult | null>(null);
+  const [copied, setCopied] = useState<boolean>(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -94,48 +90,51 @@ export function ShareAfterPostModal({
     };
   }, [postId]);
 
-  const recipients: EmailRecipient[] = parseEmailRecipients(entry);
-  const invalid: string[] = invalidEmailEntries(entry);
-  const canSend: boolean = recipients.length > 0 && !sending;
-
-  async function send(e: FormEvent): Promise<void> {
-    e.preventDefault();
-    if (!canSend) return;
-    setSending(true);
-    let succeeded: number = 0;
-    const failures: string[] = [];
-    for (const recipient of recipients) {
-      try {
-        const created = await api.createInvitation({
-          email: recipient.email,
-          invitee_name: recipient.name,
-          post_id: postId,
-          become_friend: true,
-        });
-        if (created.status === "suppressed") {
-          failures.push(`${recipient.email}: ${created.message}`);
-        } else {
-          succeeded += 1;
-        }
-      } catch (err) {
-        failures.push(
-          `${recipient.email}: ${
-            err instanceof ApiError ? err.message : "failed"
-          }`,
-        );
+  async function shareLink(): Promise<void> {
+    if (sharing) return;
+    setSharing(true);
+    setCopied(false);
+    try {
+      const created = await api.createInvitation({
+        post_id: postId,
+        become_friend: true,
+      });
+      setResult(created);
+      const url: string = created.invite_url ?? "";
+      if (!url) {
+        notify(created.message, "success");
+        return;
       }
-    }
-    setSending(false);
-    setSentCount((prev) => prev + succeeded);
-    setEntry("");
-    if (succeeded > 0) {
+      const outcome = await shareOrCopyLink({
+        title: "NewsWithFriends",
+        text: created.share_message,
+        url,
+      });
+      if (outcome === "copied") {
+        setCopied(true);
+        notify("Invite link copied", "success");
+      }
+      if (outcome === "failed") notify("Could not copy the invite link", "error");
+    } catch (err) {
       notify(
-        `Invited ${succeeded} ${succeeded === 1 ? "person" : "people"}`,
-        "success",
+        err instanceof ApiError ? err.message : "Failed to create invite link",
+        "error",
       );
+    } finally {
+      setSharing(false);
     }
-    if (failures.length > 0) {
-      notify(failures.join("; "), "error");
+  }
+
+  async function copyAgain(): Promise<void> {
+    if (!result?.invite_url) return;
+    try {
+      await navigator.clipboard.writeText(
+        result.share_message || result.invite_url,
+      );
+      setCopied(true);
+      notify("Copied", "success");
+    } catch {
+      notify("Could not copy", "error");
     }
   }
 
@@ -190,67 +189,54 @@ export function ShareAfterPostModal({
         </div>
       ) : null}
 
-      <form onSubmit={(e) => void send(e)} className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-        <label className="block">
-          <span className="font-serif text-base font-semibold text-zinc-900 dark:text-zinc-50">
-            Anyone else you&apos;d like to share this with?
-          </span>
-          {nudge !== null ? (
-            <span className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300">
-              {nudge}
-            </span>
-          ) : null}
-          <span className="mt-1 block text-xs text-zinc-500">
-            Paste emails separated by commas or spaces. Names are welcome too,
-            like Teg Grenager &lt;teg@example.com&gt;.
-          </span>
-          <input
-            value={entry}
-            onChange={(e) => setEntry(e.target.value)}
-            placeholder="friend@example.com, Ada Lovelace <ada@example.com>"
-            autoFocus
-            className="mt-2 w-full rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
-          />
-        </label>
-
-        {recipients.length > 0 ? (
-          <p className="mt-2 text-xs text-zinc-500">
-            Inviting:{" "}
-            {recipients
-              .map((r) => (r.name !== null ? `${r.name} (${r.email})` : r.email))
-              .join(", ")}
-          </p>
-        ) : null}
-        {invalid.length > 0 ? (
-          <p className="mt-2 text-xs text-red-600">
-            Not a valid email: {invalid.join(", ")}
-          </p>
-        ) : null}
-
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="submit"
-            disabled={!canSend}
-            className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
-            {sending ? "Sending…" : "Send invites"}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-          >
-            {sentCount > 0 ? "Done" : "No thanks"}
-          </button>
-        </div>
-      </form>
-
-      {sentCount > 0 ? (
-        <p className="mt-3 text-xs text-zinc-500">
-          {sentCount} {sentCount === 1 ? "invite" : "invites"} sent. They join
-          this conversation as your friend.
+      <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+        <p className="font-serif text-base font-semibold text-zinc-900 dark:text-zinc-50">
+          Anyone else you&apos;d like to share this with?
         </p>
-      ) : null}
+        {nudge !== null ? (
+          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+            {nudge}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => void shareLink()}
+          disabled={sharing}
+          className="mt-3 rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        >
+          {sharing
+            ? "Preparing…"
+            : canUseWebShare()
+              ? "Share invite link"
+              : "Copy invite link"}
+        </button>
+
+        {result?.invite_url ? (
+          <div className="mt-3">
+            <p className="break-all text-xs text-zinc-500">
+              {result.invite_url}
+            </p>
+            <button
+              type="button"
+              onClick={() => void copyAgain()}
+              className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400"
+            >
+              {copied ? "Copied!" : "Copy again"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+        >
+          Done
+        </button>
+      </div>
     </ModalShell>
   );
 }

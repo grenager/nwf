@@ -6,11 +6,11 @@ import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { shareOrCopyLink } from "@/lib/share";
 import { relativeTime } from "@/lib/time";
 import type {
   FriendRequest,
   FriendSummary,
-  InvitationCreateResult,
   RecommendedFriend,
   UUID,
 } from "@/lib/types";
@@ -174,12 +174,6 @@ export function FriendsSidebar() {
   const [openId, setOpenId] = useState<UUID | null>(null);
 
   const [inviting, setInviting] = useState<boolean>(false);
-  const [email, setEmail] = useState<string>("");
-  const [sending, setSending] = useState<boolean>(false);
-  const [lastInvite, setLastInvite] = useState<InvitationCreateResult | null>(
-    null,
-  );
-  const [copied, setCopied] = useState<boolean>(false);
 
   const isGuest: boolean = !session;
 
@@ -230,51 +224,31 @@ export function FriendsSidebar() {
     setPendingIds(next);
   }
 
-  function startInvite(): void {
+  async function startInvite(): Promise<void> {
     if (!requireAuth("invite friends")) return;
-    setInviting((v) => !v);
-    setLastInvite(null);
-    setCopied(false);
-  }
-
-  async function sendInvite(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    if (!requireAuth("invite friends")) return;
-    const value: string = email.trim();
-    if (!value || sending) return;
-    setSending(true);
-    setCopied(false);
+    if (inviting) return;
+    setInviting(true);
     try {
-      const result = await api.createInvitation({ email: value });
-      setLastInvite(result);
-      notify(result.message, "success");
-      if (result.status === "invited") {
-        // Keep form open so they can copy the link.
-      } else {
-        setEmail("");
-        setInviting(false);
-        void load();
+      const created = await api.createInvitation({ become_friend: true });
+      const url: string = created.invite_url ?? "";
+      if (!url) {
+        notify(created.message, "success");
+        return;
       }
+      const outcome = await shareOrCopyLink({
+        title: "NewsWithFriends",
+        text: created.share_message,
+        url,
+      });
+      if (outcome === "copied") notify("Invite link copied", "success");
+      if (outcome === "failed") notify("Could not copy the invite link", "error");
     } catch (err) {
       notify(
-        err instanceof ApiError ? err.message : "Failed to send invite",
+        err instanceof ApiError ? err.message : "Could not create an invite",
         "error",
       );
     } finally {
-      setSending(false);
-    }
-  }
-
-  async function copyInvite(): Promise<void> {
-    if (!lastInvite?.invite_url) return;
-    try {
-      await navigator.clipboard.writeText(
-        lastInvite.share_message || lastInvite.invite_url,
-      );
-      setCopied(true);
-      notify("Invitation copied", "success");
-    } catch {
-      notify("Could not copy", "error");
+      setInviting(false);
     }
   }
 
@@ -340,57 +314,19 @@ export function FriendsSidebar() {
           </p>
         </div>
         <button
-          onClick={startInvite}
-          className="pb-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          onClick={() => void startInvite()}
+          disabled={inviting}
+          className="pb-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-900 disabled:opacity-40 dark:hover:text-zinc-100"
         >
-          {inviting ? "Cancel" : "Invite"}
+          {inviting ? "Inviting…" : "Invite"}
         </button>
       </div>
-
-      {inviting ? (
-        <form
-          onSubmit={sendInvite}
-          className="border-b border-zinc-200 py-3 dark:border-zinc-800"
-        >
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="friend@email.com"
-            autoFocus
-            className="w-full border-b border-zinc-300 bg-transparent px-0 py-1.5 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-100"
-          />
-          <button
-            type="submit"
-            disabled={sending || email.trim().length === 0}
-            className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 disabled:opacity-40 dark:text-zinc-100"
-          >
-            {sending ? "Sending…" : "Send invite"}
-          </button>
-          {lastInvite?.invite_url ? (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-xs text-zinc-500">
-                {lastInvite.email_sent
-                  ? "Email sent. Copy a shareable link too:"
-                  : "Copy this link to share:"}
-              </p>
-              <button
-                type="button"
-                onClick={() => void copyInvite()}
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400"
-              >
-                {copied ? "Copied!" : "Copy invite"}
-              </button>
-            </div>
-          ) : null}
-        </form>
-      ) : null}
 
       {loading ? (
         <UserListSkeleton />
       ) : friends.length === 0 ? (
         <p className="py-4 text-sm text-zinc-400">
-          No friends yet. Invite someone by email to compare coverage.
+          No friends yet. Invite someone to compare coverage.
         </p>
       ) : (
         <div className="max-h-[50vh] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
