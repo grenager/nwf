@@ -6,6 +6,7 @@ import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { canUseWebShare, shareOrCopyLink } from "@/lib/share";
 import type {
   FriendRequest,
   FriendSummary,
@@ -58,8 +59,7 @@ export default function PeoplePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [openId, setOpenId] = useState<UUID | null>(null);
 
-  const [email, setEmail] = useState<string>("");
-  const [sending, setSending] = useState<boolean>(false);
+  const [inviting, setInviting] = useState<boolean>(false);
   const [lastInvite, setLastInvite] = useState<InvitationCreateResult | null>(
     null,
   );
@@ -127,28 +127,36 @@ export default function PeoplePage() {
     }
   }
 
-  async function sendInvite(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
+  async function createInvite(): Promise<void> {
     if (!requireAuth("invite friends")) return;
-    const value: string = email.trim();
-    if (!value || sending) return;
-    setSending(true);
+    if (inviting) return;
+    setInviting(true);
     setCopied(false);
     try {
-      const result = await api.createInvitation({ email: value });
-      setLastInvite(result);
-      notify(result.message, "success");
-      if (result.status !== "invited") {
-        setEmail("");
-        void load();
+      const created = await api.createInvitation({ become_friend: true });
+      setLastInvite(created);
+      const url: string = created.invite_url ?? "";
+      if (!url) {
+        notify(created.message, "success");
+        return;
       }
+      const outcome = await shareOrCopyLink({
+        title: "NewsWithFriends",
+        text: created.share_message,
+        url,
+      });
+      if (outcome === "copied") {
+        setCopied(true);
+        notify("Invite link copied", "success");
+      }
+      if (outcome === "failed") notify("Could not copy the invite link", "error");
     } catch (err) {
       notify(
-        err instanceof ApiError ? err.message : "Failed to send invite",
+        err instanceof ApiError ? err.message : "Failed to create an invite",
         "error",
       );
     } finally {
-      setSending(false);
+      setInviting(false);
     }
   }
 
@@ -192,7 +200,7 @@ export default function PeoplePage() {
       <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-400">
-            Invite by email
+            Invite friends
           </h2>
           {friendLimit > 0 ? (
             <span className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
@@ -200,41 +208,33 @@ export default function PeoplePage() {
             </span>
           ) : null}
         </div>
-        <form onSubmit={sendInvite} className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="friend@email.com"
-            className="flex-1 border-b border-zinc-300 bg-transparent px-0 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
-          />
-          <button
-            type="submit"
-            disabled={sending || email.trim().length === 0}
-            className="bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            {sending ? "Sending…" : "Send invite"}
-          </button>
-        </form>
+        <p className="mt-2 text-sm text-zinc-500">
+          Get a link to share with someone you&apos;d like to connect with.
+        </p>
+        <button
+          type="button"
+          onClick={() => void createInvite()}
+          disabled={inviting}
+          className="mt-3 bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          {inviting
+            ? "Creating…"
+            : canUseWebShare()
+              ? "Share invite link"
+              : "Copy invite link"}
+        </button>
         {lastInvite?.invite_url ? (
-          <div className="mt-3 space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              {lastInvite.email_sent
-                ? "Email sent. You can also copy a message to share:"
-                : "Copy this invitation and send it yourself:"}
-            </p>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <code className="flex-1 truncate rounded bg-zinc-50 px-2 py-1.5 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
-                {lastInvite.invite_url}
-              </code>
-              <button
-                type="button"
-                onClick={() => void copyInviteLink()}
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100"
-              >
-                {copied ? "Copied!" : "Copy invite"}
-              </button>
-            </div>
+          <div className="mt-3 flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800 sm:flex-row sm:items-center">
+            <code className="flex-1 truncate rounded bg-zinc-50 px-2 py-1.5 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+              {lastInvite.invite_url}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copyInviteLink()}
+              className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100"
+            >
+              {copied ? "Copied!" : "Copy invite"}
+            </button>
           </div>
         ) : null}
       </section>
@@ -386,7 +386,7 @@ export default function PeoplePage() {
             </div>
             {friends.length === 0 ? (
               <p className="text-sm text-zinc-400">
-                No friends yet. Invite someone by email above.
+                No friends yet. Invite someone using the link above.
               </p>
             ) : (
               <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">

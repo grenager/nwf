@@ -4,7 +4,7 @@ import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { InvitationCreateResult, UUID } from "@/lib/types";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
 import { canUseWebShare } from "@/lib/share";
 
@@ -41,9 +41,6 @@ export function SharePostModal({
   const [sharing, setSharing] = useState<boolean>(false);
   const [result, setResult] = useState<InvitationCreateResult | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
-  const [showEmail, setShowEmail] = useState<boolean>(false);
-  const [email, setEmail] = useState<string>("");
-  const [sendingEmail, setSendingEmail] = useState<boolean>(false);
 
   const trimmedNote: string = shareNote.trim();
   const canShare: boolean = trimmedNote.length > 0;
@@ -126,34 +123,6 @@ export function SharePostModal({
       notify("Copied", "success");
     } catch {
       notify("Could not copy", "error");
-    }
-  }
-
-  async function sendEmail(e: FormEvent): Promise<void> {
-    e.preventDefault();
-    if (!requireAuth("invite friends")) return;
-    const trimmed: string = email.trim();
-    if (!trimmed || !canShare || sendingEmail) return;
-    setSendingEmail(true);
-    try {
-      const created = await api.createInvitation({
-        email: trimmed,
-        post_id: postId,
-        message: trimmedNote,
-        become_friend: becomeFriend,
-      });
-      notify(created.message, "success");
-      if (created.invite_url) {
-        setResult(created);
-      }
-      setEmail("");
-    } catch (err) {
-      notify(
-        err instanceof ApiError ? err.message : "Failed to send invite",
-        "error",
-      );
-    } finally {
-      setSendingEmail(false);
     }
   }
 
@@ -257,50 +226,6 @@ export function SharePostModal({
           </button>
         </div>
       ) : null}
-
-      <div className="mt-5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-        {showEmail ? (
-          <form onSubmit={sendEmail} className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
-              Or invite by email
-            </p>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="friend@email.com"
-              className="w-full border-b border-zinc-300 bg-transparent px-0 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
-            />
-            <div className="flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={
-                  sendingEmail || email.trim().length === 0 || !canShare
-                }
-                className="bg-zinc-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-              >
-                {sendingEmail ? "Sending…" : "Send email"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowEmail(false)}
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowEmail(true)}
-            className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            Invite by email instead
-          </button>
-        )}
-      </div>
     </ModalShell>
   );
 }
