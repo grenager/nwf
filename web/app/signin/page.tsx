@@ -3,6 +3,7 @@
 import { BrandLink } from "@/components/brand-mark";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -171,6 +172,17 @@ function SignInForm() {
       </div>
       <p className="mt-4 text-center text-sm text-slate-500">
         Pre-created accounts: sign in with the same email to claim them.
+      </p>
+      <p className="mt-6 text-center text-xs text-slate-400">
+        By signing in, you agree to our{" "}
+        <Link href="/terms" className="underline">
+          Terms
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" className="underline">
+          Privacy Policy
+        </Link>
+        .
       </p>
     </main>
   );
