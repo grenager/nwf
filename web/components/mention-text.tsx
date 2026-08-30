@@ -2,13 +2,41 @@
 
 import { Fragment, type ReactNode } from "react";
 
-// Matches react-mentions markup: `@[Display Name](user-uuid)`.
-const MENTION_RE: RegExp =
-  /@\[([^\]]+)\]\(([0-9a-fA-F-]{36})\)/g;
+// Matches react-mentions markup `@[Display Name](user-uuid)`, or a bare URL.
+const TOKEN_RE: RegExp =
+  /@\[([^\]]+)\]\(([0-9a-fA-F-]{36})\)|(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/g;
+
+// Strips trailing punctuation (and any unbalanced closing bracket) that's
+// more likely to be sentence punctuation than part of the URL itself.
+function splitTrailingPunctuation(raw: string): { url: string; trailing: string } {
+  let url = raw;
+  let trailing = "";
+  while (url.length > 0) {
+    const lastChar = url[url.length - 1];
+    if (".,!?;:'\"".includes(lastChar)) {
+      trailing = lastChar + trailing;
+      url = url.slice(0, -1);
+      continue;
+    }
+    if (lastChar === ")" && !url.slice(0, -1).includes("(")) {
+      trailing = lastChar + trailing;
+      url = url.slice(0, -1);
+      continue;
+    }
+    if (lastChar === "]" && !url.slice(0, -1).includes("[")) {
+      trailing = lastChar + trailing;
+      url = url.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return { url, trailing };
+}
 
 /**
  * Render post takes / comment bodies, turning `@[Name](uuid)` mention markup
- * into styled labels while leaving all other text (and newlines) intact.
+ * into styled labels and bare URLs into clickable links, while leaving all
+ * other text (and newlines) intact.
  */
 export function MentionText({
   text,
@@ -22,27 +50,48 @@ export function MentionText({
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  MENTION_RE.lastIndex = 0;
+  TOKEN_RE.lastIndex = 0;
   let key = 0;
 
-  while ((match = MENTION_RE.exec(text)) !== null) {
-    const display: string = match[1];
+  while ((match = TOKEN_RE.exec(text)) !== null) {
     if (match.index > lastIndex) {
       nodes.push(
         <Fragment key={`t${key}`}>{text.slice(lastIndex, match.index)}</Fragment>,
       );
       key += 1;
     }
-    nodes.push(
-      <span
-        key={`m${key}`}
-        className="font-semibold text-zinc-900 dark:text-zinc-100"
-      >
-        @{display}
-      </span>,
-    );
+
+    const mentionDisplay = match[1];
+    const rawUrl = match[3];
+
+    if (mentionDisplay !== undefined) {
+      nodes.push(
+        <span
+          key={`m${key}`}
+          className="font-semibold text-zinc-900 dark:text-zinc-100"
+        >
+          @{mentionDisplay}
+        </span>,
+      );
+      lastIndex = match.index + match[0].length;
+    } else {
+      const { url, trailing } = splitTrailingPunctuation(rawUrl);
+      const href = url.startsWith("http") ? url : `https://${url}`;
+      nodes.push(
+        <a
+          key={`u${key}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+        </a>,
+      );
+      lastIndex = match.index + match[0].length - trailing.length;
+    }
     key += 1;
-    lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) {
