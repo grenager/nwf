@@ -103,7 +103,7 @@ function SignInForm() {
               type="button"
               onClick={handleGoogleSignIn}
               disabled={busy}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-zinc-900 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-zinc-50 dark:hover:bg-slate-700"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                 <path
@@ -127,7 +127,7 @@ function SignInForm() {
             </button>
             <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
               <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-              or
+              or use email
               <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -161,7 +161,7 @@ function SignInForm() {
               <button
                 type="submit"
                 disabled={busy}
-                className="w-full rounded-lg bg-zinc-900 py-2.5 font-semibold text-white transition hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2.5 font-semibold text-zinc-900 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-zinc-50 dark:hover:bg-slate-700"
               >
                 {busy ? "Sending…" : "Send magic link"}
               </button>
