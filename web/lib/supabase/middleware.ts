@@ -53,6 +53,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const isPublic: boolean =
     pathname === "/" ||
     pathname === "/signin" ||
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/invite");
 

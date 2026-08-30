@@ -43,6 +43,15 @@ double_confirm_changes = true
 # Magic-link / OTP sign-in (no passwords).
 enable_confirmations = false
 
+# Sign in with Google. Client ID/secret come from a Google Cloud OAuth
+# client (Web application type) — set the two env vars below before
+# running `supabase start`. Production config lives in the Supabase
+# dashboard under Auth -> Providers instead of this file.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+
 # Custom SMTP via Resend. Replaces Supabase's tiny built-in email limit.
 # Secrets come from the environment (never commit the API key). Set
 # RESEND_SMTP_PASSWORD to a Resend API key (starts with "re_").
