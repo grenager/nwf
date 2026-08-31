@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import Settings, get_settings
 from core.models import (
     Comment,
+    CommentReaction,
     Connection,
     ConnectionStatus,
     EmailSuppression,
@@ -27,7 +28,6 @@ from core.models import (
     PostReaction,
     PostVisibility,
     Profile,
-    StoryRating,
     StoryStatus,
 )
 
@@ -451,14 +451,15 @@ async def friend_ids_for_users(
     return result
 
 
-async def friend_stars_by_story(
+async def friend_reactors_by_story(
     session: AsyncSession,
     user_id: uuid.UUID,
     story_ids: list[uuid.UUID],
     *,
     friend_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, list[Profile]]:
-    """Map story_id -> profiles of friends who rated it."""
+    """Map story_id -> profiles of friends who reacted to a post or comment
+    about it (post_reactions joined via Post, comment_reactions via Comment)."""
     if not story_ids:
         return {}
 
@@ -470,101 +471,37 @@ async def friend_stars_by_story(
     if not friends:
         return {}
 
-    rows = (
+    result: dict[uuid.UUID, dict[uuid.UUID, Profile]] = {}
+
+    post_rows = (
         await session.execute(
-            select(StoryRating.story_id, Profile)
-            .join(Profile, Profile.id == StoryRating.user_id)
+            select(Post.story_id, Profile)
+            .join(PostReaction, PostReaction.post_id == Post.id)
+            .join(Profile, Profile.id == PostReaction.user_id)
             .where(
-                StoryRating.story_id.in_(story_ids),
-                StoryRating.user_id.in_(friends),
+                Post.story_id.in_(story_ids),
+                PostReaction.user_id.in_(friends),
             )
         )
     ).all()
+    for story_id, profile in post_rows:
+        result.setdefault(story_id, {})[profile.id] = profile
 
-    result: dict[uuid.UUID, list[Profile]] = {}
-    for story_id, profile in rows:
-        result.setdefault(story_id, []).append(profile)
-    return result
-
-
-async def my_ratings_by_story(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    story_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, float]:
-    """Map story_id -> the current user's own half-star rating (if any)."""
-    if not story_ids:
-        return {}
-    rows = (
+    comment_rows = (
         await session.execute(
-            select(StoryRating.story_id, StoryRating.rating).where(
-                StoryRating.story_id.in_(story_ids),
-                StoryRating.user_id == user_id,
+            select(Comment.story_id, Profile)
+            .join(CommentReaction, CommentReaction.comment_id == Comment.id)
+            .join(Profile, Profile.id == CommentReaction.user_id)
+            .where(
+                Comment.story_id.in_(story_ids),
+                CommentReaction.user_id.in_(friends),
             )
         )
     ).all()
-    return {story_id: float(rating) for story_id, rating in rows}
+    for story_id, profile in comment_rows:
+        result.setdefault(story_id, {})[profile.id] = profile
 
-
-async def ratings_for_users_by_story(
-    session: AsyncSession,
-    story_ids: list[uuid.UUID],
-    user_ids: Iterable[uuid.UUID],
-) -> dict[uuid.UUID, dict[uuid.UUID, float]]:
-    """Map story_id -> {user_id: half-star rating} for the given users."""
-    users = list(user_ids)
-    if not story_ids or not users:
-        return {}
-    rows = (
-        await session.execute(
-            select(
-                StoryRating.story_id,
-                StoryRating.user_id,
-                StoryRating.rating,
-            ).where(
-                StoryRating.story_id.in_(story_ids),
-                StoryRating.user_id.in_(users),
-            )
-        )
-    ).all()
-    result: dict[uuid.UUID, dict[uuid.UUID, float]] = {}
-    for story_id, uid, rating in rows:
-        result.setdefault(story_id, {})[uid] = float(rating)
-    return result
-
-
-async def friend_ratings_by_story(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    story_ids: list[uuid.UUID],
-    *,
-    friend_ids: list[uuid.UUID] | None = None,
-) -> dict[uuid.UUID, tuple[float, int]]:
-    """Map story_id -> (average rating, count) among the viewer's friends."""
-    if not story_ids:
-        return {}
-    friends: list[uuid.UUID] = (
-        friend_ids
-        if friend_ids is not None
-        else await accepted_friend_ids(session, user_id)
-    )
-    if not friends:
-        return {}
-    rows = (
-        await session.execute(
-            select(StoryRating.story_id, StoryRating.rating).where(
-                StoryRating.story_id.in_(story_ids),
-                StoryRating.user_id.in_(friends),
-            )
-        )
-    ).all()
-    buckets: dict[uuid.UUID, list[float]] = {}
-    for story_id, rating in rows:
-        buckets.setdefault(story_id, []).append(float(rating))
-    return {
-        story_id: (sum(values) / len(values), len(values))
-        for story_id, values in buckets.items()
-    }
+    return {story_id: list(profiles.values()) for story_id, profiles in result.items()}
 
 
 async def friend_activity_by_story(
@@ -676,15 +613,14 @@ async def friend_profiles_map(
     return {p.id: p for p in rows.all()}
 
 
-FofActionKind = Literal["commented", "rated", "reacted", "read"]
+FofActionKind = Literal["commented", "reacted", "read"]
 
 # Tie-break priority when a post has actions from multiple friends at the same
 # timestamp; primary sort is always most-recent-first.
 _FOF_ACTION_PRIORITY: dict[FofActionKind, int] = {
     "commented": 0,  # most effortful/notable
-    "rated": 1,
-    "reacted": 2,
-    "read": 3,  # lightest signal
+    "reacted": 1,
+    "read": 2,  # lightest signal
 }
 
 
@@ -762,20 +698,6 @@ async def fof_attribution_by_post(
         for post_id in story_to_posts[story_id]:
             candidates[post_id].append(FofAction(uid, "read", ts))
 
-    rating_rows = (
-        await session.execute(
-            select(
-                StoryRating.story_id, StoryRating.user_id, StoryRating.updated_at
-            ).where(
-                StoryRating.story_id.in_(story_ids),
-                StoryRating.user_id.in_(friend_ids),
-            )
-        )
-    ).all()
-    for story_id, uid, ts in rating_rows:
-        for post_id in story_to_posts[story_id]:
-            candidates[post_id].append(FofAction(uid, "rated", ts))
-
     best: dict[uuid.UUID, FofAction] = {}
     for post_id, actions in candidates.items():
         actions.sort(key=lambda a: (a.acted_at, -_FOF_ACTION_PRIORITY[a.kind]))
@@ -821,15 +743,15 @@ async def post_participant_ids(
 
 def _fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
     """True when any of `user_ids` engaged with Post (via post_participants /
-    post_reactions) or its Story (via story_statuses.read / story_ratings).
+    post_reactions) or its Story (via story_statuses.read).
 
-    Story-level engagement (reading, rating) unlocks every Post tied to that
-    story_id, not just one - a friend reading/rating an article is vouching
-    for the article, not for any one person's take on it, and there's often
-    no single post to narrow to (e.g. a friend who read but never posted or
-    replied). Post-level engagement (replying, reacting) stays scoped to that
-    one post. Uses EXISTS (a semi-join) rather than outerjoin so combining
-    four engagement types doesn't fan out result rows.
+    Story-level engagement (reading) unlocks every Post tied to that
+    story_id, not just one - a friend reading an article is vouching for the
+    article, not for any one person's take on it, and there's often no single
+    post to narrow to (e.g. a friend who read but never posted or replied).
+    Post-level engagement (replying, reacting) stays scoped to that one post.
+    Uses EXISTS (a semi-join) rather than outerjoin so combining engagement
+    types doesn't fan out result rows.
     """
     ids = list(user_ids)
     return or_(
@@ -846,10 +768,6 @@ def _fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]
             StoryStatus.read.is_(True),
             StoryStatus.user_id.in_(ids),
         ),
-        exists().where(
-            StoryRating.story_id == Post.story_id,
-            StoryRating.user_id.in_(ids),
-        ),
     )
 
 
@@ -862,8 +780,8 @@ async def can_see_post(
     participant_ids: list[uuid.UUID] | None = None,
 ) -> bool:
     """True if viewer may see the post (author, participant, or a direct
-    friend engaged with the post/its story - reply, reaction, rating, or
-    marking the story read)."""
+    friend engaged with the post/its story - reply, reaction, or marking the
+    story read)."""
     if viewer_id is None:
         return False
     if post.author_id == viewer_id:
@@ -896,10 +814,6 @@ async def can_see_post(
                 StoryStatus.read.is_(True),
                 StoryStatus.user_id.in_(friends),
             ),
-            exists().where(
-                StoryRating.story_id == post.story_id,
-                StoryRating.user_id.in_(friends),
-            ),
         )
     )
     return bool(await session.scalar(stmt))
@@ -926,7 +840,7 @@ async def visible_post_ids_for_viewer(
 
     Authenticated users see private posts where they are the author or a
     direct friend engaged with the post or its story (participant, reaction,
-    reading, or rating). Guests see nothing.
+    or reading). Guests see nothing.
     Sorted by ``created_at`` so a new reply - or a friend's later engagement -
     does not bump a post to the top.
 

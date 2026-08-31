@@ -2,12 +2,12 @@
 
 import { useAuthGate } from "@/components/auth-gate";
 import { MentionInput } from "@/components/mention-input";
+import { ReactionBar } from "@/components/reaction-bar";
 import { SourceLogo } from "@/components/source-logo";
-import { StarPicker } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
-import type { Post, PreviewCard, Story } from "@/lib/types";
+import type { Post, PreviewCard, ReactionKind, Story } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
 
@@ -44,7 +44,7 @@ export function AddStoryModal({ onClose, onAdded, story }: AddStoryModalProps) {
   const [url, setUrl] = useState<string>(story?.article_url ?? "");
   const [take, setTake] = useState<string>("");
   const [sharedText, setSharedText] = useState<string>("");
-  const [rating, setRating] = useState<number | null>(null);
+  const [reaction, setReaction] = useState<ReactionKind | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [preview, setPreview] = useState<PreviewCard | null>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
@@ -137,12 +137,14 @@ export function AddStoryModal({ onClose, onAdded, story }: AddStoryModalProps) {
           platform: preview.platform,
         });
       }
-      if (rating !== null) {
-        await api
-          .setRating(post.story_id, rating)
-          .catch(() => undefined);
-        post.my_rating = rating;
-        post.author_rating = rating;
+      if (reaction !== null) {
+        const reacted = await api
+          .reactToPost(post.id, reaction)
+          .catch(() => null);
+        if (reacted) {
+          post.reactions = reacted.reactions;
+          post.my_reaction = reacted.my_reaction;
+        }
       }
       notify("Posted", "success");
       onAdded?.(post);
@@ -333,16 +335,13 @@ export function AddStoryModal({ onClose, onAdded, story }: AddStoryModalProps) {
 
         <div className="flex flex-col gap-1">
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Your rating (optional)
+            Your reaction (optional)
           </span>
-          <div className="flex items-center gap-2">
-            <StarPicker value={rating} onChange={setRating} />
-            {rating !== null ? (
-              <span className="text-[11px] text-slate-400">
-                {rating.toFixed(1)}
-              </span>
-            ) : null}
-          </div>
+          <ReactionBar
+            reactions={[]}
+            myReaction={reaction}
+            onToggle={(next) => setReaction((prev) => (prev === next ? null : next))}
+          />
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400">

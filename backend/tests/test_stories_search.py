@@ -62,7 +62,7 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
     )()
 
     mock_user = type("U", (), {"id": user_id})()
-    mock_friend_stars = AsyncMock(return_value={})
+    mock_friend_reactors = AsyncMock(return_value={})
     mock_primary = AsyncMock(return_value={story_id: post_id})
     summary = _PostSummary(
         author_name="Ada Lovelace",
@@ -81,8 +81,8 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
             AsyncMock(return_value={post_id: summary}),
         ),
         patch(
-            "api.routers.stories.friend_stars_by_story",
-            mock_friend_stars,
+            "api.routers.stories.friend_reactors_by_story",
+            mock_friend_reactors,
         ),
         patch(
             "api.routers.stories.primary_post_ids_by_story",
@@ -134,7 +134,7 @@ async def test_title_search_filters_to_stories_with_a_visible_post() -> None:
     )()
 
     mock_user = type("U", (), {"id": user_id})()
-    mock_friend_stars = AsyncMock(return_value={})
+    mock_friend_reactors = AsyncMock(return_value={})
     mock_primary = AsyncMock(return_value={})
 
     with (
@@ -147,8 +147,8 @@ async def test_title_search_filters_to_stories_with_a_visible_post() -> None:
             AsyncMock(return_value={}),
         ),
         patch(
-            "api.routers.stories.friend_stars_by_story",
-            mock_friend_stars,
+            "api.routers.stories.friend_reactors_by_story",
+            mock_friend_reactors,
         ),
         patch(
             "api.routers.stories.primary_post_ids_by_story",

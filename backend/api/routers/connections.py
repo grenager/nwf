@@ -39,14 +39,15 @@ from core.email import FriendNoticeEmailContent, send_friend_notice_email
 from core.logging import get_logger
 from core.models import (
     Comment,
+    CommentReaction,
     Connection,
     ConnectionStatus,
     NotificationKind,
     Post,
+    PostReaction,
     Profile,
     Source,
     Story,
-    StoryRating,
     StoryStatus,
 )
 from core.notifications import create_notification
@@ -350,17 +351,38 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         .tuples()
         .all()
     )
-    rating_last: dict[uuid.UUID, datetime] = dict(
+    post_reaction_last: dict[uuid.UUID, datetime] = dict(
         (
             await session.execute(
-                select(StoryRating.user_id, func.max(StoryRating.updated_at))
-                .where(StoryRating.user_id.in_(friend_ids))
-                .group_by(StoryRating.user_id)
+                select(PostReaction.user_id, func.max(PostReaction.updated_at))
+                .where(PostReaction.user_id.in_(friend_ids))
+                .group_by(PostReaction.user_id)
             )
         )
         .tuples()
         .all()
     )
+    comment_reaction_last: dict[uuid.UUID, datetime] = dict(
+        (
+            await session.execute(
+                select(
+                    CommentReaction.user_id, func.max(CommentReaction.updated_at)
+                )
+                .where(CommentReaction.user_id.in_(friend_ids))
+                .group_by(CommentReaction.user_id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    reaction_last: dict[uuid.UUID, datetime] = {
+        uid: max(
+            t
+            for t in (post_reaction_last.get(uid), comment_reaction_last.get(uid))
+            if t is not None
+        )
+        for uid in set(post_reaction_last) | set(comment_reaction_last)
+    }
     post_last: dict[uuid.UUID, datetime] = dict(
         (
             await session.execute(
@@ -391,8 +413,8 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
             events.append((at, "posted a story"))
         if (at := comment_last.get(fid)) is not None:
             events.append((at, "added a comment"))
-        if (at := rating_last.get(fid)) is not None:
-            events.append((at, "rated a story"))
+        if (at := reaction_last.get(fid)) is not None:
+            events.append((at, "reacted to a post"))
         if not events:
             return None
         events.sort(key=lambda e: e[0], reverse=True)
@@ -407,7 +429,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
             for t in (
                 status_last.get(fid),
                 comment_last.get(fid),
-                rating_last.get(fid),
+                reaction_last.get(fid),
                 post_last.get(fid),
             )
             if t is not None
@@ -468,11 +490,17 @@ async def friend_profile(
     comments = await session.scalar(
         select(func.count()).select_from(Comment).where(Comment.user_id == friend_id)
     )
-    ratings = await session.scalar(
+    post_reaction_count = await session.scalar(
         select(func.count())
-        .select_from(StoryRating)
-        .where(StoryRating.user_id == friend_id)
+        .select_from(PostReaction)
+        .where(PostReaction.user_id == friend_id)
     )
+    comment_reaction_count = await session.scalar(
+        select(func.count())
+        .select_from(CommentReaction)
+        .where(CommentReaction.user_id == friend_id)
+    )
+    reactions = int(post_reaction_count or 0) + int(comment_reaction_count or 0)
 
     status_rows = (
         await session.execute(
@@ -503,29 +531,51 @@ async def friend_profile(
         )
     ).all()
 
-    rating_rows = (
+    post_reaction_rows = (
         await session.execute(
-            select(StoryRating, Story, Source)
-            .join(Story, Story.id == StoryRating.story_id)
+            select(PostReaction, Post, Story, Source)
+            .join(Post, Post.id == PostReaction.post_id)
+            .join(Story, Story.id == Post.story_id)
             .outerjoin(Source, Source.id == Story.source_id)
-            .where(StoryRating.user_id == friend_id)
-            .order_by(StoryRating.updated_at.desc())
+            .where(PostReaction.user_id == friend_id)
+            .order_by(PostReaction.updated_at.desc())
+            .limit(15)
+        )
+    ).all()
+
+    comment_reaction_rows = (
+        await session.execute(
+            select(CommentReaction, Comment, Story, Source)
+            .join(Comment, Comment.id == CommentReaction.comment_id)
+            .join(Story, Story.id == Comment.story_id)
+            .outerjoin(Source, Source.id == Story.source_id)
+            .where(CommentReaction.user_id == friend_id)
+            .order_by(CommentReaction.updated_at.desc())
             .limit(15)
         )
     ).all()
 
     # Each activity row links to the post the viewer can actually open — the
-    # comment's own post when it is visible, otherwise the story's primary one.
+    # reacted-to post when it is visible, otherwise the story's primary one.
     story_ids: list[uuid.UUID] = list(
         {row[0].id for row in status_rows}
         | {story.id for _, story, _ in comment_rows}
-        | {story.id for _, story, _ in rating_rows}
+        | {story.id for _, _, story, _ in post_reaction_rows}
+        | {story.id for _, _, story, _ in comment_reaction_rows}
     )
     post_by_story = await primary_post_ids_by_story(session, user.id, story_ids)
     visible_comment_posts = await viewer_visible_post_ids(
         session,
         user.id,
-        [comment.post_id for comment, _, _ in comment_rows if comment.post_id],
+        [
+            *(comment.post_id for comment, _, _ in comment_rows if comment.post_id),
+            *(post.id for _, post, _, _ in post_reaction_rows),
+            *(
+                comment.post_id
+                for _, comment, _, _ in comment_reaction_rows
+                if comment.post_id
+            ),
+        ],
     )
 
     items: list[FriendActivityItem] = []
@@ -557,17 +607,33 @@ async def friend_profile(
                 comment_text=comment.text,
             )
         )
-    for rating_row, story, source in rating_rows:
+    for reaction, post, story, source in post_reaction_rows:
+        on_own_post = post.id in visible_comment_posts
         items.append(
             FriendActivityItem(
-                kind="rated",
+                kind="reacted",
                 story_id=story.id,
-                post_id=post_by_story.get(story.id),
+                post_id=post.id if on_own_post else post_by_story.get(story.id),
                 headline=story.full_headline,
                 source_name=source.name if source else None,
                 article_url=story.article_url,
-                at=rating_row.updated_at,
-                rating=float(rating_row.rating),
+                at=reaction.updated_at,
+                reaction=reaction.reaction,
+            )
+        )
+    for reaction, comment, story, source in comment_reaction_rows:
+        on_own_post = comment.post_id in visible_comment_posts
+        items.append(
+            FriendActivityItem(
+                kind="reacted",
+                story_id=story.id,
+                post_id=comment.post_id if on_own_post else post_by_story.get(story.id),
+                comment_id=comment.id if on_own_post else None,
+                headline=story.full_headline,
+                source_name=source.name if source else None,
+                article_url=story.article_url,
+                at=reaction.updated_at,
+                reaction=reaction.reaction,
             )
         )
     items.sort(key=lambda i: i.at, reverse=True)
@@ -586,7 +652,7 @@ async def friend_profile(
         last_active_at=last_active,
         reads=int(reads or 0),
         comments=int(comments or 0),
-        ratings=int(ratings or 0),
+        reactions=reactions,
         can_edit=is_self or is_admin,
         is_friend=is_friend,
         recent=items[:15],

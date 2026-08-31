@@ -1,12 +1,11 @@
 "use client";
 
-import { applyReactionToggle } from "@/components/reaction-bar";
+import { applyReactionToggle, ReactionBar } from "@/components/reaction-bar";
 import { Avatar } from "@/components/avatar";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { MentionInput } from "@/components/mention-input";
 import { MentionText } from "@/components/mention-text";
 import { ShareAfterPostModal } from "@/components/share-after-post-modal";
-import { RatingInput, StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
@@ -16,7 +15,14 @@ import { commentWasEdited } from "@/lib/comments";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import { useTypingIndicator } from "@/lib/use-typing-indicator";
-import type { Comment, Post, PostTyper, Profile, UUID } from "@/lib/types";
+import type {
+  Comment,
+  Post,
+  PostTyper,
+  Profile,
+  ReactionKind,
+  UUID,
+} from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -61,9 +67,6 @@ export function PostThread({
   post,
   me,
   preview,
-  storyId,
-  myRating,
-  onRate,
   onPostChange,
   onDelete,
   onInvite,
@@ -76,9 +79,6 @@ export function PostThread({
   post: Post;
   me: Profile | null;
   preview?: ReactNode;
-  storyId: UUID;
-  myRating: number | null;
-  onRate: (value: number | null) => void;
   onPostChange: (post: Post) => void;
   onDelete: () => void;
   onInvite: () => void;
@@ -90,7 +90,7 @@ export function PostThread({
   focusCommentId?: UUID | null;
   /** Cap top-level comments shown (feed preview). Nested replies stay attached. */
   maxTopLevelComments?: number;
-  /** Hide rating row and attach affordances (feed preview). */
+  /** Hide the reaction row and attach affordances (feed preview). */
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -121,6 +121,7 @@ export function PostThread({
   );
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [reacting, setReacting] = useState<boolean>(false);
+  const [postReacting, setPostReacting] = useState<boolean>(false);
   const [seenBoundary, setSeenBoundary] = useState<string | null>(
     post.last_seen_at ?? null,
   );
@@ -129,7 +130,6 @@ export function PostThread({
   const unreadDividerRef = useRef<HTMLDivElement | null>(null);
   const scrolledUnreadRef = useRef<boolean>(false);
   const scrolledCommentRef = useRef<UUID | null>(null);
-  const [ratingOpen, setRatingOpen] = useState<boolean>(false);
   const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
   const [shareAfterReply, setShareAfterReply] = useState<boolean>(false);
   const { typers, notifyTyping } = useTypingIndicator(post.id);
@@ -138,12 +138,33 @@ export function PostThread({
   const isPreviewMode: boolean =
     compact || (maxTopLevelComments !== undefined && maxTopLevelComments > 0);
 
-  const hasAggregate: boolean =
-    post.rating_count > 0 && post.rating_avg !== null;
-
-  function handleRate(next: number | null): void {
-    onRate(next);
-    setRatingOpen(false);
+  async function togglePostReaction(reaction: ReactionKind): Promise<void> {
+    if (!requireAuth("react to this")) return;
+    if (postReacting) return;
+    const optimistic = applyReactionToggle(
+      post.reactions ?? [],
+      post.my_reaction ?? null,
+      reaction,
+    );
+    const previous: Post = post;
+    onPostChange({
+      ...post,
+      reactions: optimistic.reactions,
+      my_reaction: optimistic.my_reaction,
+    });
+    setPostReacting(true);
+    try {
+      const updated: Post =
+        optimistic.my_reaction === null
+          ? await api.clearPostReaction(post.id)
+          : await api.reactToPost(post.id, reaction);
+      onPostChange(updated);
+    } catch (err) {
+      onPostChange(previous);
+      notify(err instanceof ApiError ? err.message : "Failed to react", "error");
+    } finally {
+      setPostReacting(false);
+    }
   }
 
   // Stamp the per-thread read cursor when the signed-in viewer opens this thread
@@ -270,13 +291,16 @@ export function PostThread({
     composerRef.current?.focus();
   }
 
-  async function toggleCommentLike(comment: Comment): Promise<void> {
-    if (!requireAuth("like a comment")) return;
+  async function toggleCommentReaction(
+    comment: Comment,
+    reaction: ReactionKind,
+  ): Promise<void> {
+    if (!requireAuth("react to a comment")) return;
     if (reacting) return;
     const optimistic = applyReactionToggle(
       comment.reactions ?? [],
       comment.my_reaction ?? null,
-      "like",
+      reaction,
     );
     const patched: Comment = {
       ...comment,
@@ -292,14 +316,14 @@ export function PostThread({
       const updated: Comment =
         optimistic.my_reaction === null
           ? await api.clearCommentReaction(comment.id)
-          : await api.reactToComment(comment.id, "like");
+          : await api.reactToComment(comment.id, reaction);
       onPostChange({
         ...post,
         replies: post.replies.map((r) => (r.id === comment.id ? updated : r)),
       });
     } catch (err) {
       onPostChange(post);
-      notify(err instanceof ApiError ? err.message : "Failed to like", "error");
+      notify(err instanceof ApiError ? err.message : "Failed to react", "error");
     } finally {
       setReacting(false);
     }
@@ -566,34 +590,12 @@ export function PostThread({
 
         {!compact && !isGuest ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-            {hasAggregate && post.rating_avg !== null ? (
-              <>
-                <StarsDisplay value={post.rating_avg} size="xs" />
-                <span>
-                  {post.rating_avg.toFixed(1)} · {post.rating_count} rating
-                  {post.rating_count === 1 ? "" : "s"}
-                </span>
-              </>
-            ) : null}
-            {ratingOpen ? (
-              <RatingInput
-                storyId={storyId}
-                value={myRating}
-                onChange={handleRate}
-                size="sm"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!requireAuth("rate stories")) return;
-                  setRatingOpen(true);
-                }}
-                className="font-medium text-zinc-900 hover:underline dark:text-zinc-100"
-              >
-                {myRating != null ? "Change my rating" : "Rate this"}
-              </button>
-            )}
+            <ReactionBar
+              reactions={post.reactions}
+              myReaction={post.my_reaction}
+              onToggle={(reaction) => void togglePostReaction(reaction)}
+              disabled={postReacting}
+            />
           </div>
         ) : null}
 
@@ -650,7 +652,7 @@ export function PostThread({
                     highlighted={focusCommentId === r.id}
                     reacting={reacting}
                     onReply={() => startReplyTo(r)}
-                    onLike={() => void toggleCommentLike(r)}
+                    onReact={(reaction) => void toggleCommentReaction(r, reaction)}
                     onEdit={replaceComment}
                     onDelete={() => {
                       void api.deleteComment(r.id).then(() => {
@@ -681,7 +683,7 @@ export function PostThread({
                           highlighted={focusCommentId === child.id}
                           reacting={reacting}
                           onReply={() => startReplyTo(child)}
-                          onLike={() => void toggleCommentLike(child)}
+                          onReact={(reaction) => void toggleCommentReaction(child, reaction)}
                           onEdit={replaceComment}
                           onDelete={() => {
                             void api.deleteComment(child.id).then(() => {
@@ -840,7 +842,7 @@ function CommentRow({
   anchored = false,
   highlighted = false,
   onReply,
-  onLike,
+  onReact,
   onEdit,
   onDelete,
 }: {
@@ -852,7 +854,7 @@ function CommentRow({
   /** Tint the row when it is the comment the link pointed at. */
   highlighted?: boolean;
   onReply: () => void;
-  onLike: () => void;
+  onReact: (reaction: ReactionKind) => void;
   onEdit: (updated: Comment) => void;
   onDelete: () => void;
 }) {
@@ -861,9 +863,6 @@ function CommentRow({
   const [editDraft, setEditDraft] = useState<string>(comment.text);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
-  const liked: boolean = comment.my_reaction === "like";
-  const likeCount: number =
-    comment.reactions.find((r) => r.reaction === "like")?.count ?? 0;
   const isAuthor: boolean = userId !== null && comment.user_id === userId;
   const edited: boolean = commentWasEdited(comment);
 
@@ -954,19 +953,13 @@ function CommentRow({
         )}
         {editing ? null : (
           <div className="mt-0.5 flex items-center gap-3 text-xs">
-            <button
-              type="button"
+            <ReactionBar
+              reactions={comment.reactions}
+              myReaction={comment.my_reaction}
+              onToggle={onReact}
               disabled={reacting}
-              onClick={onLike}
-              aria-pressed={liked}
-              className={`disabled:opacity-40 ${
-                liked
-                  ? "font-semibold text-zinc-800 dark:text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-              }`}
-            >
-              Like{likeCount > 0 ? ` · ${likeCount}` : ""}
-            </button>
+              size="xs"
+            />
             <button
               type="button"
               onClick={onReply}

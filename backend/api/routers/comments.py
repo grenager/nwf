@@ -20,7 +20,6 @@ from api.friends import (
     accepted_friend_ids,
     can_see_post,
     display_name,
-    ratings_for_users_by_story,
 )
 from api.reactions import (
     delete_comment_reaction,
@@ -52,7 +51,6 @@ router = APIRouter(prefix="/comments", tags=["comments"])
 def _to_out(
     comment: Comment,
     author: Profile | None,
-    rating: float | None = None,
     *,
     reactions: list[ReactionSummary] | None = None,
     my_reaction: str | None = None,
@@ -66,7 +64,6 @@ def _to_out(
         author_name=display_name(author) if author else "Friend",
         author_image_url=author.image_url if author else None,
         text=comment.text,
-        author_rating=rating,
         reactions=reactions if reactions is not None else [],
         my_reaction=my_reaction,
         created_at=comment.created_at,
@@ -74,19 +71,9 @@ def _to_out(
     )
 
 
-async def _single_rating(
-    session: SessionDep, user_id: uuid.UUID, story_id: uuid.UUID
-) -> float | None:
-    """The commenter's own half-star rating of the story, if any."""
-    return (
-        await ratings_for_users_by_story(session, [story_id], [user_id])
-    ).get(story_id, {}).get(user_id)
-
-
-async def _rated_outs(
+async def _to_outs(
     session: SessionDep,
     rows: Sequence[Row[tuple[Comment, Profile]]],
-    ratings: dict[uuid.UUID, dict[uuid.UUID, float]],
     viewer_id: uuid.UUID | None,
 ) -> list[CommentOut]:
     reaction_map = await load_comment_reactions(
@@ -95,15 +82,7 @@ async def _rated_outs(
     outs: list[CommentOut] = []
     for c, a in rows:
         summaries, mine = reaction_map.get(c.id, ([], None))
-        outs.append(
-            _to_out(
-                c,
-                a,
-                ratings.get(c.story_id, {}).get(c.user_id),
-                reactions=summaries,
-                my_reaction=mine,
-            )
-        )
+        outs.append(_to_out(c, a, reactions=summaries, my_reaction=mine))
     return outs
 
 
@@ -217,10 +196,7 @@ async def list_comments(
             .offset(offset)
         )
         rows = (await session.execute(stmt)).all()
-        ratings = await ratings_for_users_by_story(
-            session, [post.story_id], {c.user_id for c, _ in rows}
-        )
-        return await _rated_outs(session, rows, ratings, user.id)
+        return await _to_outs(session, rows, user.id)
 
     # story_id path: return replies on posts about that story that the viewer can see
     assert story_id is not None
@@ -244,10 +220,7 @@ async def list_comments(
         .offset(offset)
     )
     rows = (await session.execute(stmt)).all()
-    ratings = await ratings_for_users_by_story(
-        session, [story_id], {c.user_id for c, _ in rows}
-    )
-    return await _rated_outs(session, rows, ratings, user.id)
+    return await _to_outs(session, rows, user.id)
 
 
 @router.post("", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
@@ -293,8 +266,7 @@ async def create_comment(
             commenter=author,
             parent_author_id=parent_author_id,
         )
-    rating = await _single_rating(session, user.id, comment.story_id)
-    return _to_out(comment, author, rating)
+    return _to_out(comment, author)
 
 
 @router.get("/{comment_id}", response_model=CommentOut)
@@ -311,11 +283,10 @@ async def get_comment(
     elif comment.user_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
     author = await session.get(Profile, comment.user_id)
-    rating = await _single_rating(session, comment.user_id, comment.story_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)
     summaries, mine = reaction_map.get(comment.id, ([], None))
     return _to_out(
-        comment, author, rating, reactions=summaries, my_reaction=mine
+        comment, author, reactions=summaries, my_reaction=mine
     )
 
 
@@ -336,11 +307,10 @@ async def update_comment(
     await _sync_comment_mentions(session, comment)
     await session.refresh(comment)
     author = await session.get(Profile, comment.user_id)
-    rating = await _single_rating(session, comment.user_id, comment.story_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)
     summaries, mine = reaction_map.get(comment.id, ([], None))
     return _to_out(
-        comment, author, rating, reactions=summaries, my_reaction=mine
+        comment, author, reactions=summaries, my_reaction=mine
     )
 
 
@@ -389,11 +359,10 @@ async def set_comment_reaction(
     )
     await session.flush()
     author = await session.get(Profile, comment.user_id)
-    rating = await _single_rating(session, comment.user_id, comment.story_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)
     summaries, mine = reaction_map.get(comment.id, ([], None))
     return _to_out(
-        comment, author, rating, reactions=summaries, my_reaction=mine
+        comment, author, reactions=summaries, my_reaction=mine
     )
 
 
@@ -422,9 +391,8 @@ async def clear_comment_reaction(
     )
     await session.flush()
     author = await session.get(Profile, comment.user_id)
-    rating = await _single_rating(session, comment.user_id, comment.story_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)
     summaries, mine = reaction_map.get(comment.id, ([], None))
     return _to_out(
-        comment, author, rating, reactions=summaries, my_reaction=mine
+        comment, author, reactions=summaries, my_reaction=mine
     )

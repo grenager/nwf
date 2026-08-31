@@ -4,18 +4,18 @@ Building this by hand means juggling three separate logged-in accounts (you,
 a "connector" friend, and a "stranger" neither of you is connected to). This
 script does it in one shot against the database directly:
 
-  - a "stranger" account, connected to nobody, who posts four different
+  - a "stranger" account, connected to nobody, who posts three different
     articles (one existing story each)
   - a "connector" account, an accepted friend of the target account, who
     engages with each of the stranger's posts a different way: commenting,
-    reacting, rating, and marking read
-  - a fifth post from the stranger that nobody touches, as a negative
+    reacting, and marking read
+  - a fourth post from the stranger that nobody touches, as a negative
     control -- it should NOT show up in the target account's feed
 
-After seeding, reload the target account's feed: the four engaged-with posts
+After seeding, reload the target account's feed: the three engaged-with posts
 should appear, each tagged with the connector's name and the matching
-action ("<connector> commented on this" / "rated this" / "reacted to this" /
-"read this"), and the fifth (untouched) post should not appear at all.
+action ("<connector> commented on this" / "reacted to this" / "read this"),
+and the fourth (untouched) post should not appear at all.
 
 Fake accounts live under the reserved ``seed.test`` domain, same convention
 as ``seed_fake_activity.py``, so they're easy to spot and this script is
@@ -30,7 +30,7 @@ Examples::
     python -m scripts.seed_fof_test --user-email me@example.com
 
     # Remove all seeded FOF test data (accounts, posts, connections,
-    # comments/reactions/ratings/statuses) and exit.
+    # comments/reactions/statuses) and exit.
     python -m scripts.seed_fof_test --clear
 
 Run from the ``backend`` directory (so ``core``/``scripts`` are importable).
@@ -56,13 +56,12 @@ SEED_DOMAIN: str = "seed.test"
 STRANGER_EMAIL: str = "fof.stranger@seed.test"
 CONNECTOR_EMAIL: str = "fof.connector@seed.test"
 
-ACTIONS: list[str] = ["commented", "reacted", "rated", "read"]
+ACTIONS: list[str] = ["commented", "reacted", "read"]
 
 # Matches FOF_ACTION_LABEL in web/components/post-card.tsx - what the
 # attribution tag should read for each action.
 ACTION_LABEL: dict[str, str] = {
     "commented": "commented on this",
-    "rated": "rated this",
     "reacted": "reacted to this",
     "read": "read this",
 }
@@ -203,10 +202,6 @@ async def _clear_seeded(conn: AsyncConnection) -> None:
         {"ids": ids},
     )
     await conn.execute(
-        text("delete from public.story_ratings where user_id = any(:ids)"),
-        {"ids": ids},
-    )
-    await conn.execute(
         text(
             "delete from public.connections where first_id = any(:ids) "
             "or second_id = any(:ids)"
@@ -327,17 +322,6 @@ async def _run_seed(email: str | None, user_id: str | None) -> None:
                         """
                     ),
                     {"uid": connector_id, "pid": post_id, "ts": ts},
-                )
-            elif action == "rated":
-                await conn.execute(
-                    text(
-                        """
-                        insert into public.story_ratings
-                            (user_id, story_id, rating, created_at, updated_at)
-                        values (:uid, :sid, 4.5, :ts, :ts)
-                        """
-                    ),
-                    {"uid": connector_id, "sid": story_id, "ts": ts},
                 )
             elif action == "read":
                 await conn.execute(

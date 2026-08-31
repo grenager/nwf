@@ -87,7 +87,7 @@ function ReaderAvatars({
 
 /**
  * Friend-scoped engagement (never global): reads on the left, comments on the
- * right. Ratings are shown separately by the card's star control.
+ * right. Reactions are shown separately by the card's reaction bar.
  */
 export function EngagementSummary({
   engagement,

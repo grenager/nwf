@@ -20,14 +20,14 @@ from api.friends import (
     display_name,
     friend_activity_by_story,
     friend_profiles_map,
-    friend_stars_by_story,
+    friend_reactors_by_story,
     global_activity_by_story,
     primary_post_ids_by_story,
     top_readers,
 )
 from api.schemas import (
     FriendEngagementOut,
-    FriendStarOut,
+    FriendReactorOut,
     StoryCreate,
     StoryList,
     StoryReaderOut,
@@ -66,7 +66,7 @@ def _with_status_columns(
 
 def _rows_to_stories(
     rows: list[Any],
-    friend_map: dict[uuid.UUID, list[FriendStarOut]] | None = None,
+    friend_map: dict[uuid.UUID, list[FriendReactorOut]] | None = None,
 ) -> list[StoryWithStatus]:
     items: list[StoryWithStatus] = []
     for story, read, starred in rows:
@@ -74,7 +74,7 @@ def _rows_to_stories(
         model.read = bool(read)
         model.starred = bool(starred)
         if friend_map is not None:
-            model.friend_stars = friend_map.get(story.id, [])
+            model.friend_reactors = friend_map.get(story.id, [])
         items.append(model)
     return items
 
@@ -185,9 +185,9 @@ async def title_search(
     ranked_rows: list[Any] = [entry[3] for entry in scored[:limit]]
 
     story_ids = [story.id for story, _, _ in ranked_rows]
-    friend_profiles = await friend_stars_by_story(session, user.id, story_ids)
+    friend_profiles = await friend_reactors_by_story(session, user.id, story_ids)
     friend_map = {
-        sid: [FriendStarOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
+        sid: [FriendReactorOut(user_id=p.id, display_name=display_name(p)) for p in profiles]
         for sid, profiles in friend_profiles.items()
     }
     items = _rows_to_stories(ranked_rows, friend_map)
@@ -285,7 +285,7 @@ async def get_story(
         model = StoryWithStatus.model_validate(story)
         model.read = False
         model.starred = False
-        model.friend_stars = []
+        model.friend_reactors = []
         model.source_name, model.source_image_url = resolve_attribution(
             article_url=story.article_url,
             source_name=source.name if source else None,
@@ -324,9 +324,9 @@ async def get_story(
         publisher=story.publisher,
     )
 
-    friend_profiles = await friend_stars_by_story(session, user.id, [story.id])
-    model.friend_stars = [
-        FriendStarOut(user_id=p.id, display_name=display_name(p))
+    friend_profiles = await friend_reactors_by_story(session, user.id, [story.id])
+    model.friend_reactors = [
+        FriendReactorOut(user_id=p.id, display_name=display_name(p))
         for p in friend_profiles.get(story.id, [])
     ]
     activity = await friend_activity_by_story(session, user.id, [story.id])

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
@@ -14,7 +14,6 @@ from api.schemas import (
     DismissMark,
     PreferencesUpdate,
     ProfileOut,
-    RatingSet,
     ReadingPing,
     ReadMark,
     StarMark,
@@ -25,7 +24,6 @@ from api.schemas import (
 from core.models import (
     Profile,
     Story,
-    StoryRating,
     StoryStatus,
 )
 
@@ -185,38 +183,6 @@ async def add_star(
         )
     )
     await session.execute(stmt)
-
-
-@router.put("/ratings", status_code=status.HTTP_204_NO_CONTENT)
-async def set_rating(
-    payload: RatingSet, session: SessionDep, user: CurrentUser
-) -> None:
-    """Set (or change) the current user's 1-5 star rating on a story."""
-    stmt = (
-        pg_insert(StoryRating)
-        .values(
-            user_id=user.id,
-            story_id=payload.story_id,
-            rating=payload.rating,
-        )
-        .on_conflict_do_update(
-            index_elements=[StoryRating.user_id, StoryRating.story_id],
-            set_={"rating": payload.rating, "updated_at": func.now()},
-        )
-    )
-    await session.execute(stmt)
-
-
-@router.delete("/ratings/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_rating(
-    story_id: str, session: SessionDep, user: CurrentUser
-) -> None:
-    await session.execute(
-        delete(StoryRating).where(
-            StoryRating.user_id == user.id,
-            StoryRating.story_id == story_id,
-        )
-    )
 
 
 @router.delete("/stars/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
