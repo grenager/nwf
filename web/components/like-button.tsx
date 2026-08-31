@@ -124,19 +124,21 @@ export function LikeButton({
               onClick={() => setPickerOpen(false)}
             />
           ) : null}
-          <div className="absolute bottom-full left-0 z-20 mb-2 flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-            {REACTIONS.map((r) => (
-              <button
-                key={r.kind}
-                type="button"
-                aria-label={r.label}
-                title={r.label}
-                onClick={() => choose(r.kind)}
-                className={`rounded-full p-1.5 leading-none transition-transform hover:scale-125 ${REACTION_ACCENT[r.kind]}`}
-              >
-                <ReactionIcon kind={r.kind} className="h-6 w-6" />
-              </button>
-            ))}
+          <div className="absolute bottom-full left-0 z-20 pb-2">
+            <div className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+              {REACTIONS.map((r) => (
+                <button
+                  key={r.kind}
+                  type="button"
+                  aria-label={r.label}
+                  title={r.label}
+                  onClick={() => choose(r.kind)}
+                  className={`rounded-full p-1.5 leading-none transition-transform hover:scale-125 ${REACTION_ACCENT[r.kind]}`}
+                >
+                  <ReactionIcon kind={r.kind} className="h-6 w-6" />
+                </button>
+              ))}
+            </div>
           </div>
         </>
       ) : null}
