@@ -27,3 +27,35 @@ Instead, pass `padded={false}` and lay out the panel yourself as siblings:
 
 This is the default for every new modal, not just the ones with obviously
 long content — short content today can grow later.
+
+## Database migrations (backend/)
+
+Default to expand/contract: a feature migration only adds — new tables,
+new columns, new allowed values, widened constraints. It never drops,
+narrows, or renames something existing code still depends on. This matters
+because migrations and code deploys don't land atomically — a migration
+applied ahead of the code that stops depending on the old shape will break
+whatever's still running in production against it.
+
+Schema cleanup (dropping an old table/column, narrowing a constraint back
+down, a breaking rename) is its own separate migration, not folded into the
+feature migration that retires the old code paths. Name it as a cleanup
+(e.g. `..._retire_story_ratings.sql`, not bundled into
+`..._add_reactions.sql`), call out explicitly that it's destructive/
+irreversible, and only apply it once the code that stops depending on the
+old shape is confirmed deployed everywhere — not just merged.
+
+## Git workflow
+
+- Start each new chat/session's work on a fresh feature branch cut from the
+  latest `main` (`git fetch origin main && git checkout -b <branch>
+  origin/main`) rather than continuing on whatever branch happens to be
+  checked out — unless the session has been handed a specific branch to
+  work on, in which case follow that instead.
+- Once the bulk of a change is done and ready for the user to try, open a
+  PR by default rather than waiting to be asked. That's also the point
+  Railway starts a preview deploy the user can actually click into.
+- After opening or updating a PR, hand the user its Railway preview URL(s)
+  as a convenience — don't make them go dig for them. They're on the PR's
+  status checks (the `nwf-api` / `nwf-web` / `nwf-digest` contexts'
+  `target_url`/description once each build succeeds).
