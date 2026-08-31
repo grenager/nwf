@@ -12,6 +12,15 @@ interface LikeButtonProps {
   onToggle: (reaction: ReactionKind) => void;
   disabled?: boolean;
   className?: string;
+  /** "toolbar" = padded pill button (post row, default). "link" = plain
+   * inline text link sized/colored like a row's other Reply/Edit/Delete
+   * links (comment row). Only trigger styling differs — the picker and all
+   * pointer/long-press handling are identical in both. */
+  variant?: "toolbar" | "link";
+  /** Total reaction count across all kinds; shown as " · N" after the
+   * label when variant is "link" and count > 0. Ignored by "toolbar" —
+   * the post's total is already shown in PostEngagementRow. */
+  reactionCount?: number;
 }
 
 /**
@@ -26,6 +35,8 @@ export function LikeButton({
   onToggle,
   disabled = false,
   className = "",
+  variant = "toolbar",
+  reactionCount,
 }: LikeButtonProps) {
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
   const [openedByTouch, setOpenedByTouch] = useState<boolean>(false);
@@ -96,13 +107,19 @@ export function LikeButton({
   const active = myReaction !== null ? REACTIONS.find((r) => r.kind === myReaction) : null;
   const label: string = active ? active.label : "Like";
   const iconKind: ReactionKind = active ? active.kind : "like";
-  const colorClass: string = active
-    ? REACTION_ACCENT[active.kind]
-    : "text-zinc-600 dark:text-zinc-300";
+  const unreactedColorClass: string =
+    variant === "link"
+      ? "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+      : "text-zinc-600 dark:text-zinc-300";
+  const colorClass: string = active ? REACTION_ACCENT[active.kind] : unreactedColorClass;
+  const countSuffix: string =
+    variant === "link" && reactionCount !== undefined && reactionCount > 0
+      ? ` · ${reactionCount}`
+      : "";
 
   return (
     <div
-      className={`relative inline-flex flex-1 ${className}`}
+      className={`relative inline-flex ${variant === "toolbar" ? "flex-1" : ""} ${className}`}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
     >
@@ -141,12 +158,21 @@ export function LikeButton({
         onPointerUp={handlePointerUpOrCancel}
         onPointerCancel={handlePointerUpOrCancel}
         onClick={handleClick}
-        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800 ${colorClass} ${
-          myReaction !== null ? "font-semibold" : "font-medium"
-        }`}
+        className={
+          variant === "toolbar"
+            ? `flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800 ${colorClass} ${
+                myReaction !== null ? "font-semibold" : "font-medium"
+              }`
+            : `inline-flex items-center gap-1 disabled:opacity-40 ${colorClass} ${
+                myReaction !== null ? "font-semibold" : ""
+              }`
+        }
       >
         <ReactionIcon kind={iconKind} className="h-[1.1em] w-[1.1em]" />
-        <span>{label}</span>
+        <span>
+          {label}
+          {countSuffix}
+        </span>
       </button>
     </div>
   );

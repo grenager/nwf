@@ -1,6 +1,6 @@
 "use client";
 
-import { applyReactionToggle, ReactionBar } from "@/components/reaction-bar";
+import { applyReactionToggle } from "@/components/reaction-bar";
 import { Avatar } from "@/components/avatar";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { LikeButton } from "@/components/like-button";
@@ -988,12 +988,12 @@ function CommentRow({
         )}
         {editing ? null : (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <ReactionBar
-              reactions={comment.reactions}
+            <LikeButton
+              variant="link"
               myReaction={comment.my_reaction}
               onToggle={onReact}
               disabled={reacting}
-              size="xs"
+              reactionCount={(comment.reactions ?? []).reduce((sum, r) => sum + r.count, 0)}
             />
             <button
               type="button"
