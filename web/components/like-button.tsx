@@ -7,6 +7,9 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 const REACTION_ACCENT: Record<ReactionKind, string> = {
   like: "text-blue-600 dark:text-blue-400",
   love: "text-red-600 dark:text-red-400",
+  care: "text-pink-600 dark:text-pink-400",
+  haha: "text-yellow-600 dark:text-yellow-400",
+  wow: "text-purple-600 dark:text-purple-400",
   sad: "text-amber-600 dark:text-amber-400",
   angry: "text-orange-600 dark:text-orange-400",
 };

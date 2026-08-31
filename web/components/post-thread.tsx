@@ -975,7 +975,7 @@ function CommentRow({
           />
         )}
         {editing ? null : (
-          <div className="mt-0.5 flex items-center gap-3 text-xs">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <ReactionBar
               reactions={comment.reactions}
               myReaction={comment.my_reaction}

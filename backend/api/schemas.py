@@ -185,7 +185,9 @@ class DismissMark(BaseModel):
 
 
 # --- Reactions (fixed set on posts and comments) --------------------------
-REACTION_VALUES: frozenset[str] = frozenset({"like", "love", "sad", "angry"})
+REACTION_VALUES: frozenset[str] = frozenset(
+    {"like", "love", "care", "haha", "wow", "sad", "angry"}
+)
 
 
 class ReactionSummary(BaseModel):

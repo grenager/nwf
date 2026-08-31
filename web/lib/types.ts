@@ -119,10 +119,13 @@ export interface CommunityStats {
   conversation_count: number;
 }
 
-/** Fixed emoji reaction set for posts and comments. */
+/** Fixed emoji reaction set for posts and comments (Facebook's full set). */
 export const REACTIONS = [
   { kind: "like", emoji: "👍", label: "Like" },
   { kind: "love", emoji: "❤️", label: "Love" },
+  { kind: "care", emoji: "🥰", label: "Care" },
+  { kind: "haha", emoji: "😆", label: "Haha" },
+  { kind: "wow", emoji: "😮", label: "Wow" },
   { kind: "sad", emoji: "😢", label: "Sad" },
   { kind: "angry", emoji: "😠", label: "Angry" },
 ] as const;
