@@ -38,6 +38,7 @@ export function LikeButton({
   className = "",
 }: LikeButtonProps) {
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
+  const [openedByTouch, setOpenedByTouch] = useState<boolean>(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPress = useRef<boolean>(false);
 
@@ -68,6 +69,7 @@ export function LikeButton({
     clearLongPressTimer();
     longPressTimer.current = setTimeout(() => {
       didLongPress.current = true;
+      setOpenedByTouch(true);
       setPickerOpen(true);
     }, LONG_PRESS_MS);
   }
@@ -78,6 +80,7 @@ export function LikeButton({
 
   function handlePointerEnter(e: ReactPointerEvent<HTMLDivElement>): void {
     if (disabled || e.pointerType !== "mouse") return;
+    setOpenedByTouch(false);
     setPickerOpen(true);
   }
 
@@ -115,10 +118,12 @@ export function LikeButton({
     >
       {pickerOpen ? (
         <>
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setPickerOpen(false)}
-          />
+          {openedByTouch ? (
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setPickerOpen(false)}
+            />
+          ) : null}
           <div className="absolute bottom-full left-0 z-20 mb-2 flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
             {REACTIONS.map((r) => (
               <button

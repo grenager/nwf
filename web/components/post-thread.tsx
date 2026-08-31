@@ -615,7 +615,19 @@ export function PostThread({
             onClick={focusComposer}
             className="flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <span>💬</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-[1.1em] w-[1.1em]"
+              aria-hidden="true"
+            >
+              <rect x="3.5" y="4.5" width="17" height="12" rx="3" />
+              <path d="M7 16.5v3.5l4-3.5" />
+            </svg>
             <span>Comment</span>
           </button>
         </div>
