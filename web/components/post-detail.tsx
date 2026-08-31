@@ -18,6 +18,8 @@ interface PostDetailProps {
   focusUnread?: boolean;
   /** Scroll to and highlight one comment, from ?comment=<id>. */
   focusCommentId?: UUID | null;
+  /** Open the author's post editor on arrival, from ?edit=1. */
+  startEditing?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function PostDetail({
   onDeleted,
   focusUnread = false,
   focusCommentId = null,
+  startEditing = false,
 }: PostDetailProps) {
   const { user } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
@@ -139,6 +142,7 @@ export function PostDetail({
         markSeenOnMount
         focusUnread={focusUnread}
         focusCommentId={focusCommentId}
+        startEditing={startEditing}
       />
       {inviteOpen ? (
         <SharePostModal

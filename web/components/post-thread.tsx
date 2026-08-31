@@ -77,6 +77,7 @@ export function PostThread({
   markSeenOnMount = false,
   focusUnread = false,
   focusCommentId = null,
+  startEditing = false,
   maxTopLevelComments,
   compact = false,
 }: {
@@ -95,6 +96,9 @@ export function PostThread({
   focusUnread?: boolean;
   /** Scroll to and highlight one comment (from ?comment=<id>). */
   focusCommentId?: UUID | null;
+  /** Open the author's post editor straight away (from ?edit=1), so the feed's
+   * Edit action lands on a focused text field rather than a read-only page. */
+  startEditing?: boolean;
   /** Cap top-level comments shown (feed preview). Nested replies stay attached. */
   maxTopLevelComments?: number;
   /** Hide the reaction row and attach affordances (feed preview). */
@@ -133,6 +137,8 @@ export function PostThread({
     post.last_seen_at ?? null,
   );
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const editTakeRef = useRef<HTMLTextAreaElement | null>(null);
+  const startedEditRef = useRef<boolean>(false);
   const markedSeenRef = useRef<boolean>(false);
   const unreadDividerRef = useRef<HTMLDivElement | null>(null);
   const scrolledUnreadRef = useRef<boolean>(false);
@@ -345,6 +351,37 @@ export function PostThread({
     }
   }
 
+  function beginEdit(): void {
+    setEditDraft(post.take ?? "");
+    setEditSharedDraft(post.shared_text ?? "");
+    setEditing(true);
+  }
+
+  // Editing is meant to be typed into immediately: drop the caret at the end of
+  // the existing take and bring the field into view.
+  useEffect(() => {
+    if (!editing) return;
+    requestAnimationFrame(() => {
+      const field: HTMLTextAreaElement | null = editTakeRef.current;
+      if (field === null) return;
+      field.focus();
+      const end: number = field.value.length;
+      field.setSelectionRange(end, end);
+      field.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [editing]);
+
+  // Arriving from the feed's Edit action (?edit=1) opens the editor once the
+  // viewer is known to be the author — `user` can hydrate after mount.
+  useEffect(() => {
+    if (!startEditing || startedEditRef.current) return;
+    if (!isAuthor || isPreviewMode) return;
+    startedEditRef.current = true;
+    beginEdit();
+    // The ref guards a single open per mount; beginEdit only reads the post.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startEditing, isAuthor, isPreviewMode]);
+
   async function saveEdit(): Promise<void> {
     const text: string = editDraft.trim();
     const shared: string = editSharedDraft.trim();
@@ -499,13 +536,14 @@ export function PostThread({
                           type="button"
                           onClick={() => {
                             setMenuOpen(false);
+                            // The feed preview shows a trimmed thread, so edit
+                            // happens on the full post — ?edit=1 opens it
+                            // focused there instead of on a read-only view.
                             if (isPreviewMode) {
-                              router.push(`/post/${post.id}`);
+                              router.push(`/post/${post.id}?edit=1`);
                               return;
                             }
-                            setEditDraft(post.take ?? "");
-                            setEditSharedDraft(post.shared_text ?? "");
-                            setEditing(true);
+                            beginEdit();
                           }}
                           className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         >
@@ -536,6 +574,7 @@ export function PostThread({
                   onChange={setEditDraft}
                   rows={2}
                   autoFocus
+                  inputRef={editTakeRef}
                   placeholder="Your take…"
                 />
               </label>
