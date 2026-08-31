@@ -164,19 +164,6 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
 
       <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Your take
-            </span>
-            <MentionInput
-              value={take}
-              onChange={setTake}
-              rows={5}
-              autoFocus
-              placeholder="What stood out? Use @ to mention a friend"
-            />
-          </label>
-
           <div className="flex flex-col gap-2">
             <label className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -185,6 +172,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
               <input
                 type="url"
                 required
+                autoFocus
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com/article"
@@ -290,6 +278,19 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
               ) : null}
             </div>
           ) : null}
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Your take
+            </span>
+            <MentionInput
+              value={take}
+              onChange={setTake}
+              rows={5}
+              className="nwf-mentions--tall"
+              placeholder="What stood out? Use @ to mention a friend"
+            />
+          </label>
 
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Only your friends will see this.

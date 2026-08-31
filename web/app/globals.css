@@ -89,6 +89,14 @@ body {
   overflow-y: auto !important;
 }
 
+/* Post composer: open at ~5 lines even when empty. react-mentions sizes the
+   control from its highlighter (content height), so `rows` alone leaves an
+   empty field one line tall — both layers need the floor. */
+.nwf-mentions--tall .nwf-mentions__input,
+.nwf-mentions--tall .nwf-mentions__highlighter {
+  min-height: 7.875rem;
+}
+
 .nwf-mentions--singleLine .nwf-mentions__input,
 .nwf-mentions--singleLine .nwf-mentions__highlighter {
   padding: 0.375rem 0.875rem;
