@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import func, select, update
 
 from api.deps import CurrentUser, SessionDep
-from api.friends import display_name
+from api.friends import identify
 from api.schemas import (
     NotificationList,
     NotificationOut,
@@ -104,7 +104,7 @@ async def list_notifications(
                 id=note.id,
                 kind=note.kind,
                 actor_id=note.actor_id,
-                actor_name=display_name(actor) if actor else "Friend",
+                actor_name=await identify(session, actor),
                 actor_image_url=actor.image_url if actor else None,
                 post_id=note.post_id,
                 comment_id=note.comment_id,

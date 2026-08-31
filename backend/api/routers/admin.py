@@ -12,7 +12,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import AdminUser, SessionDep, SettingsDep
-from api.friends import display_name
+from api.friends import identify
 from api.schemas import (
     AdminFriendRef,
     AdminFriendshipCreate,
@@ -182,9 +182,7 @@ async def list_users(session: SessionDep, _admin: AdminUser) -> list[AdminUserOu
             friend_refs.append(
                 AdminFriendRef(
                     user_id=fid,
-                    display_name=(
-                        display_name(friend_profile) if friend_profile else "Friend"
-                    ),
+                    display_name=await identify(session, friend_profile),
                 )
             )
         friend_refs.sort(key=lambda f: f.display_name.lower())

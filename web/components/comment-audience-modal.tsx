@@ -101,8 +101,8 @@ export function CommentAudienceModal({
     audience !== null ? groupPeople(audience.people) : new Map<never, never>();
 
   return (
-    <ModalShell onClose={onClose} label="Who will see this comment">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <ModalShell onClose={onClose} label="Who will see this comment" padded={false}>
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 p-5 pb-4 dark:border-zinc-800">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
             Conversations on NWF are private.
@@ -121,6 +121,7 @@ export function CommentAudienceModal({
         </button>
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5">
       {error !== null ? (
         <p className="text-sm text-zinc-500">{error}</p>
       ) : audience === null ? (
@@ -168,6 +169,7 @@ export function CommentAudienceModal({
           </p>
         </>
       )}
+      </div>
     </ModalShell>
   );
 }

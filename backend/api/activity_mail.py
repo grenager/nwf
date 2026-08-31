@@ -15,7 +15,7 @@ from api.friends import (
     ActivityEmailRecipient,
     PendingInviteRecipient,
     accepted_friend_ids,
-    display_name,
+    identify,
     load_activity_email_recipients,
     load_pending_invite_recipients,
     pending_connection_ids,
@@ -80,7 +80,7 @@ async def _context(
 ) -> _ActivityContext:
     source_label, story_image = await _story_attribution(session, story)
     return _ActivityContext(
-        actor_name=display_name(actor),
+        actor_name=await identify(session, actor),
         actor_image_url=actor.image_url,
         headline=story.full_headline,
         source_label=source_label,

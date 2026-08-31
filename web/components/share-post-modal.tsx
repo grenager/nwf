@@ -127,8 +127,8 @@ export function SharePostModal({
   }
 
   return (
-    <ModalShell onClose={onClose} label="Share">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <ModalShell onClose={onClose} label="Share" padded={false}>
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 p-5 pb-4 dark:border-zinc-800">
         <div>
           <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
             Share
@@ -147,85 +147,89 @@ export function SharePostModal({
         </button>
       </div>
 
-      <div className="mb-4 overflow-hidden border border-zinc-200 dark:border-zinc-800">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" className="h-32 w-full object-cover" />
-        ) : null}
-        <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
-          {sourceName ? (
-            <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-              {sourceName}
-            </p>
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="mb-4 overflow-hidden border border-zinc-200 dark:border-zinc-800">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt="" className="h-32 w-full object-cover" />
           ) : null}
-          <a
-            href={articleUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-0.5 block font-serif text-base font-semibold leading-snug text-zinc-900 hover:underline dark:text-zinc-50"
-          >
-            {headline}
-          </a>
-          {take ? (
-            <p className="mt-2 border-l-2 border-zinc-900 pl-3 text-sm text-zinc-600 dark:border-zinc-100 dark:text-zinc-300">
-              {take}
-            </p>
-          ) : null}
+          <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+            {sourceName ? (
+              <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+                {sourceName}
+              </p>
+            ) : null}
+            <a
+              href={articleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 block font-serif text-base font-semibold leading-snug text-zinc-900 hover:underline dark:text-zinc-50"
+            >
+              {headline}
+            </a>
+            {take ? (
+              <p className="mt-2 border-l-2 border-zinc-900 pl-3 text-sm text-zinc-600 dark:border-zinc-100 dark:text-zinc-300">
+                {take}
+              </p>
+            ) : null}
+          </div>
         </div>
+
+        <label className="mb-4 block">
+          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            What do you want to say?
+          </span>
+          <textarea
+            value={shareNote}
+            onChange={(e) => setShareNote(e.target.value)}
+            required
+            rows={3}
+            placeholder="Add a short note for your friend…"
+            className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
+          />
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            checked={becomeFriend}
+            onChange={(e) => setBecomeFriend(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-zinc-900 dark:accent-zinc-100"
+          />
+          <span>
+            Make the recipient a friend so they can join the discussion
+          </span>
+        </label>
       </div>
 
-      <label className="mb-4 block">
-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-          What do you want to say?
-        </span>
-        <textarea
-          value={shareNote}
-          onChange={(e) => setShareNote(e.target.value)}
-          required
-          rows={3}
-          placeholder="Add a short note for your friend…"
-          className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
-        />
-      </label>
+      <div className="shrink-0 border-t border-zinc-200 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 dark:border-zinc-800">
+        <button
+          type="button"
+          onClick={() => void share()}
+          disabled={sharing || !canShare}
+          className="w-full bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          {sharing
+            ? "Preparing…"
+            : canUseWebShare()
+              ? "Share…"
+              : "Copy share message"}
+        </button>
 
-      <label className="mb-5 flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300">
-        <input
-          type="checkbox"
-          checked={becomeFriend}
-          onChange={(e) => setBecomeFriend(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-zinc-900 dark:accent-zinc-100"
-        />
-        <span>
-          Make the recipient a friend so they can join the discussion
-        </span>
-      </label>
-
-      <button
-        type="button"
-        onClick={() => void share()}
-        disabled={sharing || !canShare}
-        className="w-full bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        {sharing
-          ? "Preparing…"
-          : canUseWebShare()
-            ? "Share…"
-            : "Copy share message"}
-      </button>
-
-      {result?.invite_url ? (
-        <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-          <p className="break-all text-xs text-zinc-500">{result.invite_url}</p>
-          <button
-            type="button"
-            onClick={() => void copyAgain()}
-            disabled={!canShare}
-            className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 disabled:opacity-40 dark:text-emerald-400"
-          >
-            {copied ? "Copied!" : "Copy again"}
-          </button>
-        </div>
-      ) : null}
+        {result?.invite_url ? (
+          <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <p className="break-all text-xs text-zinc-500">{result.invite_url}</p>
+            <button
+              type="button"
+              onClick={() => void copyAgain()}
+              disabled={!canShare}
+              className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 disabled:opacity-40 dark:text-emerald-400"
+            >
+              {copied ? "Copied!" : "Copy again"}
+            </button>
+          </div>
+        ) : null}
+      </div>
     </ModalShell>
   );
 }
