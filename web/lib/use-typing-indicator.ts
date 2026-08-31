@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { subscribeSharedChannel } from "@/lib/shared-realtime-channel";
 import type { PostTyper, UUID } from "@/lib/types";
 
 // Keep in sync with backend/core/config.py's typing_indicator_window_seconds.
@@ -35,28 +35,24 @@ export function useTypingIndicator(
   }, [postId]);
 
   useEffect(() => {
-    const supabase = getSupabaseBrowserClient();
-    const channel = supabase
-      .channel(`post-typing-${postId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "post_typing",
-          filter: `post_id=eq.${postId}`,
-        },
-        () => {
-          if (refetchTimer.current) clearTimeout(refetchTimer.current);
-          refetchTimer.current = setTimeout(refetch, REFETCH_DEBOUNCE_MS);
-        },
-      )
-      .subscribe();
+    const unsubscribe = subscribeSharedChannel(
+      `post-typing-${postId}`,
+      {
+        event: "*",
+        schema: "public",
+        table: "post_typing",
+        filter: `post_id=eq.${postId}`,
+      },
+      () => {
+        if (refetchTimer.current) clearTimeout(refetchTimer.current);
+        refetchTimer.current = setTimeout(refetch, REFETCH_DEBOUNCE_MS);
+      },
+    );
     const poll = setInterval(refetch, POLL_INTERVAL_MS);
     return () => {
       if (refetchTimer.current) clearTimeout(refetchTimer.current);
       clearInterval(poll);
-      void supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [postId, refetch]);
 
