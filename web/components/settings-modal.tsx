@@ -142,8 +142,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <ModalShell onClose={onClose} label="Settings">
-      <div className="flex items-start justify-between gap-3">
+    <ModalShell onClose={onClose} label="Settings" padded={false}>
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 p-5 pb-4 dark:border-zinc-800">
         <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           Settings
         </h2>
@@ -157,38 +157,40 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      <h3 className="mt-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-        Email notifications
-      </h3>
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+          Email notifications
+        </h3>
 
-      {me === null ? (
-        <p className="mt-4 text-sm text-zinc-400">Loading…</p>
-      ) : (
-        <div className="mt-4 space-y-5">
-          <Row
-            title="Daily digest"
-            description="A once-daily email with new posts and activity from your friends."
-          >
-            <Toggle
-              on={!me.digest_opt_out}
-              disabled={savingDigest}
-              label="Toggle daily digest emails"
-              onChange={() => void toggleDigest()}
-            />
-          </Row>
-          <Row
-            title="Instant activity emails"
-            description="Get an email right away when a friend posts, comments on your article, or replies to you."
-          >
-            <Toggle
-              on={!me.instant_email_opt_out}
-              disabled={savingInstant}
-              label="Toggle instant activity emails"
-              onChange={() => void toggleInstant()}
-            />
-          </Row>
-        </div>
-      )}
+        {me === null ? (
+          <p className="mt-4 text-sm text-zinc-400">Loading…</p>
+        ) : (
+          <div className="mt-4 space-y-5">
+            <Row
+              title="Daily digest"
+              description="A once-daily email with new posts and activity from your friends."
+            >
+              <Toggle
+                on={!me.digest_opt_out}
+                disabled={savingDigest}
+                label="Toggle daily digest emails"
+                onChange={() => void toggleDigest()}
+              />
+            </Row>
+            <Row
+              title="Instant activity emails"
+              description="Get an email right away when a friend posts, comments on your article, or replies to you."
+            >
+              <Toggle
+                on={!me.instant_email_opt_out}
+                disabled={savingInstant}
+                label="Toggle instant activity emails"
+                onChange={() => void toggleInstant()}
+              />
+            </Row>
+          </div>
+        )}
+      </div>
     </ModalShell>
   );
 }

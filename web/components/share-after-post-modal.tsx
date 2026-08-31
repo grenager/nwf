@@ -146,8 +146,8 @@ export function ShareAfterPostModal({
     audience !== null ? audience.people.length - shownPeople.length : 0;
 
   return (
-    <ModalShell onClose={onClose} label="Shared">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <ModalShell onClose={onClose} label="Shared" padded={false}>
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 p-5 pb-4 dark:border-zinc-800">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-900 dark:text-zinc-100">
             Conversations on NWF are private.
@@ -166,30 +166,32 @@ export function ShareAfterPostModal({
         </button>
       </div>
 
-      {shownPeople.length > 0 ? (
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          {shownPeople.map((person) => (
-            <span
-              key={person.user_id}
-              className="flex items-center gap-1.5 rounded-full border border-zinc-200 py-0.5 pl-0.5 pr-2.5 dark:border-zinc-800"
-              title={person.display_name}
-            >
-              <Avatar
-                name={person.display_name}
-                imageUrl={person.image_url}
-              />
-              <span className="max-w-[9rem] truncate text-xs text-zinc-600 dark:text-zinc-300">
-                {person.display_name}
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {shownPeople.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {shownPeople.map((person) => (
+              <span
+                key={person.user_id}
+                className="flex items-center gap-1.5 rounded-full border border-zinc-200 py-0.5 pl-0.5 pr-2.5 dark:border-zinc-800"
+                title={person.display_name}
+              >
+                <Avatar
+                  name={person.display_name}
+                  imageUrl={person.image_url}
+                />
+                <span className="max-w-[9rem] truncate text-xs text-zinc-600 dark:text-zinc-300">
+                  {person.display_name}
+                </span>
               </span>
-            </span>
-          ))}
-          {overflow > 0 ? (
-            <span className="text-xs text-zinc-500">+{overflow} more</span>
-          ) : null}
-        </div>
-      ) : null}
+            ))}
+            {overflow > 0 ? (
+              <span className="text-xs text-zinc-500">+{overflow} more</span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
-      <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+      <div className="shrink-0 border-t border-zinc-200 p-5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 dark:border-zinc-800">
         <p className="font-serif text-base font-semibold text-zinc-900 dark:text-zinc-50">
           Anyone else you&apos;d like to share this with?
         </p>
@@ -226,16 +228,16 @@ export function ShareAfterPostModal({
             </button>
           </div>
         ) : null}
-      </div>
 
-      <div className="mt-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-        >
-          Done
-        </button>
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </ModalShell>
   );
