@@ -18,8 +18,6 @@ function SignInForm() {
   const presetEmail: string = searchParams.get("email")?.trim() ?? "";
   const isInvite: boolean = nextPath.startsWith("/invite/");
 
-  const [first, setFirst] = useState<string>("");
-  const [last, setLast] = useState<string>("");
   const [email, setEmail] = useState<string>(presetEmail);
   const [sent, setSent] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
@@ -47,8 +45,6 @@ function SignInForm() {
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     const trimmedEmail: string = email.trim();
-    const trimmedFirst: string = first.trim();
-    const trimmedLast: string = last.trim();
     if (!trimmedEmail || busy) return;
     setBusy(true);
     try {
@@ -57,15 +53,9 @@ function SignInForm() {
         typeof window !== "undefined"
           ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
           : "";
-      const meta: Record<string, string> = {};
-      if (trimmedFirst) meta.first = trimmedFirst;
-      if (trimmedLast) meta.last = trimmedLast;
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmedEmail,
-        options: {
-          emailRedirectTo: redirectTo,
-          ...(Object.keys(meta).length > 0 ? { data: meta } : {}),
-        },
+        options: { emailRedirectTo: redirectTo },
       });
       if (error) throw error;
       setSent(true);
@@ -90,7 +80,7 @@ function SignInForm() {
         <p className="mt-1 text-sm text-slate-500">
           {isInvite
             ? "We'll email you a magic link so you can sign in and accept the invitation — no password needed."
-            : "Enter your email for a magic link. New accounts can add a name; existing accounts just need email."}
+            : "Enter your email for a magic link — no password needed."}
         </p>
 
         {sent ? (
@@ -141,24 +131,6 @@ function SignInForm() {
                 autoComplete="email"
                 className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:focus:border-zinc-400 dark:focus:ring-zinc-700 dark:border-slate-700 dark:bg-slate-800"
               />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  value={first}
-                  onChange={(e) => setFirst(e.target.value)}
-                  placeholder="First name (optional)"
-                  autoComplete="given-name"
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:focus:border-zinc-400 dark:focus:ring-zinc-700 dark:border-slate-700 dark:bg-slate-800"
-                />
-                <input
-                  type="text"
-                  value={last}
-                  onChange={(e) => setLast(e.target.value)}
-                  placeholder="Last name (optional)"
-                  autoComplete="family-name"
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:focus:border-zinc-400 dark:focus:ring-zinc-700 dark:border-slate-700 dark:bg-slate-800"
-                />
-              </div>
               <button
                 type="submit"
                 disabled={busy}
