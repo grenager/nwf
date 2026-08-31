@@ -20,6 +20,7 @@ import type {
   NotificationList,
   Post,
   PostAudience,
+  PostReactor,
   PostTyper,
   PreferencesUpdate,
   PreviewCard,
@@ -249,6 +250,8 @@ export const api = {
     }),
   clearPostReaction: (id: UUID): Promise<Post> =>
     request<Post>(`/posts/${id}/reactions`, { method: "DELETE" }),
+  getPostReactors: (id: UUID): Promise<PostReactor[]> =>
+    request<PostReactor[]>(`/posts/${id}/reactions`),
 
   // --- attachments ---
   createAttachment: (

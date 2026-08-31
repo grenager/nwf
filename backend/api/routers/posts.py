@@ -40,6 +40,7 @@ from api.schemas import (
     PostAudienceOut,
     PostCreate,
     PostOut,
+    PostReactorOut,
     PostTyperOut,
     PostUpdate,
     PreviewCreate,
@@ -66,6 +67,7 @@ from core.models import (
     Post,
     PostMention,
     PostParticipant,
+    PostReaction,
     PostRead,
     PostTyping,
     PostVisibility,
@@ -899,3 +901,33 @@ async def clear_post_reaction(
     )
     await session.flush()
     return await serialize_post(session, post, viewer_id=user.id)
+
+
+@router.get("/{post_id}/reactions", response_model=list[PostReactorOut])
+async def list_post_reactors(
+    post_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> list[PostReactorOut]:
+    """Everyone who has reacted to this post, most-recent-first."""
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not permitted")
+    rows = (
+        await session.execute(
+            select(PostReaction, Profile)
+            .join(Profile, Profile.id == PostReaction.user_id)
+            .where(PostReaction.post_id == post_id)
+            .order_by(PostReaction.updated_at.desc())
+        )
+    ).all()
+    return [
+        PostReactorOut(
+            user_id=profile.id,
+            display_name=display_name(profile),
+            image_url=profile.image_url,
+            reaction=reaction_row.reaction,
+            reacted_at=reaction_row.updated_at,
+        )
+        for reaction_row, profile in rows
+    ]

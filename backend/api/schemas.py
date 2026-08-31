@@ -208,6 +208,16 @@ class ReactionSet(BaseModel):
         return value
 
 
+class PostReactorOut(BaseModel):
+    """One person's reaction to a post, for the reactor-list modal."""
+
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    reaction: str
+    reacted_at: datetime
+
+
 # --- Comments (replies under a post) --------------------------------------
 class CommentOut(ORMModel):
     id: uuid.UUID

@@ -134,6 +134,15 @@ export interface ReactionSummary {
   count: number;
 }
 
+/** One person's reaction to a post, for the reactor-list modal. */
+export interface PostReactor {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  reaction: ReactionKind;
+  reacted_at: string;
+}
+
 export interface Comment {
   id: UUID;
   story_id: UUID;
