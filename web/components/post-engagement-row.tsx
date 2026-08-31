@@ -97,7 +97,7 @@ export function PostEngagementRow({ post, readers, compact }: PostEngagementRowP
                 key={r.reaction}
                 className={`inline-flex items-center gap-0.5 ${REACTION_ACCENT[r.reaction]}`}
               >
-                <ReactionIcon kind={r.reaction} className="h-5 w-5" />
+                <ReactionIcon kind={r.reaction} className="h-6 w-6" />
                 <span className="text-zinc-500 dark:text-zinc-400">{r.count}</span>
               </span>
             ))}
