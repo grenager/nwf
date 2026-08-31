@@ -192,6 +192,7 @@ async def list_users(session: SessionDep, _admin: AdminUser) -> list[AdminUserOu
                 first=profile.first,
                 last=profile.last,
                 email=emails.get(profile.id),
+                image_url=profile.image_url,
                 last_active_at=last_active,
                 friends=friend_refs,
             )
@@ -314,6 +315,7 @@ async def create_user(
         first=profile.first,
         last=profile.last,
         email=email,
+        image_url=profile.image_url,
         last_active_at=None,
         friends=[],
     )
