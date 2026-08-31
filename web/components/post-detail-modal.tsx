@@ -10,6 +10,8 @@ interface PostDetailModalProps {
   focusUnread?: boolean;
   /** Scroll to and highlight one comment, from ?comment=<id>. */
   focusCommentId?: UUID | null;
+  /** Open the author's post editor on arrival, from ?edit=1. */
+  startEditing?: boolean;
 }
 
 /**
@@ -20,6 +22,7 @@ export function PostDetailModal({
   postId,
   focusUnread = false,
   focusCommentId = null,
+  startEditing = false,
 }: PostDetailModalProps) {
   const router = useRouter();
 
@@ -59,6 +62,7 @@ export function PostDetailModal({
           onDeleted={() => router.back()}
           focusUnread={focusUnread}
           focusCommentId={focusCommentId}
+          startEditing={startEditing}
         />
       </div>
     </ModalShell>
