@@ -475,6 +475,7 @@ export interface AdminUser {
   first: string | null;
   last: string | null;
   email: string | null;
+  image_url: string | null;
   last_active_at: string | null;
   friends: AdminFriendRef[];
 }

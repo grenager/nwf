@@ -1,5 +1,6 @@
 "use client";
 
+import { Avatar } from "@/components/avatar";
 import { useAuth } from "@/components/auth-provider";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { UserListSkeleton } from "@/components/skeleton";
@@ -411,22 +412,25 @@ export default function AdminPage() {
               return (
                 <li key={user.id} className="py-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setEditUserId(user.id)}
-                        className="text-left text-sm font-semibold text-zinc-900 hover:underline dark:text-zinc-50"
-                      >
-                        {name}
-                      </button>
-                      <p className="text-sm text-zinc-500">
-                        {user.email ?? "No email"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-zinc-500">
-                        {user.last_active_at
-                          ? `Active ${relativeTime(user.last_active_at)}`
-                          : "Never active"}
-                      </p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Avatar name={name} imageUrl={user.image_url} />
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditUserId(user.id)}
+                          className="text-left text-sm font-semibold text-zinc-900 hover:underline dark:text-zinc-50"
+                        >
+                          {name}
+                        </button>
+                        <p className="text-sm text-zinc-500">
+                          {user.email ?? "No email"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {user.last_active_at
+                            ? `Active ${relativeTime(user.last_active_at)}`
+                            : "Never active"}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <button

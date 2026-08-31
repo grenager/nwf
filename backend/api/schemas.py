@@ -627,6 +627,7 @@ class AdminUserOut(BaseModel):
     first: str | None = None
     last: str | None = None
     email: str | None = None
+    image_url: str | None = None
     last_active_at: datetime | None = None
     friends: list[AdminFriendRef] = Field(default_factory=list)
 
