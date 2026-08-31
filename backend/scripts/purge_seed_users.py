@@ -10,8 +10,8 @@ This relies on the database's own cascade-delete rules rather than
 enumerating tables by hand: every table referencing ``profiles.id`` is
 ``on delete cascade``, and ``profiles.id`` itself cascades from
 ``auth.users.id``. So deleting the ``auth.users`` row takes everything with
-it (posts, comments, reactions, ratings, connections, notifications, ...)
-and stays correct even as new tables get added later.
+it (posts, comments, reactions, connections, notifications, ...) and stays
+correct even as new tables get added later.
 
 Defaults to a dry run -- it lists what it would delete and does nothing
 until you pass ``--yes``.

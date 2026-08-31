@@ -64,7 +64,7 @@ class _ScalarBoolSession:
 
 
 @pytest.mark.asyncio
-async def test_can_see_post_true_when_friend_engaged_via_reaction_read_or_rating() -> None:
+async def test_can_see_post_true_when_friend_engaged_via_reaction_or_read() -> None:
     post = _post()
     viewer = uuid.uuid4()
     friend = uuid.uuid4()

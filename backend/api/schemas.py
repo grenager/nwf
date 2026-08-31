@@ -89,7 +89,7 @@ class FriendEngagementOut(BaseModel):
     readers: list[StoryReaderOut] = Field(default_factory=list)
 
 
-FofActionKind = Literal["commented", "rated", "reacted", "read"]
+FofActionKind = Literal["commented", "reacted", "read"]
 
 
 class FofReasonOut(BaseModel):
@@ -106,7 +106,7 @@ class StoryWithStatus(StoryOut):
     read: bool = False
     starred: bool = False
     dismissed: bool = False
-    friend_stars: list[FriendStarOut] = Field(default_factory=list)
+    friend_reactors: list[FriendReactorOut] = Field(default_factory=list)
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     # Most recent post about this story the viewer may see (search → detail link),
     # with enough of the conversation to recognise it in a result list.
@@ -117,7 +117,9 @@ class StoryWithStatus(StoryOut):
     post_reply_count: int = 0
 
 
-class FriendStarOut(BaseModel):
+class FriendReactorOut(BaseModel):
+    """A friend who reacted to a post or comment about this story."""
+
     user_id: uuid.UUID
     display_name: str
 
@@ -182,24 +184,8 @@ class DismissMark(BaseModel):
     story_id: uuid.UUID
 
 
-class RatingSet(BaseModel):
-    """A half-star rating: 0.5 - 5.0 in 0.5 increments (Letterboxd-style)."""
-
-    story_id: uuid.UUID
-    rating: float = Field(ge=0.5, le=5.0)
-
-    @field_validator("rating")
-    @classmethod
-    def _half_step(cls, value: float) -> float:
-        if round(value * 2) != value * 2:
-            raise ValueError("rating must be in 0.5 increments")
-        return value
-
-
 # --- Reactions (fixed set on posts and comments) --------------------------
-REACTION_VALUES: frozenset[str] = frozenset(
-    {"like", "love", "laugh", "insightful", "sad"}
-)
+REACTION_VALUES: frozenset[str] = frozenset({"like", "love", "sad", "angry"})
 
 
 class ReactionSummary(BaseModel):
@@ -232,8 +218,6 @@ class CommentOut(ORMModel):
     author_name: str = "Friend"
     author_image_url: str | None = None
     text: str
-    # The commenter's own half-star rating of the story (shown beside them).
-    author_rating: float | None = None
     reactions: list[ReactionSummary] = Field(default_factory=list)
     my_reaction: str | None = None
     created_at: datetime
@@ -376,17 +360,11 @@ class PostOut(ORMModel):
     audience_label: str = "visible to friends"
     replies: list[CommentOut] = Field(default_factory=list)
     attachments: list[AttachmentOut] = Field(default_factory=list)
-    # The post author's own half-star rating (shown beside their take).
-    author_rating: float | None = None
     reactions: list[ReactionSummary] = Field(default_factory=list)
     my_reaction: str | None = None
     # Per-viewer log state on the underlying story
     read: bool = False
     starred: bool = False
-    my_rating: float | None = None
-    # Aggregate over everyone the viewer can see who rated (friends + self).
-    rating_avg: float | None = None
-    rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     readers: list[StoryReaderOut] = Field(default_factory=list)
@@ -410,9 +388,6 @@ class FeedCardOut(BaseModel):
     kind: StoryKind = StoryKind.news
     read: bool = False
     starred: bool = False
-    my_rating: float | None = None
-    rating_avg: float | None = None
-    rating_count: int = 0
     my_take: str | None = None
     engagement: FriendEngagementOut = Field(default_factory=FriendEngagementOut)
     posts: list[PostOut] = Field(default_factory=list)
@@ -480,7 +455,7 @@ class FriendsOverviewOut(BaseModel):
 
 
 class FriendActivityItem(BaseModel):
-    kind: str  # "read" | "commented" | "rated"
+    kind: str  # "read" | "commented" | "reacted"
     story_id: uuid.UUID
     # The post the viewer can open for this story; None when none is visible.
     post_id: uuid.UUID | None = None
@@ -492,8 +467,8 @@ class FriendActivityItem(BaseModel):
     article_url: str
     at: datetime
     comment_text: str | None = None
-    # Present when kind == "rated": the half-star rating (0.5 - 5).
-    rating: float | None = None
+    # Present when kind == "reacted": which emoji reaction was given.
+    reaction: str | None = None
 
 
 class FriendProfileOut(BaseModel):
@@ -506,7 +481,7 @@ class FriendProfileOut(BaseModel):
     last_active_at: datetime | None = None
     reads: int = 0
     comments: int = 0
-    ratings: int = 0
+    reactions: int = 0
     can_edit: bool = False
     # True when the viewer and this user are accepted friends (always False
     # for your own profile — there's no "remove friend" on yourself).

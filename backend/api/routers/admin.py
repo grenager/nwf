@@ -22,11 +22,12 @@ from api.schemas import (
 )
 from core.models import (
     Comment,
+    CommentReaction,
     Connection,
     ConnectionStatus,
     Post,
+    PostReaction,
     Profile,
-    StoryRating,
     StoryStatus,
 )
 from core.supabase_admin import AuthUserCreateError, create_auth_user, delete_auth_user
@@ -97,17 +98,36 @@ async def list_users(session: SessionDep, _admin: AdminUser) -> list[AdminUserOu
         .tuples()
         .all()
     )
-    rating_last: dict[uuid.UUID, datetime] = dict(
+    post_reaction_last: dict[uuid.UUID, datetime] = dict(
         (
             await session.execute(
-                select(StoryRating.user_id, func.max(StoryRating.updated_at)).group_by(
-                    StoryRating.user_id
-                )
+                select(
+                    PostReaction.user_id, func.max(PostReaction.updated_at)
+                ).group_by(PostReaction.user_id)
             )
         )
         .tuples()
         .all()
     )
+    comment_reaction_last: dict[uuid.UUID, datetime] = dict(
+        (
+            await session.execute(
+                select(
+                    CommentReaction.user_id, func.max(CommentReaction.updated_at)
+                ).group_by(CommentReaction.user_id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    reaction_last: dict[uuid.UUID, datetime] = {
+        uid: max(
+            t
+            for t in (post_reaction_last.get(uid), comment_reaction_last.get(uid))
+            if t is not None
+        )
+        for uid in set(post_reaction_last) | set(comment_reaction_last)
+    }
     post_last: dict[uuid.UUID, datetime] = dict(
         (
             await session.execute(
@@ -150,7 +170,7 @@ async def list_users(session: SessionDep, _admin: AdminUser) -> list[AdminUserOu
             for t in (
                 status_last.get(profile.id),
                 comment_last.get(profile.id),
-                rating_last.get(profile.id),
+                reaction_last.get(profile.id),
                 post_last.get(profile.id),
             )
             if t is not None

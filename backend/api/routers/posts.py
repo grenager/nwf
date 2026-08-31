@@ -23,7 +23,6 @@ from api.friends import (
     friend_ids_for_users,
     friend_profiles_map,
     post_participant_ids,
-    ratings_for_users_by_story,
     top_readers,
 )
 from api.reactions import (
@@ -391,10 +390,6 @@ async def serialize_post(
     read = False
     starred = False
     my_take: str | None = None
-    my_rating: float | None = None
-    author_rating: float | None = None
-    rating_avg: float | None = None
-    rating_count = 0
     engagement = FriendEngagementOut()
     readers: list[StoryReaderOut] = []
     unread_replies = False
@@ -455,24 +450,6 @@ async def serialize_post(
                 unread_reply_count += 1
         unread_replies = unread_reply_count > 0
 
-    # Per-person ratings (author + each commenter) plus a visible aggregate.
-    rater_ids: set[uuid.UUID] = (
-        {post.author_id} | {r.user_id for r in replies} | set(friends)
-    )
-    if viewer_id is not None:
-        rater_ids.add(viewer_id)
-    ratings_map = (
-        await ratings_for_users_by_story(session, [story.id], rater_ids)
-    ).get(story.id, {})
-    author_rating = ratings_map.get(post.author_id)
-    if viewer_id is not None:
-        my_rating = ratings_map.get(viewer_id)
-    for reply in replies:
-        reply.author_rating = ratings_map.get(reply.user_id)
-    if ratings_map:
-        rating_avg = sum(ratings_map.values()) / len(ratings_map)
-        rating_count = len(ratings_map)
-
     show_bodies: bool = viewer_id is not None or force_replies
     post_rx = await load_post_reactions(session, [post.id], viewer_id)
     post_reactions, my_post_reaction = post_rx.get(post.id, ([], None))
@@ -505,14 +482,10 @@ async def serialize_post(
         # unless force_replies (token-scoped invite preview).
         replies=replies if show_bodies else [],
         attachments=attachment_outs,
-        author_rating=author_rating,
         reactions=post_reactions,
         my_reaction=my_post_reaction,
         read=read,
         starred=starred,
-        my_rating=my_rating,
-        rating_avg=rating_avg,
-        rating_count=rating_count,
         my_take=my_take,
         engagement=engagement,
         readers=readers,

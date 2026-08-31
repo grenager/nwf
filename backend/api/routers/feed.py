@@ -24,7 +24,6 @@ from api.friends import (
     fof_attribution_by_post,
     friend_activity_by_story,
     friend_profiles_map,
-    ratings_for_users_by_story,
     top_readers,
     visible_post_ids_for_viewer,
 )
@@ -201,7 +200,6 @@ async def _build_post_outs(
     posts: list[Post],
     *,
     viewer_id: uuid.UUID | None,
-    friends: list[uuid.UUID],
     stories: dict[uuid.UUID, Story],
     sources: dict[uuid.UUID, Source],
     participants_by_post: dict[uuid.UUID, list[uuid.UUID]],
@@ -214,16 +212,14 @@ async def _build_post_outs(
     """Serialize a batch of posts into PostOut, using batched queries.
 
     Reproduces ``posts.serialize_post`` output field-for-field, but shares one
-    query per relation (replies, reactions, attachments, ratings, profiles)
-    across the whole batch instead of one per post.
+    query per relation (replies, reactions, attachments, profiles) across the
+    whole batch instead of one per post.
     """
     if not posts:
         return {}
 
     post_ids: list[uuid.UUID] = [p.id for p in posts]
-    story_ids: list[uuid.UUID] = list({p.story_id for p in posts})
     show_bodies: bool = viewer_id is not None
-    friend_set: set[uuid.UUID] = set(friends)
 
     # Replies (+ their authors) for every post, ordered oldest-first.
     reply_rows = (
@@ -236,15 +232,11 @@ async def _build_post_outs(
     ).all()
     replies_by_post: dict[uuid.UUID, list[tuple[Comment, Profile]]] = {}
     comment_ids: list[uuid.UUID] = []
-    reply_user_ids_by_story: dict[uuid.UUID, set[uuid.UUID]] = {}
     for comment, author in reply_rows:
         if comment.post_id is None:
             continue
         replies_by_post.setdefault(comment.post_id, []).append((comment, author))
         comment_ids.append(comment.id)
-        reply_user_ids_by_story.setdefault(comment.story_id, set()).add(
-            comment.user_id
-        )
 
     comment_rx: dict[uuid.UUID, tuple[list[ReactionSummary], str | None]] = (
         await load_comment_reactions(session, comment_ids, viewer_id)
@@ -282,16 +274,6 @@ async def _build_post_outs(
             ).all()
         }
 
-    # Ratings for anyone who could show a rating on these stories.
-    rater_ids: set[uuid.UUID] = set(friends) | author_ids
-    for users in reply_user_ids_by_story.values():
-        rater_ids |= users
-    if viewer_id is not None:
-        rater_ids.add(viewer_id)
-    ratings_by_story = await ratings_for_users_by_story(
-        session, story_ids, rater_ids
-    )
-
     out_by_post: dict[uuid.UUID, PostOut] = {}
     for post in posts:
         story = stories.get(post.story_id)
@@ -310,21 +292,6 @@ async def _build_post_outs(
 
         reply_pairs = replies_by_post.get(post.id, [])
 
-        # Per-post rating map: only raters relevant to *this* post's story.
-        story_ratings = ratings_by_story.get(story.id, {})
-        post_rater_ids: set[uuid.UUID] = (
-            {post.author_id}
-            | {c.user_id for c, _ in reply_pairs}
-            | friend_set
-        )
-        if viewer_id is not None:
-            post_rater_ids.add(viewer_id)
-        ratings_map: dict[uuid.UUID, float] = {
-            uid: rating
-            for uid, rating in story_ratings.items()
-            if uid in post_rater_ids
-        }
-
         replies: list[CommentOut] = []
         for comment, author in reply_pairs:
             reactions, my_reaction = comment_rx.get(comment.id, ([], None))
@@ -338,7 +305,6 @@ async def _build_post_outs(
                     author_name=display_name(author) if author else "Friend",
                     author_image_url=author.image_url if author else None,
                     text=comment.text,
-                    author_rating=ratings_map.get(comment.user_id),
                     reactions=reactions,
                     my_reaction=my_reaction,
                     created_at=comment.created_at,
@@ -374,14 +340,6 @@ async def _build_post_outs(
                 readers=readers,
             )
 
-        author_rating = ratings_map.get(post.author_id)
-        my_rating = ratings_map.get(viewer_id) if viewer_id is not None else None
-        rating_avg: float | None = None
-        rating_count = 0
-        if ratings_map:
-            rating_avg = sum(ratings_map.values()) / len(ratings_map)
-            rating_count = len(ratings_map)
-
         post_reactions, my_post_reaction = post_rx.get(post.id, ([], None))
         if not show_bodies:
             my_post_reaction = None
@@ -414,14 +372,10 @@ async def _build_post_outs(
             audience_label=audience_label(post.visibility, participant_count),
             replies=replies if show_bodies else [],
             attachments=attachments_by_post.get(post.id, []),
-            author_rating=author_rating,
             reactions=post_reactions,
             my_reaction=my_post_reaction,
             read=read,
             starred=starred,
-            my_rating=my_rating,
-            rating_avg=rating_avg,
-            rating_count=rating_count,
             my_take=my_take,
             engagement=engagement,
             readers=readers,
@@ -538,7 +492,7 @@ async def get_feed(
             ).all()
         }
 
-    # Viewer log state (ratings come from each serialized post below).
+    # Viewer log state.
     status_by_story: dict[uuid.UUID, StoryStatus] = {}
     activity: dict[uuid.UUID, StoryActivity] = {}
     profiles: dict[uuid.UUID, Profile] = {}
@@ -589,7 +543,6 @@ async def get_feed(
         session,
         ordered_posts,
         viewer_id=viewer_id,
-        friends=friends,
         stories=stories,
         sources=sources,
         participants_by_post=participants_by_post,
@@ -655,9 +608,6 @@ async def get_feed(
                 kind=story.kind,
                 read=read,
                 starred=starred,
-                my_rating=out.my_rating,
-                rating_avg=out.rating_avg,
-                rating_count=out.rating_count,
                 my_take=my_take,
                 engagement=engagement,
                 posts=[out],

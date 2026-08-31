@@ -43,7 +43,7 @@ export function useStoryReaders(
 
   // Seed once per story. Later updates come from Realtime/ping, not props,
   // so a self-ping or live refetch is never clobbered by a parent re-render
-  // (e.g. the feed card re-rendering after a rating change).
+  // (e.g. the feed card re-rendering after a reaction change).
   const seededStoryId = useRef<UUID | null>(null);
   useEffect(() => {
     if (seededStoryId.current !== storyId) {

@@ -64,7 +64,7 @@ export interface PostTyper {
   image_url: string | null;
 }
 
-export type FofActionKind = "commented" | "rated" | "reacted" | "read";
+export type FofActionKind = "commented" | "reacted" | "read";
 
 export interface FofReason {
   friend_id: UUID;
@@ -123,9 +123,8 @@ export interface CommunityStats {
 export const REACTIONS = [
   { kind: "like", emoji: "👍", label: "Like" },
   { kind: "love", emoji: "❤️", label: "Love" },
-  { kind: "laugh", emoji: "😂", label: "Laugh" },
-  { kind: "insightful", emoji: "💡", label: "Insightful" },
   { kind: "sad", emoji: "😢", label: "Sad" },
+  { kind: "angry", emoji: "😠", label: "Angry" },
 ] as const;
 
 export type ReactionKind = (typeof REACTIONS)[number]["kind"];
@@ -144,7 +143,6 @@ export interface Comment {
   author_name: string;
   author_image_url: string | null;
   text: string;
-  author_rating: number | null;
   reactions: ReactionSummary[];
   my_reaction: ReactionKind | null;
   created_at: string;
@@ -188,14 +186,10 @@ export interface Post {
   audience_label: string;
   replies: Comment[];
   attachments: Attachment[];
-  author_rating: number | null;
   reactions: ReactionSummary[];
   my_reaction: ReactionKind | null;
   read: boolean;
   starred: boolean;
-  my_rating: number | null;
-  rating_avg: number | null;
-  rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
   readers: StoryReader[];
@@ -258,9 +252,6 @@ export interface FeedCard {
   kind: StoryKind;
   read: boolean;
   starred: boolean;
-  my_rating: number | null;
-  rating_avg: number | null;
-  rating_count: number;
   my_take: string | null;
   engagement: FriendEngagement;
   posts: Post[];
@@ -360,7 +351,7 @@ export interface FriendsOverview {
   friend_limit: number;
 }
 
-export type FriendActivityKind = "read" | "commented" | "rated";
+export type FriendActivityKind = "read" | "commented" | "reacted";
 
 export interface FriendActivityItem {
   kind: FriendActivityKind;
@@ -374,7 +365,8 @@ export interface FriendActivityItem {
   article_url: string;
   at: string;
   comment_text: string | null;
-  rating: number | null;
+  /** Which emoji reaction was given (kind === "reacted"). */
+  reaction: ReactionKind | null;
 }
 
 export interface FriendProfile {
@@ -387,7 +379,7 @@ export interface FriendProfile {
   last_active_at: string | null;
   reads: number;
   comments: number;
-  ratings: number;
+  reactions: number;
   can_edit: boolean;
   /** True when the viewer and this user are accepted friends. */
   is_friend: boolean;

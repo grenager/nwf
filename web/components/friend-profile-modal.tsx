@@ -1,9 +1,9 @@
 "use client";
 
-import { StarsDisplay } from "@/components/star-rating";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
+import { REACTIONS } from "@/lib/types";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -31,7 +31,7 @@ interface EditForm {
 function KindLabel({ kind }: { kind: FriendActivityItem["kind"] }) {
   if (kind === "read") return <>Read</>;
   if (kind === "commented") return <>Commented on</>;
-  if (kind === "rated") return <>Rated</>;
+  if (kind === "reacted") return <>Reacted to</>;
   return <>{kind}</>;
 }
 
@@ -337,7 +337,7 @@ export function FriendProfileModal({
             <Stat label="Friends" value={friendCount ?? 0} href="/friends" />
           ) : null}
           <Stat label="Read" value={profile.reads} />
-          <Stat label="Rated" value={profile.ratings} />
+          <Stat label="Reacted" value={profile.reactions} />
           <Stat label="Comments" value={profile.comments} />
         </div>
 
@@ -355,8 +355,10 @@ export function FriendProfileModal({
                     <span className="font-semibold">
                       <KindLabel kind={item.kind} />
                     </span>
-                    {item.kind === "rated" && item.rating != null ? (
-                      <StarsDisplay value={item.rating} size="xs" />
+                    {item.kind === "reacted" && item.reaction != null ? (
+                      <span>
+                        {REACTIONS.find((r) => r.kind === item.reaction)?.emoji}
+                      </span>
                     ) : null}
                     {item.source_name ? <span>· {item.source_name}</span> : null}
                     <span className="ml-auto normal-case tracking-normal">

@@ -14,7 +14,7 @@ const valueProps: { title: string; body: string }[] = [
   },
   {
     title: "Curated by people you trust",
-    body: "Your feed is shaped by what your friends are reading and rating each day — vibrant, tailored, and free of the noise a generic feed brings.",
+    body: "Your feed is shaped by what your friends are reading and reacting to each day — vibrant, tailored, and free of the noise a generic feed brings.",
   },
   {
     title: "Never miss what matters",

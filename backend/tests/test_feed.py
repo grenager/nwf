@@ -115,7 +115,6 @@ async def _count_build_queries(n: int, *, viewer_id: uuid.UUID | None) -> int:
         session,  # type: ignore[arg-type]
         posts,
         viewer_id=viewer_id,
-        friends=[],
         stories=stories,
         sources={},
         participants_by_post={},
@@ -134,8 +133,8 @@ async def test_build_post_outs_query_count_is_constant_for_guest() -> None:
     one = await _count_build_queries(1, viewer_id=None)
     many = await _count_build_queries(50, viewer_id=None)
     assert one == many
-    # replies + post reactions + ratings (execute) + attachments + authors (scalars)
-    assert many <= 6
+    # replies + post reactions (execute) + attachments + authors (scalars)
+    assert many <= 5
 
 
 @pytest.mark.asyncio
@@ -436,13 +435,12 @@ async def test_fof_attribution_picks_most_recent_action() -> None:
     post = _post_for_story(story)
     earlier = datetime(2026, 1, 1, tzinfo=UTC)
     later = datetime(2026, 1, 2, tzinfo=UTC)
-    # comments (earlier), reactions (none), story reads (none), ratings (later)
+    # comments (earlier), reactions (later), story reads (none)
     session = _ScriptedExecuteSession(
         [
             [(post.id, friend, earlier)],
+            [(post.id, friend, later)],
             [],
-            [],
-            [(story, friend, later)],
         ]
     )
     result = await fof_attribution_by_post(
@@ -450,7 +448,7 @@ async def test_fof_attribution_picks_most_recent_action() -> None:
         [post],
         friend_ids=[friend],
     )
-    assert result[post.id].kind == "rated"
+    assert result[post.id].kind == "reacted"
     assert result[post.id].acted_at == later
 
 
@@ -466,7 +464,6 @@ async def test_fof_attribution_tie_breaks_toward_more_notable_action() -> None:
         [
             [(post.id, friend, same_time)],
             [(post.id, friend, same_time)],
-            [],
             [],
         ]
     )
@@ -490,7 +487,6 @@ async def test_fof_attribution_story_level_read_unlocks_every_post_on_it() -> No
             [],
             [],
             [(story, friend, ts)],
-            [],
         ]
     )
     result = await fof_attribution_by_post(

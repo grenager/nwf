@@ -8,13 +8,13 @@ import { useAuthGate } from "@/components/auth-gate";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { MentionText } from "@/components/mention-text";
 import { ReaderBody } from "@/components/reader-body";
-import { RatingInput, StarsDisplay } from "@/components/star-rating";
+import { applyReactionToggle, ReactionBar } from "@/components/reaction-bar";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { draftScopeKey } from "@/lib/drafts";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
-import type { InvitePreview, Post, Profile } from "@/lib/types";
+import type { InvitePreview, Post, Profile, ReactionKind } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -228,8 +228,8 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     }
   }
 
-  function handleRateAttempt(value: number | null): void {
-    if (!requireAuth("rate this article")) return;
+  async function togglePostReaction(reaction: ReactionKind): Promise<void> {
+    if (!requireAuth("react to this article")) return;
     if (!canParticipate && !joined) {
       if (preview && !preview.become_friend) {
         setFriendPromptDismissed(false);
@@ -238,7 +238,27 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       return;
     }
     if (!post) return;
-    setPost({ ...post, my_rating: value });
+    const optimistic = applyReactionToggle(
+      post.reactions ?? [],
+      post.my_reaction ?? null,
+      reaction,
+    );
+    const previous: Post = post;
+    setPost({
+      ...post,
+      reactions: optimistic.reactions,
+      my_reaction: optimistic.my_reaction,
+    });
+    try {
+      const updated: Post =
+        optimistic.my_reaction === null
+          ? await api.clearPostReaction(post.id)
+          : await api.reactToPost(post.id, reaction);
+      setPost(updated);
+    } catch (err) {
+      setPost(previous);
+      notify(err instanceof ApiError ? err.message : "Failed to react", "error");
+    }
   }
 
   if (authLoading || loading) {
@@ -400,9 +420,6 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                 <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                   {post.author_name}
                 </span>
-                {post.author_rating != null ? (
-                  <StarsDisplay value={post.author_rating} size="xs" />
-                ) : null}
                 <span className="text-xs text-zinc-400">
                   {relativeTime(post.created_at)}
                 </span>
@@ -426,9 +443,6 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                   <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                     {r.author_name}
                   </span>
-                  {r.author_rating != null ? (
-                    <StarsDisplay value={r.author_rating} size="xs" />
-                  ) : null}
                   <span className="text-zinc-400">
                     {relativeTime(r.created_at)}
                   </span>
@@ -457,23 +471,21 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-zinc-500">
-                  Your rating
+                  Your reaction
                 </span>
                 {isGuest || !canParticipate ? (
                   <button
                     type="button"
-                    onClick={() => handleRateAttempt(null)}
+                    onClick={() => void togglePostReaction("like")}
                     className="text-xs text-zinc-400 underline"
                   >
-                    Rate
+                    React
                   </button>
                 ) : (
-                  <RatingInput
-                    storyId={post.story_id}
-                    value={post.my_rating}
-                    onChange={(value) => {
-                      setPost({ ...post, my_rating: value });
-                    }}
+                  <ReactionBar
+                    reactions={post.reactions}
+                    myReaction={post.my_reaction}
+                    onToggle={(reaction) => void togglePostReaction(reaction)}
                   />
                 )}
               </div>

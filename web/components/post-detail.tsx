@@ -91,32 +91,6 @@ export function PostDetail({
     ping(me);
   }, [post, me, ping]);
 
-  function handleRate(next: number | null): void {
-    setPost((prev) => {
-      if (!prev) return prev;
-      const old: number | null = prev.my_rating;
-      let count: number = prev.rating_count;
-      let sum: number = (prev.rating_avg ?? 0) * count;
-      if (old === null && next !== null) {
-        count += 1;
-        sum += next;
-      } else if (old !== null && next === null) {
-        count -= 1;
-        sum -= old;
-      } else if (old !== null && next !== null) {
-        sum += next - old;
-      }
-      const isAuthor: boolean = user != null && user.id === prev.author_id;
-      return {
-        ...prev,
-        my_rating: next,
-        rating_avg: count > 0 ? sum / count : null,
-        rating_count: count,
-        author_rating: isAuthor ? next : prev.author_rating,
-      };
-    });
-  }
-
   if (loading) {
     return <p className="py-10 text-sm text-zinc-500">Loading…</p>;
   }
@@ -165,9 +139,6 @@ export function PostDetail({
         post={post}
         me={me}
         preview={preview}
-        storyId={post.story_id}
-        myRating={post.my_rating}
-        onRate={handleRate}
         onPostChange={setPost}
         onDelete={() => onDeleted?.()}
         onInvite={() => setInviteOpen(true)}

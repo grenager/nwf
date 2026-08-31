@@ -4,7 +4,6 @@ import { ArticleCard } from "@/components/article-card";
 import { EngagementSummary } from "@/components/engagement-summary";
 import { PostThread } from "@/components/post-thread";
 import { SharePostModal } from "@/components/share-post-modal";
-import { StarsDisplay } from "@/components/star-rating";
 import { useAuth } from "@/components/auth-provider";
 import { stripHtml } from "@/lib/html";
 import { api } from "@/lib/api";
@@ -15,7 +14,6 @@ import { useState, type ReactNode } from "react";
 
 const FOF_ACTION_LABEL: Record<FofActionKind, string> = {
   commented: "commented on this",
-  rated: "rated this",
   reacted: "reacted to this",
   read: "read this",
 };
@@ -90,45 +88,7 @@ export function PostCard({
     });
   }
 
-  // Rating my own story updates my_rating + the visible aggregate, and (if I'm
-  // the author) the stars shown beside my take. Recomputed from current card so
-  // it works for both setting and clearing.
-  function handleRate(next: number | null): void {
-    if (!post) return;
-    const old: number | null = card.my_rating;
-    let count: number = card.rating_count;
-    let sum: number = (card.rating_avg ?? 0) * count;
-    if (old === null && next !== null) {
-      count += 1;
-      sum += next;
-    } else if (old !== null && next === null) {
-      count -= 1;
-      sum -= old;
-    } else if (old !== null && next !== null) {
-      sum += next - old;
-    }
-    const isAuthor: boolean = user != null && user.id === post.author_id;
-    onCardChange({
-      ...card,
-      my_rating: next,
-      rating_avg: count > 0 ? sum / count : null,
-      rating_count: count,
-      posts: card.posts.map((p) =>
-        p.id === post.id
-          ? {
-              ...p,
-              my_rating: next,
-              author_rating: isAuthor ? next : p.author_rating,
-            }
-          : p,
-      ),
-    });
-  }
-
   if (!post) return null;
-
-  const hasAggregate: boolean =
-    card.rating_count > 0 && card.rating_avg !== null;
 
   const preview: ReactNode = (
     <>
@@ -159,23 +119,10 @@ export function PostCard({
         </div>
       ) : null}
 
-      {/* Aggregate rating + friend engagement. */}
-      {hasAggregate || hasEngagement ? (
+      {hasEngagement ? (
         <div className="flex items-center justify-between gap-3">
-          {hasAggregate && card.rating_avg !== null ? (
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-              <StarsDisplay value={card.rating_avg} size="sm" />
-              <span>
-                {card.rating_avg.toFixed(1)} · {card.rating_count} rating
-                {card.rating_count === 1 ? "" : "s"}
-              </span>
-            </div>
-          ) : (
-            <span />
-          )}
-          {hasEngagement ? (
-            <EngagementSummary engagement={engagement} variant="inline" />
-          ) : null}
+          <span />
+          <EngagementSummary engagement={engagement} variant="inline" />
         </div>
       ) : null}
     </>
@@ -206,9 +153,6 @@ export function PostCard({
         post={post}
         me={me}
         preview={preview}
-        storyId={card.story_id}
-        myRating={card.my_rating}
-        onRate={handleRate}
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
         onInvite={() => setInviteOpen(true)}

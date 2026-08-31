@@ -84,9 +84,6 @@ export function FeedClient() {
         kind: post.kind,
         read: true,
         starred: post.starred,
-        my_rating: post.my_rating,
-        rating_avg: post.rating_avg,
-        rating_count: post.rating_count,
         my_take: post.take,
         engagement: post.engagement,
         posts: [
