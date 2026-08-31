@@ -1,9 +1,9 @@
 "use client";
 
+import { ReactionIcon } from "@/components/reaction-icon";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
-import { REACTIONS } from "@/lib/types";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -356,9 +356,7 @@ export function FriendProfileModal({
                       <KindLabel kind={item.kind} />
                     </span>
                     {item.kind === "reacted" && item.reaction != null ? (
-                      <span>
-                        {REACTIONS.find((r) => r.kind === item.reaction)?.emoji}
-                      </span>
+                      <ReactionIcon kind={item.reaction} />
                     ) : null}
                     {item.source_name ? <span>· {item.source_name}</span> : null}
                     <span className="ml-auto normal-case tracking-normal">

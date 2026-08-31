@@ -1,6 +1,7 @@
 "use client";
 
 import { PeopleListModal, type PersonRow } from "@/components/people-list-modal";
+import { ReactionIcon } from "@/components/reaction-icon";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
 import { REACTIONS, type PostReactor, type UUID } from "@/lib/types";
@@ -13,7 +14,7 @@ interface ReactorsModalProps {
 
 function reactionLabel(reaction: string): string {
   const known = REACTIONS.find((r) => r.kind === reaction);
-  return known ? `${known.emoji} ${known.label}` : reaction;
+  return known ? known.label : reaction;
 }
 
 /** Who reacted to this post, and with what, most recent first. */
@@ -45,6 +46,7 @@ export function ReactorsModal({ postId, onClose }: ReactorsModalProps) {
     user_id: r.user_id,
     display_name: r.display_name,
     image_url: r.image_url,
+    icon: <ReactionIcon kind={r.reaction} className="h-3 w-3 shrink-0" />,
     subtitle: `${reactionLabel(r.reaction)} · ${relativeTime(r.reacted_at)}`,
   }));
 

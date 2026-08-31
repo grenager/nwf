@@ -1,10 +1,11 @@
 "use client";
 
 import { useAuthGate } from "@/components/auth-gate";
+import { ReactionIcon } from "@/components/reaction-icon";
 import { ReactorsModal } from "@/components/reactors-modal";
 import { ReadersModal } from "@/components/readers-modal";
 import type { LiveStoryReader } from "@/lib/use-story-readers";
-import { REACTIONS, type Post } from "@/lib/types";
+import type { Post } from "@/lib/types";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -91,15 +92,12 @@ export function PostEngagementRow({ post, readers, compact }: PostEngagementRowP
             onClick={openReactors}
             className="flex items-center gap-1.5 hover:underline"
           >
-            {post.reactions.map((r) => {
-              const known = REACTIONS.find((k) => k.kind === r.reaction);
-              return (
-                <span key={r.reaction}>
-                  {known?.emoji ?? r.reaction}
-                  {r.count}
-                </span>
-              );
-            })}
+            {post.reactions.map((r) => (
+              <span key={r.reaction} className="inline-flex items-center gap-0.5">
+                <ReactionIcon kind={r.reaction} />
+                {r.count}
+              </span>
+            ))}
           </button>
         ) : null}
       </span>

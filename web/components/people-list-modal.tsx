@@ -4,13 +4,15 @@ import { Avatar } from "@/components/avatar";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { ModalShell } from "@/components/modal-shell";
 import type { UUID } from "@/lib/types";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 export interface PersonRow {
   user_id: UUID;
   display_name: string;
   image_url: string | null;
-  /** Pre-formatted by the caller, e.g. "3h ago" or "❤️ Love · 3h ago". */
+  /** Small icon shown before the subtitle, e.g. the reaction glyph. */
+  icon?: ReactNode;
+  /** Pre-formatted by the caller, e.g. "3h ago" or "Love · 3h ago". */
   subtitle: string;
 }
 
@@ -75,8 +77,9 @@ export function PeopleListModal({
                   <span className="block truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     {person.display_name}
                   </span>
-                  <span className="block truncate text-xs text-zinc-400">
-                    {person.subtitle}
+                  <span className="flex items-center gap-1 truncate text-xs text-zinc-400">
+                    {person.icon}
+                    <span className="truncate">{person.subtitle}</span>
                   </span>
                 </span>
               </button>

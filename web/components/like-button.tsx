@@ -1,5 +1,6 @@
 "use client";
 
+import { ReactionIcon } from "@/components/reaction-icon";
 import { REACTIONS, type ReactionKind } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -101,7 +102,7 @@ export function LikeButton({
 
   const active = myReaction !== null ? REACTIONS.find((r) => r.kind === myReaction) : null;
   const label: string = active ? active.label : "Like";
-  const emoji: string = active ? active.emoji : "👍";
+  const iconKind: ReactionKind = active ? active.kind : "like";
   const colorClass: string = active
     ? REACTION_ACCENT[active.kind]
     : "text-zinc-600 dark:text-zinc-300";
@@ -126,9 +127,9 @@ export function LikeButton({
                 aria-label={r.label}
                 title={r.label}
                 onClick={() => choose(r.kind)}
-                className="rounded-full p-1 text-2xl leading-none transition-transform hover:scale-125"
+                className={`rounded-full p-1.5 leading-none transition-transform hover:scale-125 ${REACTION_ACCENT[r.kind]}`}
               >
-                {r.emoji}
+                <ReactionIcon kind={r.kind} className="h-6 w-6" />
               </button>
             ))}
           </div>
@@ -147,7 +148,7 @@ export function LikeButton({
           myReaction !== null ? "font-semibold" : "font-medium"
         }`}
       >
-        <span>{emoji}</span>
+        <ReactionIcon kind={iconKind} className="h-[1.1em] w-[1.1em]" />
         <span>{label}</span>
       </button>
     </div>
