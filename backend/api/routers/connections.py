@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import CurrentUser, SessionDep
 from api.friends import (
     accepted_friend_ids,
-    display_name,
     email_for_user,
     ensure_friend_capacity,
     friend_slots_used,
+    identify,
     primary_post_ids_by_story,
     viewer_visible_post_ids,
 )
@@ -110,7 +110,7 @@ async def notify_friend_event(
         )
         return
     settings = get_settings()
-    actor_name: str = display_name(actor) if actor is not None else "Someone"
+    actor_name: str = await identify(session, actor) if actor is not None else "Someone"
     action_path: str = "/friends"
     try:
         await send_friend_notice_email(
@@ -229,12 +229,15 @@ async def list_friend_requests(
             ).all()
         }
     mutuals = await _mutual_counts(session, user.id, all_ids)
+    names: dict[uuid.UUID, str] = {
+        uid: await identify(session, profiles.get(uid)) for uid in all_ids
+    }
 
     def _row(uid: uuid.UUID, created: datetime) -> FriendRequestOut:
         profile = profiles.get(uid)
         return FriendRequestOut(
             user_id=uid,
-            display_name=display_name(profile) if profile else "Friend",
+            display_name=names.get(uid, "Friend"),
             image_url=profile.image_url if profile else None,
             mutual_count=mutuals.get(uid, 0),
             created_at=created,
@@ -309,7 +312,7 @@ async def list_recommended_friends(
         results.append(
             RecommendedFriendOut(
                 user_id=uid,
-                display_name=display_name(profile) if profile else "Friend",
+                display_name=await identify(session, profile),
                 image_url=profile.image_url if profile else None,
                 mutual_count=count,
             )
@@ -417,7 +420,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         summaries.append(
             FriendSummaryOut(
                 user_id=fid,
-                display_name=display_name(profile) if profile else "Friend",
+                display_name=await identify(session, profile),
                 image_url=profile.image_url if profile else None,
                 online=online,
                 last_active_at=last_active,
@@ -578,7 +581,7 @@ async def friend_profile(
 
     return FriendProfileOut(
         user_id=friend_id,
-        display_name=display_name(profile) if profile else "Friend",
+        display_name=await identify(session, profile),
         first=profile.first if profile else None,
         last=profile.last if profile else None,
         image_url=profile.image_url if profile else None,

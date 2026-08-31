@@ -809,6 +809,20 @@ def display_name(profile: Profile) -> str:
     return "Friend"
 
 
+async def identify(session: AsyncSession, profile: Profile | None) -> str:
+    """Like display_name, but falls back to the account's email address
+    instead of the bare "Friend" placeholder when no name has been set yet,
+    so notifications and friend lists tell the viewer which real person this
+    is rather than reading like a literal name."""
+    if profile is None:
+        return "Friend"
+    name = display_name(profile)
+    if name != "Friend":
+        return name
+    email = await email_for_user(session, profile.id)
+    return email or "Friend"
+
+
 async def post_participant_ids(
     session: AsyncSession, post_id: uuid.UUID
 ) -> list[uuid.UUID]:
