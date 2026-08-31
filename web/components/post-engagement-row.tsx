@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthGate } from "@/components/auth-gate";
-import { ReactionIcon } from "@/components/reaction-icon";
+import { REACTION_ACCENT, ReactionIcon } from "@/components/reaction-icon";
 import { ReactorsModal } from "@/components/reactors-modal";
 import { ReadersModal } from "@/components/readers-modal";
 import type { LiveStoryReader } from "@/lib/use-story-readers";
@@ -93,9 +93,12 @@ export function PostEngagementRow({ post, readers, compact }: PostEngagementRowP
             className="flex items-center gap-1.5 hover:underline"
           >
             {post.reactions.map((r) => (
-              <span key={r.reaction} className="inline-flex items-center gap-0.5">
-                <ReactionIcon kind={r.reaction} />
-                {r.count}
+              <span
+                key={r.reaction}
+                className={`inline-flex items-center gap-0.5 ${REACTION_ACCENT[r.reaction]}`}
+              >
+                <ReactionIcon kind={r.reaction} className="h-4 w-4" />
+                <span className="text-zinc-500 dark:text-zinc-400">{r.count}</span>
               </span>
             ))}
           </button>

@@ -1,19 +1,9 @@
 "use client";
 
-import { ReactionIcon } from "@/components/reaction-icon";
+import { REACTION_ACCENT, ReactionIcon } from "@/components/reaction-icon";
 import { REACTIONS, type ReactionKind } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-
-const REACTION_ACCENT: Record<ReactionKind, string> = {
-  like: "text-blue-600 dark:text-blue-400",
-  love: "text-red-600 dark:text-red-400",
-  care: "text-pink-600 dark:text-pink-400",
-  haha: "text-yellow-600 dark:text-yellow-400",
-  wow: "text-purple-600 dark:text-purple-400",
-  sad: "text-amber-600 dark:text-amber-400",
-  angry: "text-orange-600 dark:text-orange-400",
-};
 
 const LONG_PRESS_MS = 400;
 
