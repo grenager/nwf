@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { subscribeSharedChannel } from "@/lib/shared-realtime-channel";
 import type { Profile, StoryReader, UUID } from "@/lib/types";
 
 // Keep in sync with backend/core/config.py's reading_now_window_minutes.
@@ -61,26 +61,22 @@ export function useStoryReaders(
   }, [storyId]);
 
   useEffect(() => {
-    const supabase = getSupabaseBrowserClient();
-    const channel = supabase
-      .channel(`story-readers-${storyId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "story_statuses",
-          filter: `story_id=eq.${storyId}`,
-        },
-        () => {
-          if (refetchTimer.current) clearTimeout(refetchTimer.current);
-          refetchTimer.current = setTimeout(refetch, REFETCH_DEBOUNCE_MS);
-        },
-      )
-      .subscribe();
+    const unsubscribe = subscribeSharedChannel(
+      `story-readers-${storyId}`,
+      {
+        event: "*",
+        schema: "public",
+        table: "story_statuses",
+        filter: `story_id=eq.${storyId}`,
+      },
+      () => {
+        if (refetchTimer.current) clearTimeout(refetchTimer.current);
+        refetchTimer.current = setTimeout(refetch, REFETCH_DEBOUNCE_MS);
+      },
+    );
     return () => {
       if (refetchTimer.current) clearTimeout(refetchTimer.current);
-      void supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [storyId, refetch]);
 

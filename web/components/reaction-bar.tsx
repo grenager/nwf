@@ -1,3 +1,4 @@
+import { ReactionIcon } from "@/components/reaction-icon";
 import { REACTIONS, type ReactionKind, type ReactionSummary } from "@/lib/types";
 
 /** Apply a toggle to a reaction summary list + my_reaction. */
@@ -57,7 +58,7 @@ export function ReactionBar({
   );
   return (
     <span className={`inline-flex items-center gap-1 ${SIZE_CLASS[size]}`}>
-      {REACTIONS.map(({ kind, emoji, label }) => {
+      {REACTIONS.map(({ kind, label }) => {
         const count: number = counts.get(kind) ?? 0;
         const mine: boolean = myReaction === kind;
         return (
@@ -71,11 +72,11 @@ export function ReactionBar({
             onClick={() => onToggle(kind)}
             className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 leading-none disabled:opacity-40 ${
               mine
-                ? "bg-zinc-200 dark:bg-zinc-700"
-                : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-100"
+                : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             }`}
           >
-            <span>{emoji}</span>
+            <ReactionIcon kind={kind} />
             {count > 0 ? (
               <span className="text-zinc-500 dark:text-zinc-400">{count}</span>
             ) : null}

@@ -119,12 +119,16 @@ export interface CommunityStats {
   conversation_count: number;
 }
 
-/** Fixed emoji reaction set for posts and comments. */
+/** Fixed reaction set for posts and comments (Facebook's full set). Glyphs
+ * are drawn by ReactionIcon, not stored here — this is just kind + label. */
 export const REACTIONS = [
-  { kind: "like", emoji: "👍", label: "Like" },
-  { kind: "love", emoji: "❤️", label: "Love" },
-  { kind: "sad", emoji: "😢", label: "Sad" },
-  { kind: "angry", emoji: "😠", label: "Angry" },
+  { kind: "like", label: "Like" },
+  { kind: "love", label: "Love" },
+  { kind: "care", label: "Care" },
+  { kind: "haha", label: "Haha" },
+  { kind: "wow", label: "Wow" },
+  { kind: "sad", label: "Sad" },
+  { kind: "angry", label: "Angry" },
 ] as const;
 
 export type ReactionKind = (typeof REACTIONS)[number]["kind"];
@@ -132,6 +136,15 @@ export type ReactionKind = (typeof REACTIONS)[number]["kind"];
 export interface ReactionSummary {
   reaction: ReactionKind;
   count: number;
+}
+
+/** One person's reaction to a post, for the reactor-list modal. */
+export interface PostReactor {
+  user_id: UUID;
+  display_name: string;
+  image_url: string | null;
+  reaction: ReactionKind;
+  reacted_at: string;
 }
 
 export interface Comment {

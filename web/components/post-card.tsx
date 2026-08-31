@@ -1,7 +1,6 @@
 "use client";
 
 import { ArticleCard } from "@/components/article-card";
-import { EngagementSummary } from "@/components/engagement-summary";
 import { PostThread } from "@/components/post-thread";
 import { SharePostModal } from "@/components/share-post-modal";
 import { useAuth } from "@/components/auth-provider";
@@ -66,9 +65,6 @@ export function PostCard({
     card.story_id,
     card.engagement.readers,
   );
-  const engagement = { ...card.engagement, readers: liveReaders };
-  const hasEngagement: boolean =
-    engagement.read > 0 || engagement.commented > 0 || liveReaders.length > 0;
   const post: Post | undefined = card.posts[0];
 
   function markReadOnOpen(): void {
@@ -118,13 +114,6 @@ export function PostCard({
           </Link>
         </div>
       ) : null}
-
-      {hasEngagement ? (
-        <div className="flex items-center justify-between gap-3">
-          <span />
-          <EngagementSummary engagement={engagement} variant="inline" />
-        </div>
-      ) : null}
     </>
   );
 
@@ -153,6 +142,7 @@ export function PostCard({
         post={post}
         me={me}
         preview={preview}
+        readers={liveReaders}
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
         onInvite={() => setInviteOpen(true)}

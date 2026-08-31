@@ -185,7 +185,9 @@ class DismissMark(BaseModel):
 
 
 # --- Reactions (fixed set on posts and comments) --------------------------
-REACTION_VALUES: frozenset[str] = frozenset({"like", "love", "sad", "angry"})
+REACTION_VALUES: frozenset[str] = frozenset(
+    {"like", "love", "care", "haha", "wow", "sad", "angry"}
+)
 
 
 class ReactionSummary(BaseModel):
@@ -206,6 +208,16 @@ class ReactionSet(BaseModel):
                 f"reaction must be one of: {', '.join(sorted(REACTION_VALUES))}"
             )
         return value
+
+
+class PostReactorOut(BaseModel):
+    """One person's reaction to a post, for the reactor-list modal."""
+
+    user_id: uuid.UUID
+    display_name: str
+    image_url: str | None = None
+    reaction: str
+    reacted_at: datetime
 
 
 # --- Comments (replies under a post) --------------------------------------

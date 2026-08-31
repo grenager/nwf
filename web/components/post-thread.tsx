@@ -3,8 +3,10 @@
 import { applyReactionToggle, ReactionBar } from "@/components/reaction-bar";
 import { Avatar } from "@/components/avatar";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
+import { LikeButton } from "@/components/like-button";
 import { MentionInput } from "@/components/mention-input";
 import { MentionText } from "@/components/mention-text";
+import { PostEngagementRow } from "@/components/post-engagement-row";
 import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
@@ -15,6 +17,7 @@ import { commentWasEdited } from "@/lib/comments";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
 import { useTypingIndicator } from "@/lib/use-typing-indicator";
+import type { LiveStoryReader } from "@/lib/use-story-readers";
 import type {
   Comment,
   Post,
@@ -67,6 +70,7 @@ export function PostThread({
   post,
   me,
   preview,
+  readers,
   onPostChange,
   onDelete,
   onInvite,
@@ -79,6 +83,9 @@ export function PostThread({
   post: Post;
   me: Profile | null;
   preview?: ReactNode;
+  /** Live reader list for this post's story, from the parent's own
+   * useStoryReaders() call — not fetched again here. */
+  readers: LiveStoryReader[];
   onPostChange: (post: Post) => void;
   onDelete: () => void;
   onInvite: () => void;
@@ -289,6 +296,15 @@ export function PostThread({
     setDraftParentId(comment.id);
     setComposerActive(true);
     composerRef.current?.focus();
+  }
+
+  function focusComposer(): void {
+    if (!requireAuth("comment")) return;
+    setComposerActive(true);
+    requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      composerRef.current?.focus();
+    });
   }
 
   async function toggleCommentReaction(
@@ -588,16 +604,35 @@ export function PostThread({
 
         {preview ? <div className="space-y-3">{preview}</div> : null}
 
-        {!compact && !isGuest ? (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-            <ReactionBar
-              reactions={post.reactions}
-              myReaction={post.my_reaction}
-              onToggle={(reaction) => void togglePostReaction(reaction)}
-              disabled={postReacting}
-            />
-          </div>
-        ) : null}
+        <div className="flex items-center border-y border-zinc-100 dark:border-zinc-800">
+          <LikeButton
+            myReaction={post.my_reaction}
+            onToggle={(reaction) => void togglePostReaction(reaction)}
+            disabled={postReacting}
+          />
+          <button
+            type="button"
+            onClick={focusComposer}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-[1.1em] w-[1.1em]"
+              aria-hidden="true"
+            >
+              <rect x="3.5" y="4.5" width="17" height="12" rx="3" />
+              <path d="M7 16.5v3.5l4-3.5" />
+            </svg>
+            <span>Comment</span>
+          </button>
+        </div>
+
+        <PostEngagementRow post={post} readers={readers} compact={compact} />
 
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
           {conversationTitle(post, isAuthor)}
@@ -952,7 +987,7 @@ function CommentRow({
           />
         )}
         {editing ? null : (
-          <div className="mt-0.5 flex items-center gap-3 text-xs">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <ReactionBar
               reactions={comment.reactions}
               myReaction={comment.my_reaction}

@@ -2,7 +2,6 @@
 
 import { ArticleCard } from "@/components/article-card";
 import { useAuth } from "@/components/auth-provider";
-import { EngagementSummary } from "@/components/engagement-summary";
 import { PostThread } from "@/components/post-thread";
 import { ReaderBody } from "@/components/reader-body";
 import { SharePostModal } from "@/components/share-post-modal";
@@ -103,10 +102,6 @@ export function PostDetail({
     );
   }
 
-  const engagement = { ...post.engagement, readers: liveReaders };
-  const hasEngagement: boolean =
-    engagement.read > 0 || engagement.commented > 0 || liveReaders.length > 0;
-
   const preview: ReactNode = (
     <>
       <ArticleCard
@@ -128,8 +123,6 @@ export function PostDetail({
           />
         </div>
       ) : null}
-
-      {hasEngagement ? <EngagementSummary engagement={engagement} /> : null}
     </>
   );
 
@@ -139,6 +132,7 @@ export function PostDetail({
         post={post}
         me={me}
         preview={preview}
+        readers={liveReaders}
         onPostChange={setPost}
         onDelete={() => onDeleted?.()}
         onInvite={() => setInviteOpen(true)}
