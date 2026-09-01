@@ -6,6 +6,7 @@ import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { mutualLabel } from "@/lib/people";
 import { canUseWebShare, shareOrCopyLink } from "@/lib/share";
 import type {
   FriendRequest,
@@ -40,10 +41,6 @@ function Avatar({
   );
 }
 
-function mutualLabel(count: number): string {
-  if (count <= 0) return "";
-  return count === 1 ? "1 mutual friend" : `${count} mutual friends`;
-}
 
 export default function PeoplePage() {
   const { session } = useAuth();
