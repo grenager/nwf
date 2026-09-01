@@ -16,6 +16,7 @@ import type {
   InvitationAcceptResult,
   InvitationCreateResult,
   InvitePreview,
+  InviteFunnel,
   InviteResult,
   NotificationList,
   Post,
@@ -28,6 +29,7 @@ import type {
   ProfileEdit,
   ReactionKind,
   RecommendedFriend,
+  ShareOutcome,
   SourceDetail,
   Story,
   StoryKind,
@@ -329,6 +331,20 @@ export const api = {
     }),
   getInvitePreview: (token: string): Promise<InvitePreview> =>
     request<InvitePreview>(`/invitations/${encodeURIComponent(token)}`),
+  /** Record that a human opened this link (not a messaging app unfurling it). */
+  recordInviteOpen: (token: string): Promise<void> =>
+    request<void>(`/invitations/${encodeURIComponent(token)}/open`, {
+      method: "POST",
+    }),
+  /** Report what the inviter did with a link once the share sheet resolved. */
+  recordShareOutcome: (
+    invitationId: UUID,
+    outcome: ShareOutcome,
+  ): Promise<void> =>
+    request<void>(`/invitations/${invitationId}/share-outcome`, {
+      method: "POST",
+      body: JSON.stringify({ outcome }),
+    }),
   getInvitePost: (token: string): Promise<Post> =>
     request<Post>(`/invitations/${encodeURIComponent(token)}/post`),
   acceptInvite: (
@@ -346,6 +362,10 @@ export const api = {
     ),
 
   // --- admin ---
+  getInviteFunnel: (days?: number): Promise<InviteFunnel> =>
+    request<InviteFunnel>(
+      days ? `/admin/invite-funnel?days=${days}` : "/admin/invite-funnel",
+    ),
   getAdminUsers: (): Promise<AdminUser[]> =>
     request<AdminUser[]>("/admin/users"),
   createAdminUser: (payload: {

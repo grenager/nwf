@@ -3,6 +3,7 @@
 import { Avatar } from "@/components/avatar";
 import { useAuth } from "@/components/auth-provider";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
+import { InviteFunnelReport } from "@/components/invite-funnel-report";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -333,6 +334,8 @@ export default function AdminPage() {
           View users, seed friendships, and pre-create accounts.
         </p>
       </div>
+
+      <InviteFunnelReport />
 
       <section>
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">

@@ -11,7 +11,7 @@ interface PageProps {
 async function fetchInvitePreview(token: string): Promise<InvitePreview | null> {
   try {
     const resp: Response = await fetch(
-      `${API_URL}/invitations/${encodeURIComponent(token)}`,
+      `${API_URL}/invitations/${encodeURIComponent(token)}?preview=1`,
       { next: { revalidate: 60 } },
     );
     if (!resp.ok) return null;

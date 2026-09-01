@@ -8,7 +8,7 @@ import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { mutualLabel } from "@/lib/people";
-import { shareOrCopyLink } from "@/lib/share";
+import { shareInviteLink } from "@/lib/invite-share";
 import { relativeTime } from "@/lib/time";
 import type {
   FriendRequest,
@@ -226,11 +226,7 @@ export function FriendsSidebar() {
         notify(created.message, "success");
         return;
       }
-      const outcome = await shareOrCopyLink({
-        title: "NewsWithFriends",
-        text: created.share_message,
-        url,
-      });
+      const outcome = await shareInviteLink(created);
       if (outcome === "copied") notify("Invite link copied", "success");
       if (outcome === "failed") notify("Could not copy the invite link", "error");
     } catch (err) {

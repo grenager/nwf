@@ -3,7 +3,7 @@
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { canUseWebShare } from "@/lib/share";
+import { shareInviteLink } from "@/lib/invite-share";
 import type { InvitationCreateResult } from "@/lib/types";
 import { useState } from "react";
 
@@ -31,22 +31,9 @@ export function InviteButton() {
         return;
       }
 
-      if (canUseWebShare()) {
-        try {
-          await navigator.share({
-            title: "NewsWithFriends",
-            text: created.share_message,
-            url,
-          });
-          return;
-        } catch (err) {
-          // Dismissing the tray is not a failure — fall through to the copy.
-          if (err instanceof DOMException && err.name === "AbortError") return;
-        }
-      }
-
-      await navigator.clipboard.writeText(created.share_message || url);
-      notify("Invite link copied", "success");
+      const result = await shareInviteLink(created);
+      if (result === "copied") notify("Invite link copied", "success");
+      if (result === "failed") notify("Could not copy the invite link", "error");
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Could not create an invite",

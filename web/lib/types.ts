@@ -113,6 +113,42 @@ export interface StoryList {
   offset: number;
 }
 
+/**
+ * What the inviter did with a freshly minted link. The OS share sheet never
+ * says where the link went, so this is the closest signal we get to whether
+ * an invite was actually sent rather than abandoned.
+ */
+export type ShareOutcome = "shared" | "copied" | "cancelled";
+
+/** One step of the invite funnel (`GET /admin/invite-funnel`). */
+export interface FunnelStage {
+  key: string;
+  label: string;
+  count: number;
+  /** Share of the stage above; null on the first, which converts from nothing. */
+  rate_from_previous: number | null;
+  note: string | null;
+}
+
+export interface InviteFunnel {
+  generated_at: string;
+  since: string | null;
+  link_funnel: {
+    stages: FunnelStage[];
+    /** Minted but never opened — never sent, or sent and ignored. Unknowable. */
+    unknown_fate: number;
+    share_outcomes: Record<string, number>;
+  };
+  person_funnel: { stages: FunnelStage[] };
+  fanout: {
+    links_with_joiners: Record<string, number>;
+    mean_joiners_per_opened_link: number;
+  };
+  arrivals: number;
+  arrivals_who_invited: number;
+  arrivals_who_invited_rate: number | null;
+}
+
 /** Public aggregate counts for guest social proof (`GET /community/stats`). */
 export interface CommunityStats {
   member_count: number;

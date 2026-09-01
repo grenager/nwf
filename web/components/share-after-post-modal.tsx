@@ -3,7 +3,8 @@
 import { Avatar } from "@/components/avatar";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { canUseWebShare, shareOrCopyLink } from "@/lib/share";
+import { shareInviteLink } from "@/lib/invite-share";
+import { canUseWebShare } from "@/lib/share";
 import type { InvitationCreateResult, PostAudience, UUID } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
@@ -105,11 +106,7 @@ export function ShareAfterPostModal({
         notify(created.message, "success");
         return;
       }
-      const outcome = await shareOrCopyLink({
-        title: "NewsWithFriends",
-        text: created.share_message,
-        url,
-      });
+      const outcome = await shareInviteLink(created);
       if (outcome === "copied") {
         setCopied(true);
         notify("Invite link copied", "success");
