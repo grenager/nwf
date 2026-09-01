@@ -7,6 +7,7 @@ import { UserLink } from "@/components/user-link";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
+import { mutualLabel } from "@/lib/people";
 import { shareOrCopyLink } from "@/lib/share";
 import { relativeTime } from "@/lib/time";
 import type {
@@ -18,10 +19,6 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-function mutualLabel(count: number): string {
-  if (count <= 0) return "";
-  return count === 1 ? "1 mutual friend" : `${count} mutual friends`;
-}
 
 function SidebarAvatar({
   name,

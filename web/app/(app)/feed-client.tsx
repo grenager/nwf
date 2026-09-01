@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
 import { FeedSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
@@ -9,6 +10,13 @@ import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
 import { useAwayRefresh } from "@/lib/use-away-refresh";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
+
+/**
+ * How far down the feed the friend suggestions sit. Far enough that the first
+ * thing you see is still what your friends are talking about, close enough
+ * that you reach it in a normal scroll.
+ */
+const SUGGESTIONS_AFTER_POSTS: number = 3;
 
 function formatNewSince(iso: string): string {
   const date: Date = new Date(iso);
@@ -148,6 +156,10 @@ export function FeedClient() {
 
   const postItems: FeedCard[] = data?.items ?? [];
 
+  // Too few posts to bury the suggestions under — show them up front instead,
+  // which also covers the empty feed.
+  const suggestionsAtTop: boolean = postItems.length <= SUGGESTIONS_AFTER_POSTS;
+
   let dividerBeforeIndex: number = -1;
   if (data?.new_since !== null && data?.new_since !== undefined) {
     const newSinceMs: number = Date.parse(data.new_since);
@@ -188,6 +200,8 @@ export function FeedClient() {
         </div>
       ) : null}
 
+      {isSignedIn && suggestionsAtTop ? <PeopleYouMayKnow /> : null}
+
       <div className="[&>article:first-child]:pt-1">
         {postItems.map((card, index) => {
           const showNewSinceDivider: boolean =
@@ -195,11 +209,16 @@ export function FeedClient() {
             dividerBeforeIndex > 0 &&
             data?.new_since !== null &&
             data?.new_since !== undefined;
+          const showSuggestions: boolean =
+            isSignedIn && !suggestionsAtTop && index === SUGGESTIONS_AFTER_POSTS;
+          // The strip carries its own top border, so a second one here would
+          // double up.
           const showTopBorder: boolean =
-            index > 0 && !showNewSinceDivider;
+            index > 0 && !showNewSinceDivider && !showSuggestions;
 
           return (
             <Fragment key={card.card_id}>
+              {showSuggestions ? <PeopleYouMayKnow /> : null}
               {showNewSinceDivider ? (
                 <div
                   className="relative border-t border-zinc-200 py-7 dark:border-zinc-800"
