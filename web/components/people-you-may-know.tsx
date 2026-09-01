@@ -3,7 +3,11 @@
 import { Avatar } from "@/components/avatar";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { dismissRecommendation, dismissedRecommendations, mutualLabel } from "@/lib/people";
+import {
+  dismissRecommendation,
+  dismissedRecommendations,
+  mutualLabel,
+} from "@/lib/people";
 import type { RecommendedFriend, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useEffect, useState } from "react";
