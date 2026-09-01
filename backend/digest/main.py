@@ -191,6 +191,21 @@ async def run_digest_cycle(
     log.info("digest.cycle_done", **counts)
 
 
+async def _scheduled_cycle() -> None:
+    """Run one cycle, then hand the connections back.
+
+    This process spends all but a few minutes of the day asleep between runs,
+    but SQLAlchemy's pool keeps every connection the cycle opened checked out
+    of Supabase's session-mode budget until the process exits. Those idle
+    connections are ones ``nwf-api`` then cannot have, so release them as soon
+    as the cycle is done; ``get_engine`` rebuilds the pool on the next run.
+    """
+    try:
+        await run_digest_cycle()
+    finally:
+        await dispose_engine()
+
+
 async def _main() -> None:
     settings = get_settings()
     hour: int = max(0, min(23, settings.digest_send_hour_pt))
@@ -204,7 +219,7 @@ async def _main() -> None:
 
     scheduler = AsyncIOScheduler(timezone=PT)
     scheduler.add_job(
-        run_digest_cycle,
+        _scheduled_cycle,
         CronTrigger(hour=hour, minute=0, timezone=PT),
         max_instances=1,
         coalesce=True,
