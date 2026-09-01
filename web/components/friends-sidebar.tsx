@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
+import { UserLink } from "@/components/user-link";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -65,13 +66,7 @@ function FriendAvatar({ friend }: { friend: FriendSummary }) {
   );
 }
 
-function FriendRow({
-  friend,
-  onOpen,
-}: {
-  friend: FriendSummary;
-  onOpen: (id: UUID) => void;
-}) {
+function FriendRow({ friend }: { friend: FriendSummary }) {
   const subtitle: string = friend.last_activity
     ? friend.last_activity
     : "No activity yet";
@@ -82,9 +77,8 @@ function FriendRow({
       : "";
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(friend.user_id)}
+    <UserLink
+      userId={friend.user_id}
       className="flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-900"
     >
       <FriendAvatar friend={friend} />
@@ -107,7 +101,7 @@ function FriendRow({
         </div>
         <p className="truncate text-xs text-slate-400">{subtitle}</p>
       </div>
-    </button>
+    </UserLink>
   );
 }
 
@@ -328,7 +322,7 @@ export function FriendsSidebar() {
       ) : (
         <div className="max-h-[50vh] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
           {friends.map((friend) => (
-            <FriendRow key={friend.user_id} friend={friend} onOpen={setOpenId} />
+            <FriendRow key={friend.user_id} friend={friend} />
           ))}
         </div>
       )}

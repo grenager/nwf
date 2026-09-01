@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
+import { UserLink } from "@/components/user-link";
 import { UserListSkeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -389,9 +390,8 @@ export default function PeoplePage() {
               <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
                 {friends.map((friend) => (
                   <li key={friend.user_id}>
-                    <button
-                      type="button"
-                      onClick={() => setOpenId(friend.user_id)}
+                    <UserLink
+                      userId={friend.user_id}
                       className="flex w-full items-center gap-3 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900"
                     >
                       <Avatar
@@ -406,7 +406,7 @@ export default function PeoplePage() {
                           {friend.last_activity ?? "No activity yet"}
                         </p>
                       </div>
-                    </button>
+                    </UserLink>
                   </li>
                 ))}
               </ul>

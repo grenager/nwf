@@ -124,7 +124,16 @@ export function ReaderBody({
 
       <p className="mt-8 border-t border-zinc-200 pt-4 text-xs text-zinc-400 dark:border-zinc-800">
         This text was pasted by {authorName} from a page they have access to. For
-        the definitive version, read the original at {source}.
+        the definitive version, read the original at{" "}
+        <a
+          href={articleUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold text-zinc-500 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          {source}
+        </a>
+        .
       </p>
     </div>
   );

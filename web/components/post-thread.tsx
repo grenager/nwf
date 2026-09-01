@@ -2,6 +2,7 @@
 
 import { applyReactionToggle } from "@/components/reaction-bar";
 import { Avatar } from "@/components/avatar";
+import { UserLink } from "@/components/user-link";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { LikeButton } from "@/components/like-button";
 import { MentionInput } from "@/components/mention-input";
@@ -475,17 +476,28 @@ export function PostThread({
 
   return (
     <div className="flex items-start gap-2">
-      <Avatar name={post.author_name} imageUrl={post.author_image_url} />
+      <UserLink userId={post.author_id} title={post.author_name}>
+        <Avatar name={post.author_name} imageUrl={post.author_image_url} />
+      </UserLink>
       <div className="min-w-0 flex-1 space-y-3">
         <div>
           <div className="mb-2 flex items-start gap-2">
             <div className="flex flex-1 flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              <UserLink
+                userId={post.author_id}
+                className="font-semibold text-zinc-900 hover:underline dark:text-zinc-100"
+              >
                 {post.author_name}
-              </span>
-              <span className="text-xs text-zinc-400">
+              </UserLink>
+              {/* The timestamp is the thread's permalink, the way it is
+                  everywhere else that shows one. */}
+              <Link
+                href={`/post/${post.id}`}
+                scroll={false}
+                className="text-xs text-zinc-400 hover:underline"
+              >
                 {relativeTime(post.created_at)}
-              </span>
+              </Link>
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
               <button
@@ -979,15 +991,30 @@ function CommentRow({
         highlighted ? "-mx-2 bg-zinc-100 px-2 py-1 dark:bg-zinc-800" : ""
       }`}
     >
-      <Avatar name={comment.author_name} imageUrl={comment.author_image_url} />
+      <UserLink userId={comment.user_id} title={comment.author_name}>
+        <Avatar name={comment.author_name} imageUrl={comment.author_image_url} />
+      </UserLink>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+          <UserLink
+            userId={comment.user_id}
+            className="font-semibold text-zinc-800 hover:underline dark:text-zinc-200"
+          >
             {comment.author_name}
-          </span>
-          <span className="text-zinc-400">
-            {relativeTime(comment.created_at)}
-          </span>
+          </UserLink>
+          {comment.post_id ? (
+            <Link
+              href={`/post/${comment.post_id}?comment=${comment.id}`}
+              scroll={false}
+              className="text-zinc-400 hover:underline"
+            >
+              {relativeTime(comment.created_at)}
+            </Link>
+          ) : (
+            <span className="text-zinc-400">
+              {relativeTime(comment.created_at)}
+            </span>
+          )}
           {edited ? (
             <span className="text-zinc-400">· edited</span>
           ) : null}
