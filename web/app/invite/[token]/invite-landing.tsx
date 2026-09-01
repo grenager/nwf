@@ -356,6 +356,9 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
             sourceName={sourceName}
             imageHeightClassName="h-56 sm:h-64"
             summaryClampClassName="line-clamp-3"
+            /* The source page lives behind the app shell; an invitee hasn't
+               signed in yet, so don't offer them a link into it. */
+            linkSource={false}
           />
         </div>
       ) : null}

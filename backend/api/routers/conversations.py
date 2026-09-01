@@ -166,6 +166,9 @@ async def list_conversations(
                 latest_reply_text=(
                     latest_comment.text if latest_comment is not None else None
                 ),
+                latest_reply_author_id=(
+                    latest_author.id if latest_author is not None else None
+                ),
                 latest_reply_author_name=(
                     display_name(latest_author)
                     if latest_author is not None

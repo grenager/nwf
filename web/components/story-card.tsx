@@ -6,9 +6,11 @@ import { EngagementSummary } from "@/components/engagement-summary";
 import { InboxCardActions } from "@/components/inbox-card-actions";
 import { ReadBadge } from "@/components/read-badge";
 import { SourceLogo } from "@/components/source-logo";
+import { UserLink } from "@/components/user-link";
 import { stripHtml } from "@/lib/html";
 import { relativeTime } from "@/lib/time";
 import type { Story, UUID } from "@/lib/types";
+import { sourceHref } from "@/lib/url";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -105,12 +107,27 @@ export function StoryCard({
       <div>
         {!dense && story.source_name ? (
           <div className="mb-1.5 flex items-center gap-2">
-            <SourceLogo
-              src={story.source_image_url}
-              name={story.source_name}
-              imgClassName="h-5 w-auto max-w-[160px] shrink-0 object-contain"
-              fallbackClassName="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500"
-            />
+            {sourceHref(story.article_url) ? (
+              <Link
+                href={sourceHref(story.article_url) as string}
+                title={story.source_name}
+                className="flex min-w-0 items-center gap-2 transition hover:opacity-70"
+              >
+                <SourceLogo
+                  src={story.source_image_url}
+                  name={story.source_name}
+                  imgClassName="h-5 w-auto max-w-[160px] shrink-0 object-contain"
+                  fallbackClassName="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500"
+                />
+              </Link>
+            ) : (
+              <SourceLogo
+                src={story.source_image_url}
+                name={story.source_name}
+                imgClassName="h-5 w-auto max-w-[160px] shrink-0 object-contain"
+                fallbackClassName="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500"
+              />
+            )}
           </div>
         ) : null}
         <div className={dense ? "" : "flex gap-3"}>
@@ -134,17 +151,50 @@ export function StoryCard({
             <div className="mt-1.5 flex items-center gap-2 text-[12px]">
               {story.post_author_name ? (
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <Avatar
-                    name={story.post_author_name}
-                    imageUrl={story.post_author_image_url ?? null}
-                    size="sm"
-                  />
-                  <span className="min-w-0 truncate font-semibold text-zinc-900 dark:text-zinc-100">
-                    {story.post_author_name}
-                  </span>
-                  <span className="shrink-0 whitespace-nowrap text-zinc-500">
-                    {replyLabel(story.post_reply_count ?? 0)}
-                  </span>
+                  {story.post_author_id ? (
+                    <UserLink
+                      userId={story.post_author_id}
+                      title={story.post_author_name}
+                    >
+                      <Avatar
+                        name={story.post_author_name}
+                        imageUrl={story.post_author_image_url ?? null}
+                        size="sm"
+                      />
+                    </UserLink>
+                  ) : (
+                    <Avatar
+                      name={story.post_author_name}
+                      imageUrl={story.post_author_image_url ?? null}
+                      size="sm"
+                    />
+                  )}
+                  {story.post_author_id ? (
+                    <UserLink
+                      userId={story.post_author_id}
+                      className="min-w-0 truncate font-semibold text-zinc-900 hover:underline dark:text-zinc-100"
+                    >
+                      {story.post_author_name}
+                    </UserLink>
+                  ) : (
+                    <span className="min-w-0 truncate font-semibold text-zinc-900 dark:text-zinc-100">
+                      {story.post_author_name}
+                    </span>
+                  )}
+                  {story.post_id ? (
+                    <Link
+                      href={`/post/${story.post_id}`}
+                      scroll={false}
+                      onClick={() => handleMarkRead()}
+                      className="shrink-0 whitespace-nowrap text-zinc-500 hover:underline"
+                    >
+                      {replyLabel(story.post_reply_count ?? 0)}
+                    </Link>
+                  ) : (
+                    <span className="shrink-0 whitespace-nowrap text-zinc-500">
+                      {replyLabel(story.post_reply_count ?? 0)}
+                    </span>
+                  )}
                 </span>
               ) : story.author_names.length > 0 ? (
                 <span className="min-w-0 truncate font-semibold text-zinc-900 dark:text-zinc-100">

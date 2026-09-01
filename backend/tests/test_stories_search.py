@@ -64,7 +64,9 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
     mock_user = type("U", (), {"id": user_id})()
     mock_friend_reactors = AsyncMock(return_value={})
     mock_primary = AsyncMock(return_value={story_id: post_id})
+    author_id = uuid.uuid4()
     summary = _PostSummary(
+        author_id=author_id,
         author_name="Ada Lovelace",
         author_image_url=None,
         take="Worth reading.",
@@ -99,6 +101,7 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
     assert len(result.items) == 1
     assert result.items[0].post_id == post_id
     # A result should read as the conversation it opens, not a bare article.
+    assert result.items[0].post_author_id == author_id
     assert result.items[0].post_author_name == "Ada Lovelace"
     assert result.items[0].post_take == "Worth reading."
     assert result.items[0].post_reply_count == 3

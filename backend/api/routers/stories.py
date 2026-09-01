@@ -83,6 +83,7 @@ def _rows_to_stories(
 class _PostSummary:
     """The parts of a post a search result needs to read as a conversation."""
 
+    author_id: uuid.UUID
     author_name: str
     author_image_url: str | None
     take: str | None
@@ -114,6 +115,7 @@ async def _post_summaries(
     }
     return {
         post_id: _PostSummary(
+            author_id=author.id,
             author_name=display_name(author),
             author_image_url=author.image_url,
             take=take,
@@ -202,6 +204,7 @@ async def title_search(
             item.post_id = post_id
             summary = summaries.get(post_id) if post_id else None
             if summary is not None:
+                item.post_author_id = summary.author_id
                 item.post_author_name = summary.author_name
                 item.post_author_image_url = summary.author_image_url
                 item.post_take = summary.take

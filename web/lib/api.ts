@@ -28,6 +28,7 @@ import type {
   ProfileEdit,
   ReactionKind,
   RecommendedFriend,
+  SourceDetail,
   Story,
   StoryKind,
   StoryList,
@@ -138,6 +139,11 @@ export const api = {
    * for the live "reading now" indicator. */
   getStoryReaders: (storyId: UUID): Promise<StoryReader[]> =>
     request<StoryReader[]>(`/stories/${storyId}/readers`),
+
+  // --- sources ---
+  /** A publication and the viewer-visible conversations about its articles. */
+  getSource: (host: string): Promise<SourceDetail> =>
+    request<SourceDetail>(`/sources/${encodeURIComponent(host)}`),
 
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
