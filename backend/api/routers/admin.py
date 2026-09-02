@@ -700,25 +700,23 @@ async def invite_funnel(
     ]
 
     # --- fan-out ----------------------------------------------------------
+    # An outcome, so it spans every link rather than the instrumented ones:
+    # drawn from the narrower population it read as zero while the table
+    # above it reported links that had plainly brought people in.
     buckets: dict[str, int] = {"0": 0, "1": 0, "2": 0, "3+": 0}
-    opened_link_ids = set(
-        (
-            await session.scalars(
-                _scoped(select(Invitation.id).where(Invitation.open_count > 0))
-            )
-        ).all()
+    all_link_ids = set(
+        (await session.scalars(_scoped(select(Invitation.id)))).all()
     )
-    for link_id in opened_link_ids:
+    for link_id in all_link_ids:
         n = joiners_by_link.get(link_id, 0)
         key = "3+" if n >= 3 else str(n)
         buckets[key] += 1
-    joiners_from_opened = sum(
-        joiners_by_link.get(link_id, 0) for link_id in opened_link_ids
-    )
+    # Averaged over the links that actually brought someone in. Averaging over
+    # all links would mostly measure how many were never sent, which is the
+    # question this stat is not trying to answer.
+    total_joiners = sum(joiners_by_link.get(link_id, 0) for link_id in all_link_ids)
     mean_joiners = (
-        round(joiners_from_opened / len(opened_link_ids), 2)
-        if opened_link_ids
-        else 0.0
+        round(total_joiners / links_with_joiner, 2) if links_with_joiner else 0.0
     )
 
     # --- do arrivals become inviters? -------------------------------------
@@ -760,7 +758,7 @@ async def invite_funnel(
         person_funnel=InvitePersonFunnel(stages=person_stages),
         fanout=InviteFanout(
             links_with_joiners=buckets,
-            mean_joiners_per_opened_link=mean_joiners,
+            mean_joiners_per_converting_link=mean_joiners,
         ),
         arrivals=len(unique_joiners),
         arrivals_who_invited=arrivals_who_invited,

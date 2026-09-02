@@ -199,9 +199,9 @@ links were minted and never opened.
                 Fan-out
               </h3>
               <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                Opened links brought in{" "}
+                A link that brought anyone in brought{" "}
                 <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-                  {data.fanout.mean_joiners_per_opened_link}
+                  {data.fanout.mean_joiners_per_converting_link}
                 </span>{" "}
                 people on average.
               </p>

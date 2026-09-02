@@ -751,7 +751,9 @@ class InviteFanout(BaseModel):
     """
 
     links_with_joiners: dict[str, int]
-    mean_joiners_per_opened_link: float
+    # Averaged over links that brought in at least one person, not over all
+    # links -- the latter would mostly measure how many were never sent.
+    mean_joiners_per_converting_link: float
 
 
 class InviteFunnelOut(BaseModel):

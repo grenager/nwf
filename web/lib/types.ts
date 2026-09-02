@@ -148,7 +148,7 @@ export interface InviteFunnel {
   person_funnel: { stages: FunnelStage[] };
   fanout: {
     links_with_joiners: Record<string, number>;
-    mean_joiners_per_opened_link: number;
+    mean_joiners_per_converting_link: number;
   };
   arrivals: number;
   arrivals_who_invited: number;
