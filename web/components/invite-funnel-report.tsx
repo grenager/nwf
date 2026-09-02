@@ -146,8 +146,8 @@ export function InviteFunnelReport() {
       {data ? (
         <div className="space-y-8">
           <StageTable
-            title="Links"
-            subtitle="One row per invite link minted."
+            title="Reach"
+            subtitle="What happened to the link itself. Only links minted since reach tracking shipped — the counters simply don't exist for older ones."
             stages={data.link_funnel.stages}
           />
 
@@ -156,7 +156,7 @@ export function InviteFunnelReport() {
               <span className="tabular-nums font-semibold">
                 {data.link_funnel.unknown_fate}
               </span>{" "}
-              tracked links were minted and never opened.
+links were minted and never opened.
             </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
               We can&apos;t tell whether these were never sent or sent and
@@ -170,10 +170,10 @@ export function InviteFunnelReport() {
                 <span className="tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">
                   {data.link_funnel.pre_tracking}
                 </span>{" "}
-                links predate reach tracking and are excluded above. Their
-                counters read zero because nothing was measured, not because
-                nothing happened — counting them would have shown links as
-                never opened that plainly were.
+                links predate reach tracking, so the stages above exclude
+                them: their counters read zero because nothing was measured,
+                not because nothing happened. Everything under Outcomes still
+                counts them, since that comes from real records.
               </p>
             ) : null}
             {Object.keys(data.link_funnel.share_outcomes).length > 0 ? (
@@ -188,8 +188,8 @@ export function InviteFunnelReport() {
           </div>
 
           <StageTable
-            title="People"
-            subtitle="Denominated on opens and redemptions, since one link serves many people."
+            title="Outcomes"
+            subtitle="Every invite ever sent. These come from the redemption, friendship and post records rather than the reach counters, so they're known for the whole history."
             stages={data.person_funnel.stages}
           />
 
