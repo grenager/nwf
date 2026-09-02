@@ -1,7 +1,6 @@
 "use client";
 
 import { Avatar } from "@/components/avatar";
-import { UserLink } from "@/components/user-link";
 import { api, ApiError } from "@/lib/api";
 import type { AudienceMember, PostAudience, UUID } from "@/lib/types";
 import { useEffect, useState } from "react";
@@ -146,23 +145,13 @@ export function CommentAudienceModal({
                         key={person.user_id}
                         className="flex items-center gap-2"
                       >
-                        <UserLink
-                          userId={person.user_id}
-                          title={person.display_name}
-                          onNavigate={onClose}
-                        >
-                          <Avatar
-                            name={person.display_name}
-                            imageUrl={person.image_url}
-                          />
-                        </UserLink>
-                        <UserLink
-                          userId={person.user_id}
-                          onNavigate={onClose}
-                          className="min-w-0 truncate text-sm text-zinc-800 hover:underline dark:text-zinc-200"
-                        >
+                        <Avatar
+                          name={person.display_name}
+                          imageUrl={person.image_url}
+                        />
+                        <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-200">
                           {person.display_name}
-                        </UserLink>
+                        </span>
                       </li>
                     ))}
                   </ul>

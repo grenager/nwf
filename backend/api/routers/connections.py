@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import CurrentUser, SessionDep
 from api.friends import (
     accepted_friend_ids,
-    display_name,
     email_for_user,
     ensure_friend_capacity,
     friend_slots_used,
@@ -471,45 +470,20 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
 async def friend_profile(
     friend_id: uuid.UUID, session: SessionDep, user: CurrentUser
 ) -> FriendProfileOut:
-    """Profile for anyone, plus recent activity for a connection or yourself.
-
-    Every avatar and name in the app links here, and the people you see are
-    not all friends — a friend-of-friend author, someone who reacted to a
-    thread you are in. So the card itself is open to any signed-in viewer:
-    name, avatar, and an "Add friend" action. Activity (the counts, the
-    recent list, and the online dot derived from them) stays behind
-    ``can_view_activity`` — self, an existing connection, or an admin.
-    """
+    """Detailed profile + recent activity for a connection or yourself."""
     is_self: bool = friend_id == user.id
     viewer = await session.get(Profile, user.id)
     is_admin: bool = user.is_admin or bool(viewer and viewer.is_admin)
     is_friend: bool = False
-    connected: bool = False
     if not is_self:
         connection = await _find_between(session, user.id, friend_id)
-        connected = connection is not None
         is_friend = (
             connection is not None and connection.status == ConnectionStatus.accepted
         )
+        if not is_admin and connection is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "not your friend")
 
     profile = await session.get(Profile, friend_id)
-    if profile is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
-
-    can_view_activity: bool = is_self or connected or is_admin
-    if not can_view_activity:
-        return FriendProfileOut(
-            user_id=friend_id,
-            # `display_name`, not `identify`: the email fallback would hand a
-            # stranger's address to anyone holding their user id.
-            display_name=display_name(profile),
-            first=profile.first,
-            last=profile.last,
-            image_url=profile.image_url,
-            can_edit=False,
-            is_friend=False,
-            can_view_activity=False,
-        )
 
     reads = await session.scalar(
         select(func.count())
@@ -684,7 +658,6 @@ async def friend_profile(
         reactions=reactions,
         can_edit=is_self or is_admin,
         is_friend=is_friend,
-        can_view_activity=True,
         recent=items[:15],
     )
 

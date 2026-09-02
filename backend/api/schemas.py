@@ -111,7 +111,6 @@ class StoryWithStatus(StoryOut):
     # Most recent post about this story the viewer may see (search → detail link),
     # with enough of the conversation to recognise it in a result list.
     post_id: uuid.UUID | None = None
-    post_author_id: uuid.UUID | None = None
     post_author_name: str | None = None
     post_author_image_url: str | None = None
     post_take: str | None = None
@@ -499,9 +498,6 @@ class FriendProfileOut(BaseModel):
     # True when the viewer and this user are accepted friends (always False
     # for your own profile — there's no "remove friend" on yourself).
     is_friend: bool = False
-    # False for a stranger's card: the name and avatar are public to signed-in
-    # viewers, the stats/recent activity below are not.
-    can_view_activity: bool = True
     recent: list[FriendActivityItem] = Field(default_factory=list)
 
 
@@ -663,7 +659,6 @@ class ConversationOut(BaseModel):
     last_seen_at: datetime | None = None
     latest_reply_at: datetime
     latest_reply_text: str | None = None
-    latest_reply_author_id: uuid.UUID | None = None
     latest_reply_author_name: str | None = None
     latest_reply_author_image_url: str | None = None
 
@@ -698,40 +693,6 @@ class NotificationsReadRequest(BaseModel):
     notification_ids: list[uuid.UUID] | None = None
 
 
-# --- Sources --------------------------------------------------------------
-class SourcePostOut(BaseModel):
-    """One conversation on a source page — enough to render a compact card."""
-
-    post_id: uuid.UUID
-    story_id: uuid.UUID
-    full_headline: str
-    article_url: str
-    summary: str | None = None
-    image_url: str | None = None
-    author_id: uuid.UUID
-    author_name: str
-    author_image_url: str | None = None
-    take: str | None = None
-    reply_count: int = 0
-    created_at: datetime
-    last_activity_at: datetime
-
-
-class SourceOut(BaseModel):
-    """A publication, keyed by the article host rather than a ``sources`` row.
-
-    Attribution only sometimes resolves to a curated :class:`Source` (see
-    ``core.attribution``); Substack newsletters and one-off links resolve to a
-    publisher label or the bare host. The host is the one identity every
-    article has, so it — not ``source_id`` — keys the source page.
-    """
-
-    host: str
-    name: str
-    image_url: str | None = None
-    homepage_url: str | None = None
-    post_count: int = 0
-    posts: list[SourcePostOut] = Field(default_factory=list)
 # --- Invite funnel (admin) -------------------------------------------------
 
 
