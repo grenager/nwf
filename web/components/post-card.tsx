@@ -4,7 +4,6 @@ import { ArticleCard } from "@/components/article-card";
 import { PostThread } from "@/components/post-thread";
 import { SharePostModal } from "@/components/share-post-modal";
 import { useAuth } from "@/components/auth-provider";
-import { UserLink } from "@/components/user-link";
 import { stripHtml } from "@/lib/html";
 import { api } from "@/lib/api";
 import { useStoryReaders } from "@/lib/use-story-readers";
@@ -26,25 +25,20 @@ function FofReasonTag({ card }: { card: FeedCard }) {
   if (!reason) return null;
   return (
     <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-      <UserLink userId={reason.friend_id} title={reason.friend_name}>
-        {reason.friend_image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={reason.friend_image_url}
-            alt=""
-            className="h-4 w-4 rounded-[9999px] object-cover"
-          />
-        ) : (
-          <span className="flex h-4 w-4 items-center justify-center rounded-[9999px] bg-slate-300 text-[8px] font-bold text-slate-700 dark:bg-slate-600 dark:text-slate-100">
-            {reason.friend_name.charAt(0).toUpperCase()}
-          </span>
-        )}
-      </UserLink>
+      {reason.friend_image_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={reason.friend_image_url}
+          alt=""
+          className="h-4 w-4 rounded-[9999px] object-cover"
+        />
+      ) : (
+        <span className="flex h-4 w-4 items-center justify-center rounded-[9999px] bg-slate-300 text-[8px] font-bold text-slate-700 dark:bg-slate-600 dark:text-slate-100">
+          {reason.friend_name.charAt(0).toUpperCase()}
+        </span>
+      )}
       <span>
-        <UserLink userId={reason.friend_id} className="hover:underline">
-          {reason.friend_name}
-        </UserLink>{" "}
-        {FOF_ACTION_LABEL[reason.action]}
+        {reason.friend_name} {FOF_ACTION_LABEL[reason.action]}
       </span>
     </div>
   );

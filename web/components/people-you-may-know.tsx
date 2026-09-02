@@ -2,7 +2,6 @@
 
 import { Avatar } from "@/components/avatar";
 import { useToast } from "@/components/toast";
-import { UserLink } from "@/components/user-link";
 import { api, ApiError } from "@/lib/api";
 import {
   dismissRecommendation,
@@ -116,19 +115,10 @@ export function PeopleYouMayKnow() {
               >
                 ✕
               </button>
-              <UserLink userId={rec.user_id} title={rec.display_name}>
-                <Avatar
-                  name={rec.display_name}
-                  imageUrl={rec.image_url}
-                  size="xl"
-                />
-              </UserLink>
-              <UserLink
-                userId={rec.user_id}
-                className="mt-2 line-clamp-2 text-center text-sm font-semibold text-zinc-900 hover:underline dark:text-zinc-50"
-              >
+              <Avatar name={rec.display_name} imageUrl={rec.image_url} size="xl" />
+              <p className="mt-2 line-clamp-2 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 {rec.display_name}
-              </UserLink>
+              </p>
               <p className="mt-0.5 h-4 text-center text-[11px] text-zinc-400">
                 {mutuals}
               </p>
