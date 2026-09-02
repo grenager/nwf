@@ -697,25 +697,39 @@ class NotificationsReadRequest(BaseModel):
 
 
 class FunnelStage(BaseModel):
-    """One step of a funnel, with its own denominator already applied."""
+    """One step of a funnel.
+
+    Not every stage converts from the one directly above it: "posted or
+    commented" and "came back" are both shares of the people who created an
+    account, not of each other. ``rate_of`` names the stage each rate is
+    actually measured against so the UI cannot imply the wrong denominator.
+    """
 
     key: str
     label: str
     count: int
-    # Share of the stage above it. None on the first stage, which has nothing
-    # to convert from.
-    rate_from_previous: float | None = None
+    rate: float | None = None
+    # Label of the stage ``rate`` is a share of. None when there is no rate.
+    rate_of: str | None = None
     note: str | None = None
 
 
 class InviteLinkFunnel(BaseModel):
-    """What happens to invite links, one row per invitation."""
+    """What happens to invite links, one row per instrumented invitation.
+
+    Only links minted after reach tracking shipped are counted: the others
+    have zeroed counters that mean "not measured", and folding them in
+    produced a funnel that claimed links were never opened while also
+    reporting that they had brought people in.
+    """
 
     stages: list[FunnelStage]
     # Links whose fate is genuinely unknown: minted, never opened. Could be
     # never sent, or sent and ignored -- the share tray does not tell us.
     unknown_fate: int
     share_outcomes: dict[str, int]
+    # Links from before tracking existed, excluded from every stage above.
+    pre_tracking: int = 0
 
 
 class InvitePersonFunnel(BaseModel):

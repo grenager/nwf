@@ -371,14 +371,22 @@ def _stage(
     key: str,
     label: str,
     count: int,
-    previous: int | None,
+    base: tuple[str, int] | None,
     note: str | None = None,
 ) -> FunnelStage:
+    """One funnel row.
+
+    ``base`` is the (label, count) the rate is a share of -- passed explicitly
+    rather than assumed to be the row above, because several stages convert
+    from the same earlier step rather than from each other.
+    """
     rate: float | None = None
-    if previous is not None and previous > 0:
-        rate = round(count / previous, 4)
+    rate_of: str | None = None
+    if base is not None and base[1] > 0:
+        rate = round(count / base[1], 4)
+        rate_of = base[0]
     return FunnelStage(
-        key=key, label=label, count=count, rate_from_previous=rate, note=note
+        key=key, label=label, count=count, rate=rate, rate_of=rate_of, note=note
     )
 
 
@@ -408,16 +416,35 @@ async def invite_funnel(
         """Limit a query to the reporting window, when one was asked for."""
         return stmt.where(Invitation.created_at >= since) if since else stmt
 
+    def _tracked(stmt: Select[Any]) -> Select[Any]:
+        """Window, and only links whose counters were actually recorded.
+
+        Invitations predating the reach counters carry zeros that mean "not
+        measured". Counting them would understate every rate and, worse,
+        report links as never opened that plainly were.
+        """
+        return _scoped(stmt).where(Invitation.instrumented.is_(True))
+
     # --- link funnel: one row per invitation -----------------------------
     created: int = int(
         await session.scalar(
-            _scoped(select(func.count()).select_from(Invitation))
+            _tracked(select(func.count()).select_from(Invitation))
+        )
+        or 0
+    )
+    pre_tracking: int = int(
+        await session.scalar(
+            _scoped(
+                select(func.count())
+                .select_from(Invitation)
+                .where(Invitation.instrumented.is_(False))
+            )
         )
         or 0
     )
     handed_off: int = int(
         await session.scalar(
-            _scoped(
+            _tracked(
                 select(func.count())
                 .select_from(Invitation)
                 .where(
@@ -434,7 +461,7 @@ async def invite_funnel(
     )
     previewed: int = int(
         await session.scalar(
-            _scoped(
+            _tracked(
                 select(func.count())
                 .select_from(Invitation)
                 .where(Invitation.preview_fetch_count > 0)
@@ -444,7 +471,7 @@ async def invite_funnel(
     )
     opened_links: int = int(
         await session.scalar(
-            _scoped(
+            _tracked(
                 select(func.count())
                 .select_from(Invitation)
                 .where(Invitation.open_count > 0)
@@ -454,11 +481,13 @@ async def invite_funnel(
     )
 
     # Joiners per invitation, counting both redemption rows (reusable links)
-    # and the legacy single-use accepted_user_id.
+    # and the legacy single-use accepted_user_id. Instrumented links only:
+    # drawing this from a wider population than the stages above it let
+    # "brought in at least one person" exceed "opened by a human".
     redemption_rows = (
         (
             await session.execute(
-                _scoped(
+                _tracked(
                     select(
                         InvitationRedemption.invitation_id,
                         func.count(InvitationRedemption.user_id),
@@ -478,7 +507,7 @@ async def invite_funnel(
     legacy_accepted = set(
         (
             await session.scalars(
-                _scoped(
+                _tracked(
                     select(Invitation.id).where(
                         Invitation.accepted_user_id.is_not(None)
                     )
@@ -508,76 +537,100 @@ async def invite_funnel(
         outcome.value: int(count) for outcome, count in share_outcome_rows if outcome
     }
 
+    created_base: tuple[str, int] = ("links created", created)
     link_stages: list[FunnelStage] = [
         _stage("created", "Links created", created, None),
         _stage(
             "handed_off",
             "Handed off (shared or copied)",
             handed_off,
-            created,
+            created_base,
             note=(
-                "Only recorded for links minted after share-outcome tracking "
-                "shipped; older links show as not handed off."
+                "The inviter completed the OS share sheet or fell back to "
+                "copying, rather than backing out."
             ),
         ),
         _stage(
             "previewed",
             "Rendered a preview somewhere",
             previewed,
-            handed_off or created,
+            created_base,
             note=(
                 "Weak signal: messaging apps fetch previews when a link is "
                 "pasted, but ordinary visits render too and crawlers inflate it."
             ),
         ),
-        _stage("opened", "Opened by a human", opened_links, created),
-        _stage("joined", "Brought in at least one person", links_with_joiner, opened_links),
+        _stage("opened", "Opened by a human", opened_links, created_base),
+        _stage(
+            "joined",
+            "Brought in at least one person",
+            links_with_joiner,
+            ("opened", opened_links),
+        ),
     ]
 
     # --- person funnel: denominated on opens and redemptions -------------
     total_opens: int = int(
         await session.scalar(
-            _scoped(select(func.coalesce(func.sum(Invitation.open_count), 0)))
+            _tracked(select(func.coalesce(func.sum(Invitation.open_count), 0)))
         )
         or 0
     )
-    joiner_ids: list[uuid.UUID] = list(
-        (
-            await session.scalars(
-                _scoped(
-                    select(InvitationRedemption.user_id).join(
-                        Invitation,
-                        Invitation.id == InvitationRedemption.invitation_id,
-                    )
+    # Who arrived through an invite, and whose invite it was. The inviter is
+    # carried along so "became a friend" can be checked against the actual
+    # connection rather than inferred.
+    redeemed_pairs = (
+        await session.execute(
+            _tracked(
+                select(InvitationRedemption.user_id, Invitation.inviter_id).join(
+                    Invitation,
+                    Invitation.id == InvitationRedemption.invitation_id,
                 )
             )
-        ).all()
-    ) + list(
-        (
-            await session.scalars(
-                _scoped(
-                    select(Invitation.accepted_user_id).where(
-                        Invitation.accepted_user_id.is_not(None)
-                    )
+        )
+    ).all()
+    accepted_pairs = (
+        await session.execute(
+            _tracked(
+                select(Invitation.accepted_user_id, Invitation.inviter_id).where(
+                    Invitation.accepted_user_id.is_not(None)
                 )
             )
-        ).all()
-    )
-    unique_joiners: set[uuid.UUID] = set(joiner_ids)
+        )
+    ).all()
+    inviters_by_joiner: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    for joiner_id, inviter_id in list(redeemed_pairs) + list(accepted_pairs):
+        if joiner_id is not None:
+            inviters_by_joiner[joiner_id].add(inviter_id)
+    unique_joiners: set[uuid.UUID] = set(inviters_by_joiner)
 
-    befriended: int = int(
-        await session.scalar(
-            _scoped(
-                select(func.count())
-                .select_from(InvitationRedemption)
-                .join(
-                    Invitation, Invitation.id == InvitationRedemption.invitation_id
+    # Distinct *people*, not redemption rows. Counting rows let one person
+    # who redeemed several links register several times, which produced a
+    # "became a friend" number larger than "created an account" -- a
+    # conversion rate over 100%, which is impossible by construction.
+    #
+    # Ground truth is the connection itself rather than the redemption's
+    # became_friend flag: legacy email invites friend the invitee without
+    # writing a redemption row at all, so the flag undercounts them.
+    befriended_ids: set[uuid.UUID] = set()
+    if unique_joiners:
+        joiner_list = list(unique_joiners)
+        rows = (
+            await session.execute(
+                select(Connection.first_id, Connection.second_id).where(
+                    Connection.status == ConnectionStatus.accepted,
+                    or_(
+                        Connection.first_id.in_(joiner_list),
+                        Connection.second_id.in_(joiner_list),
+                    ),
                 )
-                .where(InvitationRedemption.became_friend.is_(True))
             )
-        )
-        or 0
-    )
+        ).all()
+        for first_id, second_id in rows:
+            for a, b in ((first_id, second_id), (second_id, first_id)):
+                if a in unique_joiners and b in inviters_by_joiner.get(a, set()):
+                    befriended_ids.add(a)
+    befriended: int = len(befriended_ids)
 
     active_ids: set[uuid.UUID] = set()
     returned_ids: set[uuid.UUID] = set()
@@ -599,7 +652,7 @@ async def invite_funnel(
         )
         active_ids = posted | commented
 
-        returned_rows = (
+        returned_profile_rows = (
             await session.execute(
                 select(Profile.id).where(
                     Profile.id.in_(ids),
@@ -608,8 +661,9 @@ async def invite_funnel(
                 )
             )
         ).all()
-        returned_ids = {row[0] for row in returned_rows}
+        returned_ids = {row[0] for row in returned_profile_rows}
 
+    joined_base: tuple[str, int] = ("accounts created", len(unique_joiners))
     person_stages: list[FunnelStage] = [
         _stage(
             "opens",
@@ -618,16 +672,19 @@ async def invite_funnel(
             None,
             note="Opens, not openers: one person opening twice counts twice.",
         ),
-        _stage("joined", "Created an account", len(unique_joiners), total_opens),
-        _stage("friended", "Became a friend", befriended, len(unique_joiners)),
         _stage(
-            "active", "Posted or commented", len(active_ids), len(unique_joiners)
+            "joined",
+            "Created an account",
+            len(unique_joiners),
+            ("link opens", total_opens),
         ),
+        _stage("friended", "Became a friend", befriended, joined_base),
+        _stage("active", "Posted or commented", len(active_ids), joined_base),
         _stage(
             "returned",
             "Came back a day or more later",
             len(returned_ids),
-            len(unique_joiners),
+            joined_base,
         ),
     ]
 
@@ -636,7 +693,7 @@ async def invite_funnel(
     opened_link_ids = set(
         (
             await session.scalars(
-                _scoped(select(Invitation.id).where(Invitation.open_count > 0))
+                _tracked(select(Invitation.id).where(Invitation.open_count > 0))
             )
         ).all()
     )
@@ -656,14 +713,16 @@ async def invite_funnel(
     # --- do arrivals become inviters? -------------------------------------
     arrivals_who_invited: int = 0
     if unique_joiners:
-        rows = (
+        joined_at_rows = (
             await session.execute(
                 select(Profile.id, Profile.created_at).where(
                     Profile.id.in_(list(unique_joiners))
                 )
             )
         ).all()
-        joined_at: dict[uuid.UUID, datetime] = {r[0]: r[1] for r in rows}
+        joined_at: dict[uuid.UUID, datetime] = {
+            r[0]: r[1] for r in joined_at_rows
+        }
         inviter_rows = (
             await session.execute(
                 select(Invitation.inviter_id, func.min(Invitation.created_at))
@@ -685,6 +744,7 @@ async def invite_funnel(
             stages=link_stages,
             unknown_fate=created - opened_links,
             share_outcomes=share_outcomes,
+            pre_tracking=pre_tracking,
         ),
         person_funnel=InvitePersonFunnel(stages=person_stages),
         fanout=InviteFanout(

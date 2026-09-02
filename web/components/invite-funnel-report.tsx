@@ -37,7 +37,7 @@ function StageTable({
           <tr className="border-b border-zinc-200 text-left text-[11px] uppercase tracking-[0.08em] text-zinc-400 dark:border-zinc-800">
             <th className="py-1.5 font-semibold">Stage</th>
             <th className="py-1.5 text-right font-semibold">Count</th>
-            <th className="py-1.5 text-right font-semibold">From above</th>
+            <th className="py-1.5 text-right font-semibold">Conversion</th>
           </tr>
         </thead>
         <tbody>
@@ -67,8 +67,13 @@ function StageTable({
               <td className="py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100">
                 {stage.count}
               </td>
-              <td className="py-2 text-right tabular-nums text-zinc-500">
-                {percent(stage.rate_from_previous)}
+              <td className="py-2 text-right text-zinc-500">
+                <span className="tabular-nums">{percent(stage.rate)}</span>
+                {stage.rate_of ? (
+                  <span className="block text-[10px] leading-tight text-zinc-400">
+                    of {stage.rate_of}
+                  </span>
+                ) : null}
               </td>
             </tr>
           ))}
@@ -151,7 +156,7 @@ export function InviteFunnelReport() {
               <span className="tabular-nums font-semibold">
                 {data.link_funnel.unknown_fate}
               </span>{" "}
-              links were minted and never opened.
+              tracked links were minted and never opened.
             </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
               We can&apos;t tell whether these were never sent or sent and
@@ -159,6 +164,18 @@ export function InviteFunnelReport() {
               received it, or how many people. Don&apos;t read them as failed
               invites.
             </p>
+            {data.link_funnel.pre_tracking > 0 ? (
+              <p className="mt-2 border-t border-zinc-100 pt-2 text-xs leading-relaxed text-zinc-500 dark:border-zinc-900">
+                A further{" "}
+                <span className="tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">
+                  {data.link_funnel.pre_tracking}
+                </span>{" "}
+                links predate reach tracking and are excluded above. Their
+                counters read zero because nothing was measured, not because
+                nothing happened — counting them would have shown links as
+                never opened that plainly were.
+              </p>
+            ) : null}
             {Object.keys(data.link_funnel.share_outcomes).length > 0 ? (
               <p className="mt-2 text-xs text-zinc-500">
                 At the moment of minting:{" "}

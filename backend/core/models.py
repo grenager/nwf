@@ -693,6 +693,12 @@ class Invitation(Base):
     preview_fetch_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # Whether this row's counters mean anything. False for invitations that
+    # predate the counters, whose zeros are "not measured", not "never
+    # happened" -- see migration 00000000000034.
+    instrumented: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # Humans opening the landing page, counted client-side so unfurls do not
     # register as visits.
     open_count: Mapped[int] = mapped_column(

@@ -124,8 +124,13 @@ export interface FunnelStage {
   key: string;
   label: string;
   count: number;
-  /** Share of the stage above; null on the first, which converts from nothing. */
-  rate_from_previous: number | null;
+  rate: number | null;
+  /**
+   * What `rate` is a share of. Not always the row above — "posted or
+   * commented" and "came back" are both shares of the accounts created, not
+   * of each other — so the UI must label it rather than assume.
+   */
+  rate_of: string | null;
   note: string | null;
 }
 
@@ -137,6 +142,8 @@ export interface InviteFunnel {
     /** Minted but never opened — never sent, or sent and ignored. Unknowable. */
     unknown_fate: number;
     share_outcomes: Record<string, number>;
+    /** Links from before tracking existed, excluded from every stage. */
+    pre_tracking: number;
   };
   person_funnel: { stages: FunnelStage[] };
   fanout: {
