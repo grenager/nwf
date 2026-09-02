@@ -113,6 +113,15 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     void load();
   }, [load]);
 
+  // Count this as a human opening the link. Fired from the client on purpose:
+  // the server-rendered fetch also runs when a messaging app unfurls the URL
+  // to build a preview, and counting those as visits would overstate reach.
+  // Once per mount, and never blocking the page.
+  useEffect(() => {
+    if (!token) return;
+    void api.recordInviteOpen(token).catch(() => undefined);
+  }, [token]);
+
   useEffect(() => {
     if (!session) {
       setMe(null);

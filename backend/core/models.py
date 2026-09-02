@@ -18,6 +18,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     Text,
     UniqueConstraint,
@@ -46,6 +47,19 @@ class InvitationStatus(enum.StrEnum):
     accepted = "accepted"
     revoked = "revoked"
     expired = "expired"
+
+
+class InvitationShareOutcome(enum.StrEnum):
+    """What the inviter did with a freshly minted link.
+
+    ``shared`` means the OS share sheet completed, which on some platforms
+    fires at hand-off rather than on delivery -- so it is evidence of intent
+    to send, not proof anyone received it.
+    """
+
+    shared = "shared"
+    copied = "copied"
+    cancelled = "cancelled"
 
 
 class SourceKind(enum.StrEnum):
@@ -658,6 +672,42 @@ class Invitation(Base):
     )
     # Throttle watermark for activity nudges sent to a not-yet-signed-up invitee.
     last_activity_email_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # What the inviter did with the link at the moment of minting. The OS
+    # share sheet never says who it went to, so this is the closest thing to
+    # "was this actually sent" that the browser can observe. Null for email
+    # invites, which are sent by the server rather than handed off.
+    share_outcome: Mapped[InvitationShareOutcome | None] = mapped_column(
+        Enum(
+            InvitationShareOutcome,
+            name="invitation_share_outcome",
+            create_type=False,
+        ),
+        nullable=True,
+    )
+    # Server-rendered previews of the landing page. Previews with no opens
+    # suggest the link was pasted somewhere and ignored. A weak signal, not a
+    # funnel stage: real visits server-render too, the 60s revalidate cache
+    # hides some hits, and crawlers inflate it.
+    preview_fetch_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Whether this row's counters mean anything. False for invitations that
+    # predate the counters, whose zeros are "not measured", not "never
+    # happened" -- see migration 00000000000034.
+    instrumented: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    # Humans opening the landing page, counted client-side so unfurls do not
+    # register as visits.
+    open_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    first_opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_opened_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
