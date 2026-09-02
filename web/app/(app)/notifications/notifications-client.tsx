@@ -2,7 +2,6 @@
 
 import { Avatar } from "@/components/avatar";
 import { useAuth } from "@/components/auth-provider";
-import { UserLink } from "@/components/user-link";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
@@ -98,12 +97,8 @@ function hrefFor(item: NotificationItem): string {
   return "/";
 }
 
-// The row is one big link, so the person's avatar sits *beside* it rather
-// than inside it — anchors can't nest, and tapping a face should go to that
-// face's profile, not to the thread.
 const ROW_CLASS: string =
   "flex gap-3 py-4 transition hover:bg-zinc-50 dark:hover:bg-zinc-900/50";
-const BODY_CLASS: string = "flex min-w-0 flex-1";
 const UNREAD_CLASS: string = "bg-zinc-100/60 dark:bg-zinc-900/40";
 
 export function NotificationsClient() {
@@ -240,23 +235,13 @@ function ThreadRow({ item }: { item: ConversationItem }) {
     item.latest_reply_text?.trim() || "joined the conversation";
   const unread: boolean = item.unread_count > 0;
 
-  const previewAuthorId: string =
-    item.latest_reply_author_id ?? item.author_id;
-
   return (
-    <div className={`${ROW_CLASS} ${unread ? UNREAD_CLASS : ""}`}>
-      <UserLink
-        userId={previewAuthorId}
-        title={previewAuthor}
-        className="shrink-0"
-      >
-        <Avatar name={previewAuthor} imageUrl={previewImage} size="lg" />
-      </UserLink>
-      <Link
-        href={`/post/${item.post_id}?focus=unread`}
-        scroll={false}
-        className={BODY_CLASS}
-      >
+    <Link
+      href={`/post/${item.post_id}?focus=unread`}
+      scroll={false}
+      className={`${ROW_CLASS} ${unread ? UNREAD_CLASS : ""}`}
+    >
+      <Avatar name={previewAuthor} imageUrl={previewImage} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p className="line-clamp-2 font-serif text-sm font-semibold text-zinc-900 dark:text-zinc-50">
@@ -281,8 +266,7 @@ function ThreadRow({ item }: { item: ConversationItem }) {
           {` · ${item.reply_count} ${item.reply_count === 1 ? "reply" : "replies"}`}
         </p>
       </div>
-      </Link>
-    </div>
+    </Link>
   );
 }
 
@@ -294,19 +278,16 @@ function AlertRow({
   wasUnread: boolean;
 }) {
   return (
-    <div className={`${ROW_CLASS} ${wasUnread ? UNREAD_CLASS : ""}`}>
-      <UserLink
-        userId={item.actor_id}
-        title={item.actor_name}
-        className="shrink-0"
-      >
-        <Avatar
-          name={item.actor_name}
-          imageUrl={item.actor_image_url}
-          size="lg"
-        />
-      </UserLink>
-      <Link href={hrefFor(item)} scroll={false} className={BODY_CLASS}>
+    <Link
+      href={hrefFor(item)}
+      scroll={false}
+      className={`${ROW_CLASS} ${wasUnread ? UNREAD_CLASS : ""}`}
+    >
+      <Avatar
+        name={item.actor_name}
+        imageUrl={item.actor_image_url}
+        size="lg"
+      />
       <div className="min-w-0 flex-1">
         <p className="text-sm text-zinc-800 dark:text-zinc-200">
           <span className="font-semibold">{item.actor_name}</span>{" "}
@@ -330,7 +311,6 @@ function AlertRow({
           {relativeTime(item.created_at)}
         </p>
       </div>
-      </Link>
-    </div>
+    </Link>
   );
 }

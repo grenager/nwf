@@ -98,7 +98,6 @@ export interface Story {
   /** Most recent viewer-visible post about this story, when one exists. */
   post_id?: UUID | null;
   /** The post `post_id` opens, so a result reads as a conversation. */
-  post_author_id?: UUID | null;
   post_author_name?: string | null;
   post_author_image_url?: string | null;
   post_take?: string | null;
@@ -299,7 +298,6 @@ export interface ConversationItem {
   last_seen_at: string | null;
   latest_reply_at: string;
   latest_reply_text: string | null;
-  latest_reply_author_id: UUID | null;
   latest_reply_author_name: string | null;
   latest_reply_author_image_url: string | null;
 }
@@ -398,9 +396,6 @@ export interface FriendProfile {
   can_edit: boolean;
   /** True when the viewer and this user are accepted friends. */
   is_friend: boolean;
-  /** False on a stranger's card: name and avatar are visible to any signed-in
-   * viewer, the stats and recent activity are not. */
-  can_view_activity: boolean;
   recent: FriendActivityItem[];
 }
 
@@ -488,34 +483,4 @@ export interface AdminUser {
   image_url: string | null;
   last_active_at: string | null;
   friends: AdminFriendRef[];
-}
-
-/** One conversation listed on a source page. */
-export interface SourcePost {
-  post_id: UUID;
-  story_id: UUID;
-  full_headline: string;
-  article_url: string;
-  summary: string | null;
-  image_url: string | null;
-  author_id: UUID;
-  author_name: string;
-  author_image_url: string | null;
-  take: string | null;
-  reply_count: number;
-  created_at: string;
-  last_activity_at: string;
-}
-
-/**
- * A publication, keyed by the article host (`GET /sources/{host}`) rather than
- * a `sources` row — see the backend router for why.
- */
-export interface SourceDetail {
-  host: string;
-  name: string;
-  image_url: string | null;
-  homepage_url: string | null;
-  post_count: number;
-  posts: SourcePost[];
 }

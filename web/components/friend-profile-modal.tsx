@@ -4,7 +4,6 @@ import { ReactionIcon } from "@/components/reaction-icon";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { relativeTime } from "@/lib/time";
-import { sourceHref } from "@/lib/url";
 import type { FriendActivityItem, FriendProfile, Profile, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -77,103 +76,6 @@ function Stat({
   );
 }
 
-/**
- * Stats plus the recent-activity feed — the half of a profile that only
- * connections (and admins, and you yourself) get to see.
- */
-function ActivitySection({
-  profile,
-  isSelf,
-  friendCount,
-  onNavigate,
-}: {
-  profile: FriendProfile;
-  isSelf: boolean;
-  friendCount: number | null;
-  /** Close the modal this section lives in when a link navigates away. */
-  onNavigate?: () => void;
-}) {
-  return (
-    <>
-      <div
-        className={`mt-5 grid gap-2 ${
-          isSelf ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
-        }`}
-      >
-        {isSelf ? (
-          <Stat label="Friends" value={friendCount ?? 0} href="/friends" />
-        ) : null}
-        <Stat label="Read" value={profile.reads} />
-        <Stat label="Reacted" value={profile.reactions} />
-        <Stat label="Comments" value={profile.comments} />
-      </div>
-
-      <div className="mt-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Recent activity
-        </h3>
-        {profile.recent.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">Nothing yet.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-            {profile.recent.map((item, idx) => (
-              <li key={`${item.story_id}-${item.kind}-${idx}`} className="py-3">
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-400">
-                  <span className="font-semibold">
-                    <KindLabel kind={item.kind} />
-                  </span>
-                  {item.kind === "reacted" && item.reaction != null ? (
-                    <ReactionIcon kind={item.reaction} />
-                  ) : null}
-                  {item.source_name ? (
-                    sourceHref(item.article_url) ? (
-                      <Link
-                        href={sourceHref(item.article_url) as string}
-                        onClick={onNavigate}
-                        className="hover:underline"
-                      >
-                        · {item.source_name}
-                      </Link>
-                    ) : (
-                      <span>· {item.source_name}</span>
-                    )
-                  ) : null}
-                  <span className="ml-auto normal-case tracking-normal">
-                    {relativeTime(item.at)}
-                  </span>
-                </div>
-                {item.post_id ? (
-                  <Link
-                    href={activityHref(item)}
-                    onClick={onNavigate}
-                    className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
-                  >
-                    {item.headline}
-                  </Link>
-                ) : (
-                  <a
-                    href={item.article_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
-                  >
-                    {item.headline}
-                  </a>
-                )}
-                {item.comment_text ? (
-                  <p className="mt-1 border-l-2 border-slate-200 pl-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                    {item.comment_text}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </>
-  );
-}
-
 export function FriendProfileModal({
   friendId,
   variant = "modal",
@@ -191,6 +93,20 @@ export function FriendProfileModal({
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const isPage: boolean = variant === "page";
+
+  useEffect(() => {
+    if (isPage || onClose == null) return;
+    const close: () => void = onClose;
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === "Escape") close();
+    }
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [isPage, onClose]);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -412,28 +328,69 @@ export function FriendProfileModal({
           </div>
         ) : null}
 
-        {profile.can_view_activity ? (
-          <ActivitySection
-            profile={profile}
-            isSelf={isSelf}
-            friendCount={friendCount}
-            onNavigate={onClose}
-          />
-        ) : (
-          <div className="mt-6 border border-dashed border-slate-300 p-5 text-center dark:border-slate-700">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              You and {profile.display_name.split(/\s+/)[0]} aren&apos;t
-              connected yet, so what they read and say stays private.
-            </p>
-            <button
-              type="button"
-              onClick={() => void addFriend()}
-              className="mt-3 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-            >
-              Add friend
-            </button>
-          </div>
-        )}
+        <div
+          className={`mt-5 grid gap-2 ${
+            isSelf ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+          }`}
+        >
+          {isSelf ? (
+            <Stat label="Friends" value={friendCount ?? 0} href="/friends" />
+          ) : null}
+          <Stat label="Read" value={profile.reads} />
+          <Stat label="Reacted" value={profile.reactions} />
+          <Stat label="Comments" value={profile.comments} />
+        </div>
+
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Recent activity
+          </h3>
+          {profile.recent.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400">Nothing yet.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+              {profile.recent.map((item, idx) => (
+                <li key={`${item.story_id}-${item.kind}-${idx}`} className="py-3">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-400">
+                    <span className="font-semibold">
+                      <KindLabel kind={item.kind} />
+                    </span>
+                    {item.kind === "reacted" && item.reaction != null ? (
+                      <ReactionIcon kind={item.reaction} />
+                    ) : null}
+                    {item.source_name ? <span>· {item.source_name}</span> : null}
+                    <span className="ml-auto normal-case tracking-normal">
+                      {relativeTime(item.at)}
+                    </span>
+                  </div>
+                  {item.post_id ? (
+                    <Link
+                      href={activityHref(item)}
+                      onClick={onClose}
+                      className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
+                    >
+                      {item.headline}
+                    </Link>
+                  ) : (
+                    <a
+                      href={item.article_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 block font-serif text-[15px] font-semibold leading-snug tracking-tight text-slate-900 hover:underline dark:text-slate-100"
+                    >
+                      {item.headline}
+                    </a>
+                  )}
+                  {item.comment_text ? (
+                    <p className="mt-1 border-l-2 border-slate-200 pl-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                      {item.comment_text}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     );
 

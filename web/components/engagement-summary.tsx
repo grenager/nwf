@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { UserLink } from "@/components/user-link";
 import type { FriendEngagement, StoryReader } from "@/lib/types";
 
 /** A reader with `isLive` known (from `useStoryReaders`); plain `StoryReader`
@@ -23,9 +22,8 @@ interface EngagementSummaryProps {
 }
 
 /** Just the avatar stack - no summary sentence. Tap an avatar for its name
- * (a hover title doesn't work on touch), then tap the name to open that
- * person; the overflow count gets its own plain "+N" circle rather than
- * trailing text. */
+ * (a hover title doesn't work on touch), and the overflow count gets its
+ * own plain "+N" circle rather than trailing text. */
 function ReaderAvatars({
   readers,
   read,
@@ -68,13 +66,10 @@ function ReaderAvatars({
             )}
           </button>
           {revealed === r.user_id ? (
-            <UserLink
-              userId={r.user_id}
-              className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg hover:underline dark:bg-zinc-100 dark:text-zinc-900"
-            >
+            <span className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
               {r.display_name}
               {r.isLive ? " · reading now" : ""}
-            </UserLink>
+            </span>
           ) : null}
         </span>
       ))}
