@@ -571,7 +571,11 @@ export function PostThread({
                     type="button"
                     aria-label="Post options"
                     onClick={() => setMenuOpen((v) => !v)}
-                    className="rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+                    // h-5/leading-none pins the button to the author line's
+                    // own 20px line box. With padding it was taller, and
+                    // items-start stretched the whole header row — which is
+                    // why an author's post sat lower than everyone else's.
+                    className="flex h-5 w-6 items-center justify-center rounded leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
                   >
                     ⋯
                   </button>
