@@ -17,8 +17,6 @@ from api.friends import (
 )
 from api.main import create_app
 from api.routers.invitations import (
-    _APP_FOOTER,
-    _DEFAULT_INVITE_PREFIX,
     _share_message,
     accept_invitation_for_user,
     create_invitation,
@@ -53,65 +51,48 @@ def test_openapi_includes_people_and_invite_routes() -> None:
     assert "/invitations/{token}/accept" in paths
 
 
-def test_share_message_leads_with_the_article_not_the_app() -> None:
-    """The headline comes first; the product is a footnote under the link."""
+def test_share_message_is_only_the_link_when_nothing_was_typed() -> None:
+    """A bare link is the whole message, so the preview has nothing to fight."""
+    assert (
+        _share_message(personal=None, invite_url="https://nwf.example/invite/abc")
+        == "https://nwf.example/invite/abc"
+    )
+
+
+def test_share_message_puts_a_typed_note_above_the_link() -> None:
     msg = _share_message(
-        headline="Quiet week in AI",
-        take="Worth your time",
         personal="Thought of you",
         invite_url="https://nwf.example/invite/abc",
     )
-    lines = msg.splitlines()
-    assert lines[0] == "Quiet week in AI"
-    # A note written for this person beats the take attached to the post.
-    assert lines[1] == "Thought of you"
-    assert "Worth your time" not in msg
-    assert lines[2] == "https://nwf.example/invite/abc"
-    assert lines[-1] == _APP_FOOTER
-    # The old copy opened by pitching the product. It must not do that again.
-    assert not msg.startswith("I'm using NewsWithFriends")
+    assert msg == "Thought of you\nhttps://nwf.example/invite/abc"
 
 
-def test_share_message_uses_the_take_when_there_is_no_personal_note() -> None:
-    msg = _share_message(
-        headline="Quiet week in AI",
-        take="Worth your time",
-        personal=None,
-        invite_url="https://nwf.example/invite/abc",
+def test_the_link_is_always_the_last_thing_in_the_message() -> None:
+    """The rule this whole shape exists to satisfy.
+
+    iMessage only renders a link preview when the URL ends the message.
+    Anything after it -- including a one-line footnote about where the link
+    goes -- collapses the preview to a bare blue string, which is what
+    happened the first time this was shipped.
+    """
+    url = "https://nwf.example/invite/abc"
+    for personal in (None, "", "   ", "Thought of you", "Multi\nline\nnote"):
+        assert _share_message(personal=personal, invite_url=url).endswith(url)
+
+
+def test_share_message_adds_nothing_the_sender_did_not_write() -> None:
+    """No app pitch, no headline, no take: a default nobody edits gets sent."""
+    msg = _share_message(personal=None, invite_url="https://nwf.example/invite/abc")
+    lowered = msg.lower()
+    for unwanted in ("newswithfriends", "shared via", "i'm using", "discuss"):
+        assert unwanted not in lowered, f"{unwanted!r} in {msg!r}"
+
+
+def test_share_message_ignores_whitespace_only_notes() -> None:
+    assert (
+        _share_message(personal="   \n  ", invite_url="https://nwf.example/invite/abc")
+        == "https://nwf.example/invite/abc"
     )
-    assert msg.splitlines()[:3] == [
-        "Quiet week in AI",
-        "Worth your time",
-        "https://nwf.example/invite/abc",
-    ]
-
-
-def test_share_message_is_headline_and_link_with_nothing_to_say() -> None:
-    """No take, no note: the headline still has to carry the message."""
-    msg = _share_message(
-        headline="Quiet week in AI",
-        take=None,
-        personal=None,
-        invite_url="https://nwf.example/invite/abc",
-    )
-    assert msg.splitlines() == [
-        "Quiet week in AI",
-        "https://nwf.example/invite/abc",
-        _APP_FOOTER,
-    ]
-
-
-def test_share_message_invites_to_the_app_without_an_article() -> None:
-    """A standalone invite has no article, so it must not point at one."""
-    msg = _share_message(
-        headline=None,
-        take=None,
-        personal=None,
-        invite_url="https://nwf.example/invite/abc",
-    )
-    assert msg.startswith(_DEFAULT_INVITE_PREFIX)
-    assert "this article" not in msg
-    assert "https://nwf.example/invite/abc" in msg
 
 
 @pytest.mark.asyncio

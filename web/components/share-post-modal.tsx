@@ -91,11 +91,11 @@ export function SharePostModal({
       // Cancelled — stay on the modal with the link still available.
       if (shareResult === "cancelled") return;
       if (shareResult === "failed") {
-        notify("Could not copy the message", "error");
+        notify("Could not copy the link", "error");
         return;
       }
       setCopied(true);
-      notify("Message copied — paste it anywhere", "success");
+      notify("Link copied — paste it anywhere", "success");
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Failed to create share link",
@@ -176,7 +176,7 @@ export function SharePostModal({
             value={shareNote}
             onChange={(e) => setShareNote(e.target.value)}
             rows={3}
-            placeholder="Optional — why should they read it?"
+            placeholder="Optional — the link goes underneath"
             className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
           />
         </label>
@@ -205,7 +205,7 @@ export function SharePostModal({
             ? "Preparing…"
             : canUseWebShare()
               ? "Share…"
-              : "Copy share message"}
+              : "Copy share link"}
         </button>
 
         {result?.invite_url ? (
