@@ -289,51 +289,51 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
           ) : null}
 
           {/* Optional pull-quote: a line the author picked from the article,
-              shown under the link preview in place of the og:description. */}
-          {preview !== null ? (
-            quoteOpen ? (
-              <div className="flex flex-col gap-1">
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Quote from the article{" "}
-                    <span className="font-normal text-slate-400">optional</span>
-                  </span>
-                  <textarea
-                    value={quote}
-                    onChange={(e) => setQuote(e.target.value)}
-                    maxLength={QUOTE_MAX_LENGTH}
-                    rows={3}
-                    placeholder="Paste the line that made you share this…"
-                    className="resize-y border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  />
-                </label>
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span>
-                    {quote.length}/{QUOTE_MAX_LENGTH} · shown instead of the
-                    site&rsquo;s own description
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuote("");
-                      setQuoteOpen(false);
-                    }}
-                    className="hover:text-slate-600 dark:hover:text-slate-300"
-                  >
-                    Remove
-                  </button>
-                </div>
+              shown under the link preview in place of the og:description.
+              Always offered, so the option is discoverable before a URL is
+              pasted — the preview panel above echoes it once there is one. */}
+          {quoteOpen ? (
+            <div className="flex flex-col gap-1">
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  Quote from the article{" "}
+                  <span className="font-normal text-slate-400">optional</span>
+                </span>
+                <textarea
+                  value={quote}
+                  onChange={(e) => setQuote(e.target.value)}
+                  maxLength={QUOTE_MAX_LENGTH}
+                  rows={3}
+                  placeholder="Paste the line that made you share this…"
+                  className="resize-y border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>
+                  {quote.length}/{QUOTE_MAX_LENGTH} · shown instead of the
+                  site&rsquo;s own description
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuote("");
+                    setQuoteOpen(false);
+                  }}
+                  className="hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  Remove
+                </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setQuoteOpen(true)}
-                className="self-start text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-              >
-                + Add a quote from the article
-              </button>
-            )
-          ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setQuoteOpen(true)}
+              className="self-start text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+            >
+              + Add a quote from the article
+            </button>
+          )}
 
           <label className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
