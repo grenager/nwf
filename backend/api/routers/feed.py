@@ -356,6 +356,7 @@ async def _build_post_outs(
             take=post.take,
             shared_text=shared_teaser,
             shared_text_truncated=shared_truncated,
+            quote=post.quote,
             visibility=post.visibility,
             last_activity_at=post.last_activity_at,
             created_at=post.created_at,

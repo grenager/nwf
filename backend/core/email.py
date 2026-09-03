@@ -927,6 +927,146 @@ async def send_activity_email(
     return True
 
 
+# --- Content reports (moderation) ----------------------------------------
+
+
+@dataclass(frozen=True)
+class ContentReportEmailContent:
+    """A reader flagged a post; everything a moderator needs to act on it."""
+
+    to_emails: tuple[str, ...]
+    reporter_name: str
+    reporter_email: str | None
+    author_name: str
+    author_email: str | None
+    reason: str | None
+    headline: str | None
+    article_url: str | None
+    take: str | None
+    shared_text: str | None
+    post_url: str
+
+
+def _report_subject(content: ContentReportEmailContent) -> str:
+    subject: str = f"Content report: post by {content.author_name}"
+    if content.headline:
+        return f"{subject} — {content.headline[:80]}"
+    return subject
+
+
+def _report_fields(content: ContentReportEmailContent) -> list[tuple[str, str]]:
+    """Label/value pairs shared by the HTML and plain-text bodies."""
+    reporter: str = content.reporter_name
+    if content.reporter_email:
+        reporter = f"{reporter} <{content.reporter_email}>"
+    author: str = content.author_name
+    if content.author_email:
+        author = f"{author} <{content.author_email}>"
+    fields: list[tuple[str, str]] = [
+        ("Reported by", reporter),
+        ("Post author", author),
+        ("Reason", content.reason or "(none given)"),
+    ]
+    if content.headline:
+        fields.append(("Article", content.headline))
+    if content.article_url:
+        fields.append(("Article URL", content.article_url))
+    if content.take:
+        fields.append(("Their take", content.take))
+    if content.shared_text:
+        fields.append(("Shared text", content.shared_text))
+    return fields
+
+
+def _report_plain(content: ContentReportEmailContent) -> str:
+    lines: list[str] = ["A post was reported for a content violation.", ""]
+    for label, value in _report_fields(content):
+        lines.append(f"{label}: {value}")
+    lines.extend(["", f"Open the post: {content.post_url}"])
+    return "\n".join(lines)
+
+
+def _report_html(content: ContentReportEmailContent) -> str:
+    body_style: str = (
+        "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"
+        "font-size:14px;line-height:1.5;color:#18181b;"
+    )
+    rows: list[str] = []
+    for label, value in _report_fields(content):
+        rows.append(
+            f'<p style="{body_style}margin:0 0 10px;">'
+            f'<strong style="color:#71717a;">{html.escape(label)}:</strong> '
+            f"{html.escape(value)}</p>"
+        )
+    url: str = html.escape(content.post_url, quote=True)
+    rows.append(
+        f'<p style="margin:24px 0 8px;">'
+        f'<a href="{url}" style="display:inline-block;background:#18181b;'
+        f"color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,"
+        f"sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;"
+        f'text-transform:uppercase;text-decoration:none;padding:12px 20px;'
+        f'border-radius:4px;">Open the post</a></p>'
+        f'<p style="{_FOOTER_TEXT_STYLE}margin:16px 0 0;">'
+        f'Or open this link: <a href="{url}" style="color:#71717a;">{url}</a></p>'
+    )
+    return (
+        '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
+        f'<p style="{body_style}margin:0 0 16px;font-weight:600;">'
+        "A post was reported for a content violation.</p>"
+        + "".join(rows)
+        + "</div>"
+    )
+
+
+async def send_content_report_email(
+    content: ContentReportEmailContent,
+    *,
+    settings: Settings | None = None,
+) -> bool:
+    """Email moderators about a reported post. Returns True on success.
+
+    No-ops (returns False) with no recipients or no ``resend_api_key``. These
+    are operational mails to admins rather than subscriptions, so they carry
+    no unsubscribe footer.
+    """
+    cfg: Settings = settings or get_settings()
+    if not content.to_emails:
+        log.warning("email.content_report.skip", reason="no_recipients")
+        return False
+    if not cfg.resend_api_key:
+        log.info("email.content_report.skip", reason="no_resend_api_key")
+        return False
+
+    payload: dict[str, object] = {
+        "from": cfg.email_from,
+        "to": list(content.to_emails),
+        "subject": _report_subject(content),
+        "html": _report_html(content),
+        "text": _report_plain(content),
+    }
+    if content.reporter_email:
+        payload["reply_to"] = content.reporter_email
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {cfg.resend_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        log.warning("email.content_report.failed", error=str(exc))
+        return False
+
+    log.info("email.content_report.sent", recipients=len(content.to_emails))
+    return True
+
+
 # --- Invite reach (your link was opened, nobody joined) -------------------
 
 

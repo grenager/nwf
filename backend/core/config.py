@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     # Shared secret guarding internal/admin scrape endpoints.
     admin_api_secret: str | None = Field(default=None)
 
+    # Where content-violation reports are delivered. Unset falls back to the
+    # email of every profile with is_admin, so moderation still reaches
+    # someone without extra configuration.
+    moderation_report_email: str | None = Field(default=None)
+
     # How long a reader stays shown as "reading now" after opening a story,
     # before settling into the plain "read" state.
     reading_now_window_minutes: int = Field(default=12, ge=1)

@@ -5,7 +5,7 @@ import { MentionInput } from "@/components/mention-input";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
-import type { Post, PreviewCard } from "@/lib/types";
+import { QUOTE_MAX_LENGTH, type Post, type PreviewCard } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
 
@@ -40,6 +40,8 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   const [take, setTake] = useState<string>("");
   const [paywalled, setPaywalled] = useState<boolean>(false);
   const [sharedText, setSharedText] = useState<string>("");
+  const [quote, setQuote] = useState<string>("");
+  const [quoteOpen, setQuoteOpen] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [preview, setPreview] = useState<PreviewCard | null>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
@@ -115,6 +117,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
         url: trimmedUrl,
         take: take.trim(),
         shared_text: paywalled ? sharedText.trim() || null : null,
+        quote: quote.trim() || null,
         kind: "news",
         canonical_url: preview.canonical_url,
         full_headline: preview.full_headline,
@@ -257,7 +260,13 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
                     <h3 className="mt-1 font-serif text-base font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-50">
                       {preview.full_headline}
                     </h3>
-                    {preview.summary ? (
+                    {quote.trim() ? (
+                      <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 dark:border-slate-600">
+                        <p className="whitespace-pre-line font-serif text-sm italic leading-relaxed text-slate-700 [overflow-wrap:anywhere] dark:text-slate-300">
+                          {quote}
+                        </p>
+                      </blockquote>
+                    ) : preview.summary ? (
                       <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
                         {stripHtml(preview.summary)}
                       </p>
@@ -278,6 +287,53 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
               ) : null}
             </div>
           ) : null}
+
+          {/* Optional pull-quote: a line the author picked from the article,
+              shown under the link preview in place of the og:description.
+              Always offered, so the option is discoverable before a URL is
+              pasted — the preview panel above echoes it once there is one. */}
+          {quoteOpen ? (
+            <div className="flex flex-col gap-1">
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  Quote from the article{" "}
+                  <span className="font-normal text-slate-400">optional</span>
+                </span>
+                <textarea
+                  value={quote}
+                  onChange={(e) => setQuote(e.target.value)}
+                  maxLength={QUOTE_MAX_LENGTH}
+                  rows={3}
+                  placeholder="Paste the line that made you share this…"
+                  className="resize-y border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>
+                  {quote.length}/{QUOTE_MAX_LENGTH} · shown instead of the
+                  site&rsquo;s own description
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuote("");
+                    setQuoteOpen(false);
+                  }}
+                  className="hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setQuoteOpen(true)}
+              className="self-start text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+            >
+              + Add a quote from the article
+            </button>
+          )}
 
           <label className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">

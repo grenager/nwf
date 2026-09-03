@@ -11,7 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.activity_mail import notify_friends_of_new_post
-from api.deps import CurrentUser, OptionalUser, SessionDep
+from api.deps import CurrentUser, OptionalUser, SessionDep, is_admin_user
 from api.friends import (
     accepted_friend_ids,
     aggregate_engagement,
@@ -19,6 +19,7 @@ from api.friends import (
     average_friend_count_for_active_users,
     can_see_post,
     display_name,
+    email_for_user,
     friend_activity_by_story,
     friend_ids_for_users,
     friend_profiles_map,
@@ -41,6 +42,8 @@ from api.schemas import (
     PostCreate,
     PostOut,
     PostReactorOut,
+    PostReportCreate,
+    PostReportOut,
     PostTyperOut,
     PostUpdate,
     PreviewCreate,
@@ -53,6 +56,7 @@ from api.schemas import (
 from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
 from core.config import get_settings
+from core.email import ContentReportEmailContent, send_content_report_email
 from core.enrich import (
     UrlMetadata,
     fetch_url_metadata,
@@ -466,6 +470,7 @@ async def serialize_post(
         author_image_url=author.image_url if author else None,
         take=post.take,
         shared_text=post.shared_text,
+        quote=post.quote,
         visibility=post.visibility,
         last_activity_at=post.last_activity_at,
         created_at=post.created_at,
@@ -591,6 +596,7 @@ async def create_post(
         author_id=user.id,
         take=(payload.take or "").strip() or None,
         shared_text=(payload.shared_text or "").strip() or None,
+        quote=(payload.quote or "").strip() or None,
         visibility=PostVisibility.private,
         last_activity_at=datetime.now(UTC),
     )
@@ -834,6 +840,8 @@ async def update_post(
         await _sync_post_mentions(session, post)
     if "shared_text" in fields:
         post.shared_text = (payload.shared_text or "").strip() or None
+    if "quote" in fields:
+        post.quote = (payload.quote or "").strip() or None
     post.updated_at = datetime.now(UTC)
     await session.flush()
     await session.refresh(post)
@@ -847,9 +855,73 @@ async def delete_post(
     post = await session.get(Post, post_id)
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
-    if post.author_id != user.id:
+    # Admins can take down anyone's post — that is how a content report gets
+    # acted on. Everyone else may only delete their own.
+    if post.author_id != user.id and not await is_admin_user(session, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
     await session.delete(post)
+
+
+async def _moderation_recipients(session: SessionDep) -> list[str]:
+    """Where content reports go: the configured address, else every admin."""
+    configured: str | None = get_settings().moderation_report_email
+    if configured:
+        return [configured.strip()]
+    admin_ids: list[uuid.UUID] = list(
+        (await session.scalars(select(Profile.id).where(Profile.is_admin))).all()
+    )
+    emails: list[str] = []
+    for admin_id in admin_ids:
+        email: str | None = await email_for_user(session, admin_id)
+        if email and email not in emails:
+            emails.append(email)
+    return emails
+
+
+@router.post(
+    "/{post_id}/report",
+    response_model=PostReportOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def report_post(
+    post_id: uuid.UUID,
+    payload: PostReportCreate,
+    session: SessionDep,
+    user: CurrentUser,
+) -> PostReportOut:
+    """Flag a post for a content violation and email moderators immediately.
+
+    Reports are not stored: the email carries the post's contents inline so
+    it stays actionable even after the post is taken down.
+    """
+    post = await session.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+    # A post the reporter cannot see is, to them, no different from one that
+    # does not exist.
+    if not await can_see_post(session, user.id, post):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "post not found")
+
+    story = await session.get(Story, post.story_id)
+    author = await session.get(Profile, post.author_id)
+    reporter = await session.get(Profile, user.id)
+    recipients: list[str] = await _moderation_recipients(session)
+
+    content = ContentReportEmailContent(
+        to_emails=tuple(recipients),
+        reporter_name=display_name(reporter) if reporter else "Someone",
+        reporter_email=user.email,
+        author_name=display_name(author) if author else "Unknown",
+        author_email=await email_for_user(session, post.author_id),
+        reason=(payload.reason or "").strip() or None,
+        headline=story.full_headline if story else None,
+        article_url=story.article_url if story else None,
+        take=post.take,
+        shared_text=post.shared_text,
+        post_url=get_settings().app_url(f"/post/{post.id}"),
+    )
+    emailed: bool = await send_content_report_email(content)
+    return PostReportOut(emailed=emailed)
 
 
 @router.put("/{post_id}/reactions", response_model=PostOut)

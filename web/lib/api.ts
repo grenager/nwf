@@ -181,6 +181,7 @@ export const api = {
     url?: string;
     take?: string | null;
     shared_text?: string | null;
+    quote?: string | null;
     kind?: StoryKind;
     title?: string;
     canonical_url?: string;
@@ -199,6 +200,7 @@ export const api = {
     payload: {
       take?: string | null;
       shared_text?: string | null;
+      quote?: string | null;
     },
   ): Promise<Post> =>
     request<Post>(`/posts/${id}`, {
@@ -207,6 +209,13 @@ export const api = {
     }),
   deletePost: (id: UUID): Promise<void> =>
     request<void>(`/posts/${id}`, { method: "DELETE" }),
+  /** Flag a post for a content violation; emails moderators immediately.
+   *  `emailed` is false when no moderation address is reachable. */
+  reportPost: (id: UUID, reason: string | null): Promise<{ emailed: boolean }> =>
+    request<{ emailed: boolean }>(`/posts/${id}/report`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 
   // --- comments (replies) ---
   listComments: (opts?: { postId?: UUID; storyId?: UUID }): Promise<Comment[]> => {
