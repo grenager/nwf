@@ -37,8 +37,10 @@ from api.schemas import (
     FriendEngagementOut,
     PostOut,
     ReactionSummary,
+    StandardsNudgeOut,
     StoryReaderOut,
 )
+from api.standards import StandardsKind, standards_nudge
 from core.attribution import resolve_attribution
 from core.config import get_settings
 from core.models import (
@@ -389,9 +391,19 @@ async def _build_post_outs(
 
 
 async def _empty_feed(
-    session: SessionDep, new_since: datetime | None
+    session: SessionDep,
+    new_since: datetime | None,
+    *,
+    viewer_id: uuid.UUID | None = None,
+    friends: list[uuid.UUID] | None = None,
 ) -> FeedOut:
-    """Empty-state payload with the aggregate counts the empty state shows."""
+    """Empty-state payload with the aggregate counts the empty state shows.
+
+    The standards ribbon matters *more* here than on a full feed: a member
+    whose one friend has not posted yet sees nothing, and is the member most
+    likely to conclude there is nothing to do. Guests (``viewer_id`` None)
+    are never nudged -- there is nobody to nudge.
+    """
     aggregate_readers = int(
         (
             await session.scalar(
@@ -412,14 +424,30 @@ async def _empty_feed(
         )
         or 0
     )
+    nudge = (
+        await standards_nudge(session, viewer_id, friends or [])
+        if viewer_id is not None
+        else None
+    )
     return FeedOut(
         items=[],
         caught_up_after=0,
         unread_count=0,
+        standards=_nudge_out(nudge),
         aggregate_readers=aggregate_readers,
         aggregate_private_conversations=aggregate_private,
         new_since=new_since,
     )
+
+
+def _nudge_out(
+    nudge: tuple[StandardsKind, int, str | None] | None,
+) -> StandardsNudgeOut | None:
+    """Wire form of the one ask, or None when the member needs no prompting."""
+    if nudge is None:
+        return None
+    kind, value, friend_name = nudge
+    return StandardsNudgeOut(kind=kind, value=value, friend_name=friend_name)
 
 
 @router.get("", response_model=FeedOut)
@@ -458,7 +486,9 @@ async def get_feed(
     # Aggregate counts are only rendered by the empty state, so only pay for
     # the full-table COUNT(*)s when the feed is actually empty.
     if not post_ids:
-        return await _empty_feed(session, new_since)
+        return await _empty_feed(
+            session, new_since, viewer_id=viewer_id, friends=friends
+        )
 
     participants_by_post = await _participants_by_post(session, post_ids)
 
@@ -618,10 +648,12 @@ async def get_feed(
             )
         )
 
+    nudge = await standards_nudge(session, viewer_id, friends)
     return FeedOut(
         items=cards,
         caught_up_after=0,
         unread_count=sum(1 for c in cards if c.unread_reply_count > 0),
+        standards=_nudge_out(nudge),
         aggregate_readers=0,
         aggregate_private_conversations=0,
         new_since=new_since,
