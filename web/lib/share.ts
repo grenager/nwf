@@ -42,15 +42,21 @@ export async function shareOrCopyLink(payload: {
 }): Promise<ShareResult> {
   if (canUseWebShare()) {
     try {
-      // An invite's text already ends with the link, and passing `url`
-      // alongside it makes the link appear twice in the composed message.
-      // The text is the richer of the two, so it wins and `url` is only
-      // handed over when it would add something.
-      const alreadyLinked: boolean = payload.text.includes(payload.url);
+      // What reaches the recipient has to end with the link, or the messaging
+      // app renders no preview. An invite's text already ends with it, so
+      // passing `url` as well would append a second copy and bury the first.
+      //
+      // With no note there is nothing but the link, and a link is better
+      // shared as one: `{title, url}` lets the OS hand the target a real URL
+      // rather than a string that happens to contain one.
+      const linkOnly: boolean = payload.text.trim() === payload.url;
+      const endsWithLink: boolean = payload.text.trimEnd().endsWith(payload.url);
       await navigator.share(
-        alreadyLinked
-          ? { title: payload.title, text: payload.text }
-          : payload,
+        linkOnly
+          ? { title: payload.title, url: payload.url }
+          : endsWithLink
+            ? { title: payload.title, text: payload.text }
+            : payload,
       );
       return "shared";
     } catch (err) {

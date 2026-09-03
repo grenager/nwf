@@ -176,7 +176,7 @@ export function SharePostModal({
             value={shareNote}
             onChange={(e) => setShareNote(e.target.value)}
             rows={3}
-            placeholder="Optional — why should they read it?"
+            placeholder="Optional — the link goes underneath"
             className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
           />
         </label>

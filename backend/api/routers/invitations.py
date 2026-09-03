@@ -53,51 +53,31 @@ router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 _TOKEN_BYTES = 24
 _DEFAULT_EXPIRY = timedelta(days=14)
-# Trailing footnote, not the opening line: the message has to read like one
-# friend sending another an article, because that is what it is. Leading with
-# the product turns a share into an app pitch, and an app pitch from a friend
-# is easy to ignore.
-_APP_FOOTER = "(Shared via NewsWithFriends — reading the news with friends.)"
-# A standalone invite has no article to lead with, so the app is the subject.
-_DEFAULT_INVITE_PREFIX = (
-    "I'm using NewsWithFriends to discuss articles privately with friends. "
-    "Come join me."
-)
-
-
 def _new_token() -> str:
     return secrets.token_urlsafe(_TOKEN_BYTES)
 
 
-def _share_message(
-    *,
-    headline: str | None,
-    take: str | None,
-    personal: str | None,
-    invite_url: str,
-) -> str:
+def _share_message(*, personal: str | None, invite_url: str) -> str:
     """The text handed to the OS share sheet or clipboard.
 
-    Shaped as: what the article is, what the sender thinks of it, the link,
-    and only then a one-line note about where the link goes. The recipient
-    already knows who is texting them, so the sender's name is left out.
+    Whatever the inviter actually typed, then the link — and nothing else.
+    Two rules earned the hard way:
 
-    A note the inviter typed wins over the take attached to the post — it was
-    written for this person. The link still carries a rich preview in most
-    messaging apps; repeating the headline is deliberate, since plain SMS and
-    a few clients render no preview at all.
+    **The link goes last.** iMessage (and most messaging apps) only builds a
+    rich preview when the URL ends the message. Anything after it — even one
+    tidy footnote about where the link goes — turns the preview into a bare
+    blue string, which is a far worse advert for the app than the footnote was
+    a good one.
+
+    **Nothing is written for the sender.** No headline, no take, no default
+    blurb. The preview already renders the headline and image from the invite
+    page's own metadata, so repeating them in text buys nothing and costs the
+    preview. And a default nobody edits is what actually gets sent: text the
+    sender did not choose reads, to the person receiving it, as spam from a
+    friend.
     """
-    lines: list[str] = []
-    if headline:
-        lines.append(headline.strip())
-    note: str = (personal or "").strip() or (take or "").strip()
-    if note:
-        lines.append(note)
-    if not lines:
-        lines.append(_DEFAULT_INVITE_PREFIX)
-    lines.append(invite_url)
-    lines.append(_APP_FOOTER)
-    return "\n".join(lines)
+    note: str = (personal or "").strip()
+    return f"{note}\n{invite_url}" if note else invite_url
 
 
 async def _find_connection(
@@ -490,12 +470,7 @@ async def create_invitation(
         session.add(invitation)
         await session.flush()
         durable_url: str = _durable_invite_url(settings, token)
-        share = _share_message(
-            headline=story.full_headline if story else None,
-            take=take,
-            personal=personal,
-            invite_url=durable_url,
-        )
+        share = _share_message(personal=personal, invite_url=durable_url)
         return InvitationCreateResult(
             status="invited",
             invitation_id=invitation.id,
@@ -615,12 +590,7 @@ async def create_invitation(
         settings=settings,
     )
 
-    share = _share_message(
-        headline=story.full_headline if story else None,
-        take=take,
-        personal=personal,
-        invite_url=durable_url,
-    )
+    share = _share_message(personal=personal, invite_url=durable_url)
     return InvitationCreateResult(
         status="invited",
         invitation_id=invitation.id,
