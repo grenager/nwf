@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from api.errors import UnhandledErrorMiddleware
 from api.routers import (
     admin,
     attachments,
@@ -50,6 +51,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Added before CORSMiddleware on purpose. add_middleware prepends, so
+    # the first one added ends up innermost -- which is what puts the CORS
+    # layer *outside* this one, and therefore what gets an unhandled 500
+    # answered with the CORS headers a browser needs to read it. Registered
+    # the other way round, a 500 reaches the browser as a CORS violation and
+    # the real error is invisible from the client.
+    app.add_middleware(UnhandledErrorMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

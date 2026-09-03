@@ -41,9 +41,17 @@ const API_URL: string = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:800
 
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /**
+   * Server-side reference for a 500, when the API supplied one. The same
+   * string appears in the API log next to the traceback, so quoting it turns
+   * "something broke" into an exact request. Null for 4xx, which explain
+   * themselves.
+   */
+  readonly errorId: string | null;
+  constructor(status: number, message: string, errorId: string | null = null) {
     super(message);
     this.status = status;
+    this.errorId = errorId;
     this.name = "ApiError";
   }
 }
@@ -82,15 +90,22 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!resp.ok) {
     let detail = resp.statusText;
+    let errorId: string | null = null;
     try {
       const body: unknown = await resp.json();
-      if (body && typeof body === "object" && "detail" in body) {
-        detail = String((body as { detail: unknown }).detail);
+      if (body && typeof body === "object") {
+        if ("detail" in body) {
+          detail = String((body as { detail: unknown }).detail);
+        }
+        // The API attaches this to unhandled 500s; the same reference is in
+        // the server log beside the traceback.
+        const id: unknown = (body as { error_id?: unknown }).error_id;
+        if (typeof id === "string" && id.length > 0) errorId = id;
       }
     } catch {
       // non-JSON error body; keep statusText.
     }
-    throw new ApiError(resp.status, detail);
+    throw new ApiError(resp.status, detail, errorId);
   }
 
   if (resp.status === 204) {
