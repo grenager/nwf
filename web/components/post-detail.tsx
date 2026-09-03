@@ -41,6 +41,14 @@ export function PostDetail({
   const [error, setError] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState<boolean>(false);
 
+  // Key the fetches off the viewer's *identity*, never the `user` object.
+  // supabase-js re-emits SIGNED_IN with a freshly parsed session on every
+  // hidden->visible tab transition, so `user` changes identity constantly
+  // while the signed-in person does not. Depending on the object refetched
+  // the post on every tab return, which tore down PostThread and threw away
+  // whatever the author was typing in the editor.
+  const userId: string | null = user?.id ?? null;
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -50,7 +58,7 @@ export function PostDetail({
         if (!active) return;
         setPost(data);
         setError(null);
-        if (user && !data.read) {
+        if (userId !== null && !data.read) {
           void api.markRead(data.story_id, true).catch(() => undefined);
         }
       })
@@ -67,15 +75,15 @@ export function PostDetail({
     return () => {
       active = false;
     };
-  }, [postId, user]);
+  }, [postId, userId]);
 
   useEffect(() => {
-    if (!user) {
+    if (userId === null) {
       setMe(null);
       return;
     }
     void api.getMe().then(setMe).catch(() => undefined);
-  }, [user]);
+  }, [userId]);
 
   const emptyReaders: StoryReader[] = [];
   const { readers: liveReaders, ping } = useStoryReaders(
@@ -93,7 +101,10 @@ export function PostDetail({
     ping(me);
   }, [post, me, ping]);
 
-  if (loading) {
+  // A placeholder only when there is nothing right to show: the first load,
+  // or a load of a *different* post. Swapping one in for a refetch of the
+  // post already on screen would unmount PostThread and lose an open editor.
+  if (loading && post?.id !== postId) {
     return <p className="py-10 text-sm text-zinc-500">Loading…</p>;
   }
 
