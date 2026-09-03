@@ -4,6 +4,7 @@ import { applyReactionToggle } from "@/components/reaction-bar";
 import { Avatar } from "@/components/avatar";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { LikeButton } from "@/components/like-button";
+import { PersonLink } from "@/components/person-link";
 import { MentionInput } from "@/components/mention-input";
 import { MentionText } from "@/components/mention-text";
 import { PostEngagementRow } from "@/components/post-engagement-row";
@@ -20,6 +21,8 @@ import { useTypingIndicator } from "@/lib/use-typing-indicator";
 import type { LiveStoryReader } from "@/lib/use-story-readers";
 import type {
   Comment,
+  FofActionKind,
+  FofReason,
   Post,
   PostTyper,
   Profile,
@@ -55,6 +58,61 @@ function typingLabel(typers: PostTyper[]): string | null {
   return `${names[0]}, ${names[1]} and ${names.length - 2} others are typing…`;
 }
 
+const FOF_ACTION_LABEL: Record<FofActionKind, string> = {
+  commented: "commented on this",
+  reacted: "reacted to this",
+  read: "read this",
+};
+
+/** Why a post from someone the viewer has no direct connection to is in their
+ * feed. It sits directly under the author's name (rather than as its own row
+ * above the post) so it reads as an explanation *of that stranger*, and names
+ * the friend as prominently as the author — on a site for discussing news with
+ * friends, the friend is the reason the post is here at all. */
+function FofReasonLine({ reason }: { reason: FofReason }) {
+  return (
+    <div className="mt-0.5 flex items-center text-xs text-zinc-500 dark:text-zinc-400">
+      <span className="min-w-0 truncate">
+        <PersonLink
+          userId={reason.friend_id}
+          className="font-semibold text-emerald-700 dark:text-emerald-400"
+        >
+          {reason.friend_name}
+        </PersonLink>{" "}
+        {FOF_ACTION_LABEL[reason.action]}
+      </span>
+    </div>
+  );
+}
+
+/** The friend's face, badged on the author's avatar: a glanceable companion to
+ * the reason line naming them. */
+function FriendAvatar({
+  reason,
+  className,
+}: {
+  reason: FofReason;
+  className: string;
+}) {
+  if (reason.friend_image_url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={reason.friend_image_url}
+        alt=""
+        className={`${className} shrink-0 rounded-[9999px] object-cover`}
+      />
+    );
+  }
+  return (
+    <span
+      className={`${className} flex shrink-0 items-center justify-center rounded-[9999px] bg-emerald-600 font-bold text-white`}
+    >
+      {reason.friend_name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 /**
  * Names the thread above the comment list so the audience model reads as
  * private-by-default rather than a public comment section.
@@ -80,6 +138,7 @@ export function PostThread({
   startEditing = false,
   maxTopLevelComments,
   compact = false,
+  fofReason = null,
 }: {
   post: Post;
   me: Profile | null;
@@ -90,6 +149,10 @@ export function PostThread({
   onPostChange: (post: Post) => void;
   onDelete: () => void;
   onInvite: () => void;
+  /** Friend-of-friend provenance for a post by someone the viewer isn't
+   * connected to; rendered under the author's name. Null for a friend's own
+   * post, where no explanation is needed. */
+  fofReason?: FofReason | null;
   /** Stamp the read cursor only when the thread is actually opened (detail page). */
   markSeenOnMount?: boolean;
   /** Scroll the "New replies" divider into view once (from ?focus=unread). */
@@ -475,46 +538,33 @@ export function PostThread({
 
   return (
     <div className="flex items-start gap-2">
-      <Avatar name={post.author_name} imageUrl={post.author_image_url} />
+      <div className="relative shrink-0">
+        <Avatar name={post.author_name} imageUrl={post.author_image_url} />
+        {fofReason ? (
+          <FriendAvatar
+            reason={fofReason}
+            className="absolute -bottom-1 -right-1 h-4 w-4 text-[8px] ring-2 ring-white dark:ring-zinc-950"
+          />
+        ) : null}
+      </div>
       <div className="min-w-0 flex-1 space-y-3">
         <div>
           <div className="mb-2 flex items-start gap-2">
-            <div className="flex flex-1 flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                {post.author_name}
-              </span>
-              <span className="text-xs text-zinc-400">
-                {relativeTime(post.created_at)}
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <PersonLink
+                  userId={post.author_id}
+                  className="font-semibold text-zinc-900 dark:text-zinc-100"
+                >
+                  {post.author_name}
+                </PersonLink>
+                <span className="text-xs text-zinc-400">
+                  {relativeTime(post.created_at)}
+                </span>
+              </div>
+              {fofReason ? <FofReasonLine reason={fofReason} /> : null}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                aria-label="Share this conversation"
-                title="Share"
-                onClick={() => {
-                  if (!requireAuth("share this conversation")) return;
-                  onInvite();
-                }}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-800 hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-500 dark:hover:bg-zinc-900"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                >
-                  <path d="M12 3v11" />
-                  <path d="M8.5 6.5 12 3l3.5 3.5" />
-                  <path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
-                </svg>
-                Share
-              </button>
               {isAuthor ? (
                 <div className="relative">
                   <button
@@ -668,6 +718,32 @@ export function PostThread({
               <path d="M7 16.5v3.5l4-3.5" />
             </svg>
             <span>Comment</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Share this conversation"
+            onClick={() => {
+              if (!requireAuth("share this conversation")) return;
+              onInvite();
+            }}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-[1.1em] w-[1.1em]"
+              aria-hidden="true"
+            >
+              <path d="M12 3v11" />
+              <path d="M8.5 6.5 12 3l3.5 3.5" />
+              <path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+            </svg>
+            <span>Share</span>
           </button>
         </div>
 
@@ -982,9 +1058,12 @@ function CommentRow({
       <Avatar name={comment.author_name} imageUrl={comment.author_image_url} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+          <PersonLink
+            userId={comment.user_id}
+            className="font-semibold text-zinc-800 dark:text-zinc-200"
+          >
             {comment.author_name}
-          </span>
+          </PersonLink>
           <span className="text-zinc-400">
             {relativeTime(comment.created_at)}
           </span>

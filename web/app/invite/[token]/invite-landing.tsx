@@ -11,10 +11,16 @@ import { ReaderBody } from "@/components/reader-body";
 import { applyReactionToggle, ReactionBar } from "@/components/reaction-bar";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import { draftScopeKey } from "@/lib/drafts";
+import { draftScopeKey, readDraft, writeDraft } from "@/lib/drafts";
+import {
+  clearPendingReaction,
+  inviteIntentKey,
+  readPendingReaction,
+  writePendingReaction,
+} from "@/lib/pending-intent";
 import { relativeTime } from "@/lib/time";
 import { usePersistedDraft } from "@/lib/use-persisted-draft";
-import type { InvitePreview, Post, Profile, ReactionKind } from "@/lib/types";
+import type { InvitePreview, Post, Profile, ReactionKind, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -65,15 +71,43 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   // the inviter's friend list is full), fall back to the full landing page
   // instead of leaving the visitor stuck on the "Joining…" state.
   const [autoAcceptFallback, setAutoAcceptFallback] = useState<boolean>(false);
+  const draftKey: string = draftScopeKey(
+    { kind: "invite", token },
+    user?.id ?? null,
+  );
   const {
     text: draft,
     setText: setDraft,
     clear: clearDraft,
-  } = usePersistedDraft(
-    draftScopeKey({ kind: "invite", token }, user?.id ?? null),
-  );
+  } = usePersistedDraft(draftKey);
   const [posting, setPosting] = useState<boolean>(false);
   const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
+
+  // A reaction a signed-out visitor tapped, held until they have an account to
+  // attribute it to. Its companion — their comment text — is already carried
+  // across sign-in by the invite-scoped draft above.
+  const intentKey: string = inviteIntentKey(token);
+  const [heldReaction, setHeldReaction] = useState<ReactionKind | null>(null);
+  const heldReactionApplied = useRef<boolean>(false);
+  // `accept` runs from an effect and must not re-create itself on every
+  // keystroke, so it reads the pending work through refs rather than closing
+  // over the state.
+  const draftRef = useRef<string>("");
+  const heldReactionRef = useRef<ReactionKind | null>(null);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    heldReactionRef.current = heldReaction;
+  }, [heldReaction]);
+
+  // Restored in an effect, not an initializer, so the first client render
+  // matches the server's.
+  useEffect(() => {
+    setHeldReaction(readPendingReaction(intentKey));
+  }, [intentKey]);
 
   // Height tracks the text itself so a restored draft opens at its real size.
   useEffect(() => {
@@ -138,6 +172,74 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     user != null && preview != null && user.id === preview.inviter_id;
   const canParticipate: boolean = !isGuest && (joined || isOwnInvite);
 
+  // Paint a held reaction onto the article once it loads, so a guest coming
+  // back to the page sees the choice they already made rather than a blank bar.
+  // Once only — re-applying would keep re-adding it to the counts.
+  useEffect(() => {
+    if (!isGuest || post === null || heldReaction === null) return;
+    if (heldReactionApplied.current) return;
+    heldReactionApplied.current = true;
+    setPost((prev) => {
+      if (prev === null) return prev;
+      const applied = applyReactionToggle(
+        prev.reactions ?? [],
+        prev.my_reaction ?? null,
+        heldReaction,
+      );
+      return {
+        ...prev,
+        reactions: applied.reactions,
+        my_reaction: applied.my_reaction,
+      };
+    });
+  }, [isGuest, post, heldReaction]);
+
+  /**
+   * Post the work a visitor did while signed out. Runs after the invite is
+   * accepted — comments and reactions both require the friendship that
+   * acceptance creates — and before the redirect to the post, so they arrive
+   * to find their own words already in the thread.
+   *
+   * Each piece is cleared only once it has actually landed: a failure here
+   * must never silently swallow something the visitor typed.
+   */
+  const replayPendingWork = useCallback(
+    async (postId: UUID): Promise<void> => {
+      // Storage is the fallback rather than the refs alone: after signing in
+      // this is a fresh page load racing an accept, and the work was written
+      // by a *previous* one. Refs win when set, since they hold keystrokes
+      // the debounced write may not have flushed yet.
+      const reaction: ReactionKind | null =
+        heldReactionRef.current ?? readPendingReaction(intentKey);
+      if (reaction !== null) {
+        try {
+          await api.reactToPost(postId, reaction);
+          clearPendingReaction(intentKey);
+        } catch {
+          // Leave it held so a later visit can retry it.
+        }
+      }
+      const text: string =
+        draftRef.current.trim() || (readDraft(draftKey)?.text ?? "").trim();
+      if (text.length === 0) return;
+      try {
+        await api.createComment(postId, text);
+        clearDraft();
+      } catch {
+        // Hand the words to the composer on the post they're about to land
+        // on, rather than leaving them stranded under an invite key nothing
+        // will show again. Clearing the invite draft in the same breath keeps
+        // a re-visit from posting this text a second time.
+        writeDraft(draftScopeKey({ kind: "post", postId }, user?.id ?? null), {
+          text,
+          parentCommentId: null,
+        });
+        clearDraft();
+      }
+    },
+    [intentKey, draftKey, clearDraft, user?.id],
+  );
+
   const accept = useCallback(
     async (addFriend: boolean): Promise<boolean> => {
       if (!token || accepting) return false;
@@ -150,6 +252,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
           // No toast here: this is either an invisible auto-accept (about to
           // hard-navigate away) or the visitor was already friends/already
           // redeemed this link, so "You're now friends" would be misleading.
+          if (result.post_id !== null) await replayPendingWork(result.post_id);
           const destination: string =
             result.post_id !== null ? `/post/${result.post_id}` : "/";
           // A soft client-side transition here lands on /post/[id], which
@@ -172,7 +275,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
         setAccepting(false);
       }
     },
-    [accepting, notify, token],
+    [accepting, notify, token, replayPendingWork],
   );
 
   // True when this visit is going to silently friend the inviter (or is
@@ -210,7 +313,12 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
     preview.status !== "expired";
 
   async function reply(): Promise<void> {
-    if (!requireAuth("reply")) return;
+    // The wall lands here rather than at the first keystroke: by now they have
+    // written something, so signing in is about keeping their reply, not about
+    // creating an account before they know whether they want one. The draft is
+    // already persisted under a key that ignores the user id, so it — and any
+    // held reaction — survive the round trip and get posted by `accept`.
+    if (!requireAuth("post your reply")) return;
     if (!canParticipate && !joined) {
       if (preview && !preview.become_friend) {
         setFriendPromptDismissed(false);
@@ -238,7 +346,26 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
   }
 
   async function togglePostReaction(reaction: ReactionKind): Promise<void> {
-    if (!requireAuth("react to this article")) return;
+    if (!post) return;
+    // A guest reacts for free. There is no account to attribute it to yet, so
+    // it is applied locally and held on the device; `replayPendingWork` posts
+    // it for real the moment they join. Prompting here instead would ask for a
+    // signup before they had done anything worth keeping.
+    if (isGuest) {
+      const optimistic = applyReactionToggle(
+        post.reactions ?? [],
+        post.my_reaction ?? null,
+        reaction,
+      );
+      setPost({
+        ...post,
+        reactions: optimistic.reactions,
+        my_reaction: optimistic.my_reaction,
+      });
+      setHeldReaction(optimistic.my_reaction);
+      writePendingReaction(intentKey, optimistic.my_reaction);
+      return;
+    }
     if (!canParticipate && !joined) {
       if (preview && !preview.become_friend) {
         setFriendPromptDismissed(false);
@@ -246,7 +373,6 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       }
       return;
     }
-    if (!post) return;
     const optimistic = applyReactionToggle(
       post.reactions ?? [],
       post.my_reaction ?? null,
@@ -320,6 +446,11 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
       ? `&email=${encodeURIComponent(preview.invitee_email)}`
       : ""
   }`;
+
+  // Something a guest would lose by leaving — drives the "saved on this
+  // device" reassurance and the sign-in copy below.
+  const hasPendingWork: boolean =
+    isGuest && (heldReaction !== null || draft.trim().length > 0);
 
   const articleUrl: string | null = post?.article_url ?? preview.article_url;
   const headline: string | null = post?.full_headline ?? preview.headline;
@@ -482,7 +613,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                 <span className="text-xs font-medium text-zinc-500">
                   Your reaction
                 </span>
-                {isGuest || !canParticipate ? (
+                {!isGuest && !canParticipate ? (
                   <button
                     type="button"
                     onClick={() => void togglePostReaction("like")}
@@ -504,13 +635,13 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                   rows={1}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  onFocus={() => {
-                    if (!requireAuth("reply")) return;
-                  }}
                   onClick={() => {
-                    if (isGuest) {
-                      requireAuth("reply");
-                    } else if (!canParticipate && preview && !preview.become_friend) {
+                    if (
+                      !isGuest &&
+                      !canParticipate &&
+                      preview &&
+                      !preview.become_friend
+                    ) {
                       setFriendPromptDismissed(false);
                       notify(
                         `Add ${preview.inviter_name} as a friend to join`,
@@ -519,13 +650,11 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                     }
                   }}
                   placeholder={
-                    isGuest
-                      ? "Sign up to reply…"
-                      : !canParticipate
-                        ? "Add friend to reply…"
-                        : "Reply…"
+                    !isGuest && !canParticipate
+                      ? "Add friend to reply…"
+                      : "Reply…"
                   }
-                  readOnly={isGuest || !canParticipate}
+                  readOnly={!isGuest && !canParticipate}
                   className="min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-zinc-300 bg-white px-3 py-1.5 text-base outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 sm:text-sm"
                   style={{ maxHeight: REPLY_MAX_HEIGHT_PX }}
                   onKeyDown={(e) => {
@@ -538,13 +667,22 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                 <button
                   type="button"
                   onClick={() => void reply()}
-                  disabled={posting || !draft.trim() || !canParticipate}
+                  disabled={posting || !draft.trim() || (!isGuest && !canParticipate)}
                   className="shrink-0 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
                 >
                   Reply
                 </button>
               </div>
-              {isGuest ? null : (
+              {isGuest ? (
+                hasPendingWork ? (
+                  // Reassurance, not a wall: they can see their work is safe,
+                  // and the ask to sign in only arrives when they hit Reply.
+                  <p className="text-xs text-zinc-400">
+                    Saved on this device. Sign in when you&apos;re ready and it
+                    posts to {preview.inviter_name}&apos;s conversation.
+                  </p>
+                ) : null
+              ) : (
                 <button
                   type="button"
                   onClick={() => setAudienceOpen(true)}
@@ -600,7 +738,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                 href={signInHref}
                 className="bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
               >
-                Create free account
+                {hasPendingWork ? "Post what I wrote" : "Create free account"}
               </Link>
               <a
                 href="/"
@@ -612,8 +750,9 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
               </a>
             </div>
             <p className="mt-3 text-xs text-zinc-400">
-              No password — just a magic link. Exploring opens in a new tab so
-              you don&apos;t lose {preview.inviter_name}&apos;s conversation.
+              One tap with Google, or we&apos;ll email you a link — no password
+              either way. Exploring opens in a new tab so you don&apos;t lose{" "}
+              {preview.inviter_name}&apos;s conversation.
             </p>
           </section>
 

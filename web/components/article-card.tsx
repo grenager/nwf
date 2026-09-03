@@ -28,8 +28,10 @@ interface ArticleCardProps {
 
 /**
  * Substack-style link preview: full-width image, then a bordered footer with the
- * source (logo + name) and the headline. Shared by the feed, the post detail
- * view, and the invite landing so the article always reads the same way.
+ * source (logo + name) and the headline. The entire card is the link — image
+ * and footer share one hover/active state so they read as a single clickable
+ * unit rather than a picture next to some text. Shared by the feed, the post
+ * detail view, and the invite landing so the article always reads the same way.
  */
 export function ArticleCard({
   articleUrl,
@@ -48,17 +50,17 @@ export function ArticleCard({
       target="_blank"
       rel="noopener noreferrer"
       onClick={onOpen}
-      className="group block border border-zinc-200 dark:border-zinc-800"
+      className="group block border border-zinc-200 transition-colors hover:border-zinc-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 active:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-600 dark:focus-visible:outline-zinc-100 dark:active:border-zinc-500"
     >
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imageUrl}
           alt=""
-          className={`w-full object-cover ${imageHeightClassName}`}
+          className={`w-full object-cover transition-opacity group-hover:opacity-90 ${imageHeightClassName}`}
         />
       ) : null}
-      <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+      <div className="border-t border-zinc-200 p-3 transition-colors group-hover:border-zinc-400 group-hover:bg-zinc-50 dark:border-zinc-800 dark:group-hover:border-zinc-600 dark:group-hover:bg-zinc-900">
         <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
           {sourceImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
