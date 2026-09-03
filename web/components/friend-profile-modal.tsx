@@ -87,6 +87,7 @@ export function FriendProfileModal({
   const [profile, setProfile] = useState<FriendProfile | null>(null);
   const [me, setMe] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [form, setForm] = useState<EditForm>({ first: "", last: "", image_url: "" });
@@ -110,18 +111,24 @@ export function FriendProfileModal({
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data: FriendProfile = await api.getFriendProfile(friendId);
       setProfile(data);
     } catch (err) {
-      notify(
-        err instanceof ApiError ? err.message : "Failed to load profile",
-        "error",
+      // A profile you can't see (not a connection) is an expected outcome, not
+      // a failure to retry — say so in place rather than spinning forever.
+      setLoadError(
+        err instanceof ApiError && err.status === 403
+          ? "You're not connected to this person yet, so their profile is private."
+          : err instanceof ApiError
+            ? err.message
+            : "Failed to load profile",
       );
     } finally {
       setLoading(false);
     }
-  }, [friendId, notify]);
+  }, [friendId]);
 
   useEffect(() => {
     void load();
@@ -231,11 +238,17 @@ export function FriendProfileModal({
       ]
     : [];
 
+  const stateClassName: string = isPage
+    ? "py-16 text-center"
+    : "p-10 text-center";
+
   const body: ReactNode =
-    loading || !profile ? (
-      <div className={isPage ? "py-16 text-center text-slate-400" : "p-10 text-center text-slate-400"}>
-        Loading…
+    loadError !== null ? (
+      <div className={`${stateClassName} text-sm text-slate-500 dark:text-slate-400`}>
+        {loadError}
       </div>
+    ) : loading || !profile ? (
+      <div className={`${stateClassName} text-slate-400`}>Loading…</div>
     ) : (
       <div className={isPage ? "py-4 sm:py-6" : "p-6"}>
         <div className="flex items-center gap-4">
