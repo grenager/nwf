@@ -443,7 +443,7 @@ export function Nav() {
             <TabIcon badge={incomingCount}>
               <IconFriends className="h-5 w-5" filled={tabActive("/friends")} />
             </TabIcon>
-            Friends
+            People
           </Link>
           <button
             type="button"
