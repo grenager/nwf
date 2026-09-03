@@ -29,6 +29,7 @@ import type {
   ReactionKind,
   UUID,
 } from "@/lib/types";
+import { QUOTE_MAX_LENGTH } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -192,6 +193,9 @@ export function PostThread({
   const [editDraft, setEditDraft] = useState<string>(post.take ?? "");
   const [editSharedDraft, setEditSharedDraft] = useState<string>(
     post.shared_text ?? "",
+  );
+  const [editQuoteDraft, setEditQuoteDraft] = useState<string>(
+    post.quote ?? "",
   );
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [reacting, setReacting] = useState<boolean>(false);
@@ -417,6 +421,7 @@ export function PostThread({
   function beginEdit(): void {
     setEditDraft(post.take ?? "");
     setEditSharedDraft(post.shared_text ?? "");
+    setEditQuoteDraft(post.quote ?? "");
     setEditing(true);
   }
 
@@ -448,11 +453,13 @@ export function PostThread({
   async function saveEdit(): Promise<void> {
     const text: string = editDraft.trim();
     const shared: string = editSharedDraft.trim();
+    const quote: string = editQuoteDraft.trim();
     setSavingEdit(true);
     try {
       const updated: Post = await api.updatePost(post.id, {
         take: text || null,
         shared_text: shared || null,
+        quote: quote || null,
       });
       onPostChange(updated);
       setEditing(false);
@@ -630,6 +637,24 @@ export function PostThread({
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                  Quote from the article{" "}
+                  <span className="font-normal text-zinc-400">optional</span>
+                </span>
+                <textarea
+                  value={editQuoteDraft}
+                  onChange={(e) => setEditQuoteDraft(e.target.value)}
+                  maxLength={QUOTE_MAX_LENGTH}
+                  rows={2}
+                  placeholder="A line from the article…"
+                  className="w-full resize-y border border-zinc-300 bg-white p-2 text-sm leading-relaxed outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950"
+                />
+                <span className="text-[11px] text-zinc-400">
+                  {editQuoteDraft.length}/{QUOTE_MAX_LENGTH} · shown instead of
+                  the site&rsquo;s own description
+                </span>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                   Article text
                 </span>
                 <textarea
@@ -655,6 +680,7 @@ export function PostThread({
                     setEditing(false);
                     setEditDraft(post.take ?? "");
                     setEditSharedDraft(post.shared_text ?? "");
+                    setEditQuoteDraft(post.quote ?? "");
                   }}
                   className="border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
                 >

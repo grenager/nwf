@@ -162,6 +162,10 @@ export interface CommunityStats {
   conversation_count: number;
 }
 
+/** Max length of a post's pull-quote. Mirrors QUOTE_MAX_LENGTH in
+ * backend/api/schemas.py — the API rejects anything longer. */
+export const QUOTE_MAX_LENGTH: number = 300;
+
 /** Fixed reaction set for posts and comments (Facebook's full set). Glyphs
  * are drawn by ReactionIcon, not stored here — this is just kind + label. */
 export const REACTIONS = [
@@ -226,6 +230,8 @@ export interface Post {
   shared_text: string | null;
   /** True when the feed payload omitted the tail of a long pasted body. */
   shared_text_truncated?: boolean;
+  /** Short excerpt the author picked; shown instead of the og:description. */
+  quote: string | null;
   visibility: PostVisibility;
   last_activity_at: string;
   created_at: string;

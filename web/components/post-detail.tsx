@@ -111,6 +111,7 @@ export function PostDetail({
         articleUrl={post.article_url}
         headline={post.full_headline}
         summary={post.shared_text?.trim() ? null : post.summary}
+        quote={post.quote}
         imageUrl={post.image_url}
         sourceName={post.source_name}
         sourceImageUrl={post.source_image_url}
