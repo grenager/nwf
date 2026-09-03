@@ -576,6 +576,16 @@ class InvitationCreateResult(BaseModel):
     email_sent: bool = False
 
 
+class InvitationShareOutcomeIn(BaseModel):
+    """What the inviter did with a link once it was minted.
+
+    Reported after the fact because the outcome is only known once the OS
+    share sheet resolves, which is well after the invitation row exists.
+    """
+
+    outcome: Literal["shared", "copied", "cancelled"]
+
+
 class InvitePreviewOut(BaseModel):
     token: str
     status: str
@@ -692,3 +702,81 @@ class NotificationList(BaseModel):
 
 class NotificationsReadRequest(BaseModel):
     notification_ids: list[uuid.UUID] | None = None
+
+
+# --- Invite funnel (admin) -------------------------------------------------
+
+
+class FunnelStage(BaseModel):
+    """One step of a funnel.
+
+    Not every stage converts from the one directly above it: "posted or
+    commented" and "came back" are both shares of the people who created an
+    account, not of each other. ``rate_of`` names the stage each rate is
+    actually measured against so the UI cannot imply the wrong denominator.
+    """
+
+    key: str
+    label: str
+    count: int
+    rate: float | None = None
+    # Label of the stage ``rate`` is a share of. None when there is no rate.
+    rate_of: str | None = None
+    note: str | None = None
+
+
+class InviteLinkFunnel(BaseModel):
+    """What happens to invite links, one row per instrumented invitation.
+
+    Only links minted after reach tracking shipped are counted: the others
+    have zeroed counters that mean "not measured", and folding them in
+    produced a funnel that claimed links were never opened while also
+    reporting that they had brought people in.
+    """
+
+    stages: list[FunnelStage]
+    # Links whose fate is genuinely unknown: minted, never opened. Could be
+    # never sent, or sent and ignored -- the share tray does not tell us.
+    unknown_fate: int
+    share_outcomes: dict[str, int]
+    # Links from before tracking existed, excluded from every stage above.
+    pre_tracking: int = 0
+
+
+class InvitePersonFunnel(BaseModel):
+    """What happens to people, denominated on opens and redemptions.
+
+    A reusable link is opened and joined by many people, so these stages
+    cannot be counted per invitation without understating reach.
+    """
+
+    stages: list[FunnelStage]
+
+
+class InviteFanout(BaseModel):
+    """How many joiners each shared link produced.
+
+    The closest we get to "how many people was this sent to" -- a link that
+    brought in four people was plainly broadcast, one that brought in one was
+    probably sent to one person.
+    """
+
+    links_with_joiners: dict[str, int]
+    # Averaged over links that brought in at least one person, not over all
+    # links -- the latter would mostly measure how many were never sent.
+    mean_joiners_per_converting_link: float
+
+
+class InviteFunnelOut(BaseModel):
+    generated_at: datetime
+    since: datetime | None = None
+    link_funnel: InviteLinkFunnel
+    person_funnel: InvitePersonFunnel
+    fanout: InviteFanout
+    # The loop only compounds if people who arrived via an invite go on to
+    # send one. Share of invite-arrivals who created an invitation within 14
+    # days of joining.
+    arrivals: int = 0
+    arrivals_who_invited: int = 0
+    arrivals_who_invited_rate: float | None = None
+    segments: dict[str, list[FunnelStage]] = Field(default_factory=dict)

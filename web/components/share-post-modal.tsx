@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import type { InvitationCreateResult, UUID } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
+import { shareInviteLink } from "@/lib/invite-share";
 import { canUseWebShare } from "@/lib/share";
 
 const DEFAULT_SHARE_NOTE =
@@ -80,27 +81,25 @@ export function SharePostModal({
         return;
       }
 
-      const text: string = composeShareMessage(trimmedNote, url);
+      // The note must carry the URL: this same text is what lands on the
+      // clipboard when the share sheet isn't available, and a note without
+      // the link is useless.
+      const shareResult = await shareInviteLink(created, {
+        title: headline,
+        text: composeShareMessage(trimmedNote, url),
+      });
 
-      if (canUseWebShare()) {
-        try {
-          await navigator.share({
-            title: headline,
-            text: trimmedNote,
-            url,
-          });
-          notify("Shared", "success");
-          onClose();
-          return;
-        } catch (err) {
-          // User cancelled the share sheet — stay on the modal with the link.
-          if (err instanceof DOMException && err.name === "AbortError") {
-            return;
-          }
-        }
+      if (shareResult === "shared") {
+        notify("Shared", "success");
+        onClose();
+        return;
       }
-
-      await navigator.clipboard.writeText(text);
+      // Cancelled — stay on the modal with the link still available.
+      if (shareResult === "cancelled") return;
+      if (shareResult === "failed") {
+        notify("Could not copy the message", "error");
+        return;
+      }
       setCopied(true);
       notify("Message copied — paste it anywhere", "success");
     } catch (err) {

@@ -45,6 +45,42 @@ feature migration that retires the old code paths. Name it as a cleanup
 irreversible, and only apply it once the code that stops depending on the
 old shape is confirmed deployed everywhere — not just merged.
 
+## Running backend scripts (backend/)
+
+Run the one-off scripts in `backend/scripts/` with `uv run`, from the
+`backend/` directory:
+
+```bash
+uv run python -m scripts.seed_pymk_test --list-users
+uv run python -m scripts.seed_pymk_test --user-email me@example.com
+uv run python -m scripts.seed_pymk_test --clear
+```
+
+The working directory matters twice over: it's what makes `core` and
+`scripts` importable as modules, and `backend/.env` is read relative to it,
+so running from the repo root silently falls back to the default localhost
+`DATABASE_URL`.
+
+Note that these scripts are not in the deployed image — the Dockerfile
+copies only `core`, `api` and `digest` — so they can't be run inside a
+Railway container. They run from a local checkout, pointed at whichever
+database `DATABASE_URL` names.
+
+That makes it easy to hit the wrong database, and these scripts write real
+rows. Two things worth knowing:
+
+- An exported `DATABASE_URL` in the shell **overrides** `backend/.env`, so a
+  leftover local-Supabase value silently wins over the production one (and
+  vice versa).
+- Start with the script's read-only mode (`--list-users`, `--dry-run`) and
+  check the output names accounts you recognise before running anything that
+  writes.
+
+Seed scripts create their accounts under the reserved `seed.test` email
+domain, each with its own local-part namespace (`pymk.`, `fof.`), so one
+script's `--clear` leaves the others alone. `scripts/purge_seed_users.py`
+deletes every `seed.test` account outright, and defaults to a dry run.
+
 ## Git workflow
 
 - Start each new chat/session's work on a fresh feature branch cut from the

@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Body, HTTPException, status
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -25,6 +25,7 @@ from api.schemas import (
     InvitationAcceptResult,
     InvitationCreate,
     InvitationCreateResult,
+    InvitationShareOutcomeIn,
     InvitePreviewOut,
     PostOut,
 )
@@ -37,6 +38,7 @@ from core.models import (
     ConnectionStatus,
     Invitation,
     InvitationRedemption,
+    InvitationShareOutcome,
     InvitationStatus,
     Post,
     PostParticipant,
@@ -607,12 +609,28 @@ async def get_invitation_preview(
     token: str,
     session: SessionDep,
     _user: OptionalUser,
+    preview: bool = False,
 ) -> InvitePreviewOut:
+    """Public teaser for an invite link.
+
+    ``preview=1`` marks the server-rendered call the landing page makes while
+    building its OpenGraph tags, which is also what a messaging app triggers
+    when it unfurls the link. Counting it separately from a real open is the
+    only visibility we get into a link that was pasted somewhere and ignored.
+    """
     invitation = await session.scalar(
         select(Invitation).where(Invitation.token == token)
     )
     if invitation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "invitation not found")
+
+    if preview:
+        # Counter-only update so concurrent unfurls cannot clobber each other.
+        await session.execute(
+            update(Invitation)
+            .where(Invitation.id == invitation.id)
+            .values(preview_fetch_count=Invitation.preview_fetch_count + 1)
+        )
 
     inviter = await session.get(Profile, invitation.inviter_id)
     post, story, publisher, take = await _post_teaser(session, invitation.post_id)
@@ -637,6 +655,69 @@ async def get_invitation_preview(
         reply_count=replies,
         reusable=bool(invitation.reusable),
     )
+
+
+@router.post("/{token}/open", status_code=status.HTTP_204_NO_CONTENT)
+async def record_invitation_open(
+    token: str,
+    session: SessionDep,
+    user: OptionalUser,
+) -> None:
+    """Record that a human opened this link's landing page.
+
+    Called from the client rather than inferred server-side, so that a
+    messaging app unfurling the link does not register as a visit. The
+    inviter checking their own link is not an open either -- that would
+    inflate exactly the number we care about.
+
+    One person opening twice counts twice: a reusable link is meant to be
+    opened by many people and there is no reliable way to tell repeat visits
+    from distinct recipients, so the number is "opens", not "openers".
+    """
+    invitation = await session.scalar(
+        select(Invitation).where(Invitation.token == token)
+    )
+    if invitation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "invitation not found")
+    if user is not None and user.id == invitation.inviter_id:
+        return
+
+    now = datetime.now(UTC)
+    await session.execute(
+        update(Invitation)
+        .where(Invitation.id == invitation.id)
+        .values(
+            open_count=Invitation.open_count + 1,
+            first_opened_at=func.coalesce(Invitation.first_opened_at, now),
+            last_opened_at=now,
+        )
+    )
+
+
+@router.post(
+    "/{invitation_id}/share-outcome", status_code=status.HTTP_204_NO_CONTENT
+)
+async def record_share_outcome(
+    invitation_id: uuid.UUID,
+    payload: InvitationShareOutcomeIn,
+    session: SessionDep,
+    user: CurrentUser,
+) -> None:
+    """Record what the inviter did with a link at the moment of minting.
+
+    The OS share sheet never reveals where the link went, so this is as close
+    as the browser gets to "was it actually sent": the sheet completed, the
+    inviter fell back to copying, or they backed out. Restricted to the
+    inviter, since nobody else can know what they did with it.
+    """
+    invitation = await session.get(Invitation, invitation_id)
+    if invitation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "invitation not found")
+    if invitation.inviter_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not your invitation")
+
+    invitation.share_outcome = InvitationShareOutcome(payload.outcome)
+    await session.flush()
 
 
 @router.get("/{token}/post", response_model=PostOut)

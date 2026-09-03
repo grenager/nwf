@@ -1,3 +1,5 @@
+import type { ShareOutcome } from "@/lib/types";
+
 /** Prefer the OS share tray on coarse pointers (phones/tablets). */
 export function canUseWebShare(): boolean {
   return (
@@ -9,15 +11,35 @@ export function canUseWebShare(): boolean {
   );
 }
 
+export type ShareResult = "shared" | "cancelled" | "copied" | "failed";
+
+/**
+ * The share results worth recording against an invitation.
+ *
+ * "failed" is dropped deliberately: the clipboard threw, which says something
+ * about the browser and nothing about whether the inviter meant to send the
+ * link. Recording it as an outcome would put a technical error in the same
+ * column as a human decision.
+ */
+export function reportableShareOutcome(
+  result: ShareResult,
+): ShareOutcome | null {
+  return result === "failed" ? null : result;
+}
+
 /**
  * Hand a link to the OS share tray, falling back to the clipboard when the
  * tray is unavailable or the user backs out of it without picking anything.
+ *
+ * The tray never reveals where the link went, so the return value is the only
+ * signal we get about whether an invite was actually sent — see
+ * `reportableShareOutcome`.
  */
 export async function shareOrCopyLink(payload: {
   title: string;
   text: string;
   url: string;
-}): Promise<"shared" | "cancelled" | "copied" | "failed"> {
+}): Promise<ShareResult> {
   if (canUseWebShare()) {
     try {
       await navigator.share(payload);

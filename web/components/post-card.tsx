@@ -7,42 +7,9 @@ import { useAuth } from "@/components/auth-provider";
 import { stripHtml } from "@/lib/html";
 import { api } from "@/lib/api";
 import { useStoryReaders } from "@/lib/use-story-readers";
-import type { FeedCard, FofActionKind, Post, Profile } from "@/lib/types";
+import type { FeedCard, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-
-const FOF_ACTION_LABEL: Record<FofActionKind, string> = {
-  commented: "commented on this",
-  reacted: "reacted to this",
-  read: "read this",
-};
-
-/** Why a post from someone the viewer has no direct connection to is
- * showing up: named via the friend whose engagement unlocked it, never as
- * an unexplained stranger's post. */
-function FofReasonTag({ card }: { card: FeedCard }) {
-  const reason = card.fof_reason;
-  if (!reason) return null;
-  return (
-    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-      {reason.friend_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={reason.friend_image_url}
-          alt=""
-          className="h-4 w-4 rounded-[9999px] object-cover"
-        />
-      ) : (
-        <span className="flex h-4 w-4 items-center justify-center rounded-[9999px] bg-slate-300 text-[8px] font-bold text-slate-700 dark:bg-slate-600 dark:text-slate-100">
-          {reason.friend_name.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span>
-        {reason.friend_name} {FOF_ACTION_LABEL[reason.action]}
-      </span>
-    </div>
-  );
-}
 
 interface PostCardProps {
   card: FeedCard;
@@ -127,7 +94,6 @@ export function PostCard({
     <article
       className={`py-7 ${showTopBorder ? "border-t border-zinc-200 dark:border-zinc-800" : ""}`}
     >
-      <FofReasonTag card={card} />
       {unreadN > 0 ? (
         <div className="mb-2">
           <Link
@@ -149,6 +115,7 @@ export function PostCard({
         onInvite={() => setInviteOpen(true)}
         maxTopLevelComments={2}
         compact
+        fofReason={card.fof_reason}
       />
       {inviteOpen ? (
         <SharePostModal
