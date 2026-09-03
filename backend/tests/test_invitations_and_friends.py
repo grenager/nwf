@@ -9,11 +9,16 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from api.friends import ensure_friend_capacity, friend_slots_used
+from api.friends import (
+    ensure_friend_capacity,
+    ensure_invite_capacity,
+    friend_slots_used,
+    pending_invites_used,
+)
 from api.main import create_app
 from api.routers.invitations import (
+    _APP_FOOTER,
     _DEFAULT_INVITE_PREFIX,
-    _DEFAULT_SHARE_PREFIX,
     _share_message,
     accept_invitation_for_user,
     create_invitation,
@@ -22,6 +27,14 @@ from api.schemas import InvitationCreate
 from core.email import InviteEmailContent, _html_body, _plain_text, send_invite_email
 from core.models import Invitation, InvitationStatus
 from core.supabase_admin import generate_magic_link
+
+
+def _limits(*, max_friends: int = 150, max_pending_invites: int = 25) -> MagicMock:
+    """Settings stub pinning the caps a test depends on."""
+    settings = MagicMock()
+    settings.max_friends = max_friends
+    settings.max_pending_invites = max_pending_invites
+    return settings
 
 
 def test_openapi_includes_people_and_invite_routes() -> None:
@@ -35,38 +48,57 @@ def test_openapi_includes_people_and_invite_routes() -> None:
     assert "/invitations/{token}/accept" in paths
 
 
-def test_share_message_includes_prefix_note_and_link() -> None:
+def test_share_message_leads_with_the_article_not_the_app() -> None:
+    """The headline comes first; the product is a footnote under the link."""
     msg = _share_message(
-        inviter_name="Ada",
         headline="Quiet week in AI",
         take="Worth your time",
         personal="Thought of you",
         invite_url="https://nwf.example/invite/abc",
     )
-    assert msg.startswith("Thought of you")
-    assert _DEFAULT_SHARE_PREFIX not in msg
-    assert msg.rstrip().endswith("https://nwf.example/invite/abc")
+    lines = msg.splitlines()
+    assert lines[0] == "Quiet week in AI"
+    # A note written for this person beats the take attached to the post.
+    assert lines[1] == "Thought of you"
+    assert "Worth your time" not in msg
+    assert lines[2] == "https://nwf.example/invite/abc"
+    assert lines[-1] == _APP_FOOTER
+    # The old copy opened by pitching the product. It must not do that again.
+    assert not msg.startswith("I'm using NewsWithFriends")
 
 
-def test_share_message_falls_back_to_default_prefix() -> None:
+def test_share_message_uses_the_take_when_there_is_no_personal_note() -> None:
     msg = _share_message(
-        inviter_name="Ada",
+        headline="Quiet week in AI",
+        take="Worth your time",
+        personal=None,
+        invite_url="https://nwf.example/invite/abc",
+    )
+    assert msg.splitlines()[:3] == [
+        "Quiet week in AI",
+        "Worth your time",
+        "https://nwf.example/invite/abc",
+    ]
+
+
+def test_share_message_is_headline_and_link_with_nothing_to_say() -> None:
+    """No take, no note: the headline still has to carry the message."""
+    msg = _share_message(
         headline="Quiet week in AI",
         take=None,
         personal=None,
         invite_url="https://nwf.example/invite/abc",
     )
-    assert msg.startswith(
-        "I'm using NewsWithFriends to discuss articles privately with friends. "
-        "I'd like to invite you to my private discussion about this article."
-    )
-    assert msg.rstrip().endswith("https://nwf.example/invite/abc")
+    assert msg.splitlines() == [
+        "Quiet week in AI",
+        "https://nwf.example/invite/abc",
+        _APP_FOOTER,
+    ]
 
 
 def test_share_message_invites_to_the_app_without_an_article() -> None:
     """A standalone invite has no article, so it must not point at one."""
     msg = _share_message(
-        inviter_name="Ada",
         headline=None,
         take=None,
         personal=None,
@@ -74,7 +106,7 @@ def test_share_message_invites_to_the_app_without_an_article() -> None:
     )
     assert msg.startswith(_DEFAULT_INVITE_PREFIX)
     assert "this article" not in msg
-    assert msg.rstrip().endswith("https://nwf.example/invite/abc")
+    assert "https://nwf.example/invite/abc" in msg
 
 
 @pytest.mark.asyncio
@@ -223,16 +255,26 @@ async def test_send_invite_email_sets_list_unsubscribe_header() -> None:
 
 
 @pytest.mark.asyncio
-async def test_friend_slots_used_counts_connections_and_invitations() -> None:
+async def test_friend_slots_used_counts_only_connections() -> None:
+    """Outstanding invitations no longer eat into the friend limit."""
     session = AsyncMock()
-    session.scalar = AsyncMock(side_effect=[7, 3])
-    assert await friend_slots_used(session, uuid.uuid4()) == 10
+    session.scalar = AsyncMock(return_value=7)
+    assert await friend_slots_used(session, uuid.uuid4()) == 7
+    # One query, not two: invitations are not consulted at all.
+    assert session.scalar.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_pending_invites_used_counts_outstanding_invitations() -> None:
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=3)
+    assert await pending_invites_used(session, uuid.uuid4()) == 3
 
 
 @pytest.mark.asyncio
 async def test_ensure_friend_capacity_allows_below_the_limit() -> None:
     session = AsyncMock()
-    session.scalar = AsyncMock(side_effect=[48, 1])
+    session.scalar = AsyncMock(return_value=49)
     settings = MagicMock()
     settings.max_friends = 50
     await ensure_friend_capacity(session, uuid.uuid4(), settings=settings)
@@ -241,13 +283,49 @@ async def test_ensure_friend_capacity_allows_below_the_limit() -> None:
 @pytest.mark.asyncio
 async def test_ensure_friend_capacity_raises_at_the_limit() -> None:
     session = AsyncMock()
-    session.scalar = AsyncMock(side_effect=[40, 10])
+    session.scalar = AsyncMock(return_value=50)
     settings = MagicMock()
     settings.max_friends = 50
     with pytest.raises(HTTPException) as excinfo:
         await ensure_friend_capacity(session, uuid.uuid4(), settings=settings)
     assert excinfo.value.status_code == 409
     assert "50-friend limit" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_a_prolific_inviter_keeps_their_friend_slots() -> None:
+    """The regression this split exists to prevent.
+
+    Under the old rule, 20 friends plus 40 invitations in flight filled a
+    50-slot account and blocked the next invite -- the wall landed on the
+    people doing the most inviting, exactly when it started working.
+    """
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=20)
+    settings = MagicMock()
+    settings.max_friends = 50
+    await ensure_friend_capacity(session, uuid.uuid4(), settings=settings)
+
+
+@pytest.mark.asyncio
+async def test_ensure_invite_capacity_raises_at_the_limit() -> None:
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=25)
+    settings = MagicMock()
+    settings.max_pending_invites = 25
+    with pytest.raises(HTTPException) as excinfo:
+        await ensure_invite_capacity(session, uuid.uuid4(), settings=settings)
+    assert excinfo.value.status_code == 409
+    assert "25 invitations still outstanding" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_ensure_invite_capacity_allows_below_the_limit() -> None:
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=24)
+    settings = MagicMock()
+    settings.max_pending_invites = 25
+    await ensure_invite_capacity(session, uuid.uuid4(), settings=settings)
 
 
 @pytest.mark.asyncio
@@ -261,14 +339,57 @@ async def test_accept_invitation_refuses_when_accepter_is_full() -> None:
         reusable=False,
     )
     session = AsyncMock()
-    session.scalar = AsyncMock(side_effect=[50, 0])
+    # One count now: the friend limit no longer consults invitations.
+    session.scalar = AsyncMock(side_effect=[50])
     session.add = MagicMock()
 
-    with pytest.raises(HTTPException) as excinfo:
+    with (
+        patch("api.friends.get_settings", return_value=_limits(max_friends=50)),
+        pytest.raises(HTTPException) as excinfo,
+    ):
         await accept_invitation_for_user(session, invitation, uuid.uuid4())
     assert excinfo.value.status_code == 409
     session.add.assert_not_called()
     assert invitation.status == InvitationStatus.pending
+
+
+@pytest.mark.asyncio
+async def test_email_invite_degrades_to_view_only_when_inviter_is_full() -> None:
+    """Sending an invite no longer reserves the inviter a slot.
+
+    It is capped as outbound mail instead, so by redemption time the inviter
+    can genuinely be full. That must leave the recipient reading rather than
+    push the inviter over their own limit.
+    """
+    invitation = Invitation(
+        token="tok-mail-full",
+        inviter_id=uuid.uuid4(),
+        invitee_email="friend@example.com",
+        post_id=uuid.uuid4(),
+        status=InvitationStatus.pending,
+        reusable=False,
+    )
+    session = AsyncMock()
+    # The redeemer has room; the inviter does not.
+    session.scalar = AsyncMock(side_effect=[0, 50])
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+
+    with (
+        patch("api.friends.get_settings", return_value=_limits(max_friends=50)),
+        patch(
+            "api.routers.invitations.get_settings",
+            return_value=_limits(max_friends=50),
+        ),
+    ):
+        result = await accept_invitation_for_user(session, invitation, uuid.uuid4())
+
+    assert result.status == "view_only"
+    assert result.became_friend is False
+    # The invitation stays open so it can still be redeemed once room frees up.
+    assert invitation.status == InvitationStatus.pending
+    session.add.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -284,13 +405,20 @@ async def test_reusable_link_degrades_to_view_only_when_inviter_is_full() -> Non
         become_friend=True,
     )
     session = AsyncMock()
-    # existing redemption lookup, then the redeemer's counts, then the inviter's
-    session.scalar = AsyncMock(side_effect=[None, 0, 0, 50, 0, None])
+    # existing redemption lookup, then the redeemer's count, then the inviter's
+    session.scalar = AsyncMock(side_effect=[None, 0, 50, None])
     session.execute = AsyncMock()
     session.flush = AsyncMock()
     session.add = MagicMock()
 
-    result = await accept_invitation_for_user(session, invitation, uuid.uuid4())
+    with (
+        patch("api.friends.get_settings", return_value=_limits(max_friends=50)),
+        patch(
+            "api.routers.invitations.get_settings",
+            return_value=_limits(max_friends=50),
+        ),
+    ):
+        result = await accept_invitation_for_user(session, invitation, uuid.uuid4())
     assert result.status == "view_only"
     assert result.became_friend is False
     assert "full" in result.message

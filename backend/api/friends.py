@@ -309,13 +309,16 @@ async def friend_slots_used(
 ) -> int:
     """How many of a user's friend slots are taken.
 
-    Counts accepted friends, friend requests the user sent that are still
-    unanswered, and unexpired email invitations they sent. Outstanding requests
-    and invitations count so the limit constrains outbound email rather than
-    just the final friend list; incoming requests do not, so nobody else can
-    fill up your account.
+    Counts accepted friends plus friend requests the user sent that are still
+    unanswered. Requests they sent count so a pile of unanswered ones cannot
+    be used to sit above the limit; incoming requests do not, so nobody else
+    can fill up your account.
+
+    Outstanding invitations used to count here too, which meant inviting
+    people consumed the very room they were being invited into -- the wall
+    landed on the most active inviters first. They are capped separately now;
+    see :func:`pending_invites_used`.
     """
-    moment: datetime = now or datetime.now(UTC)
     connections: int | None = await session.scalar(
         select(func.count())
         .select_from(Connection)
@@ -331,6 +334,20 @@ async def friend_slots_used(
             ),
         )
     )
+    return int(connections or 0)
+
+
+async def pending_invites_used(
+    session: AsyncSession, user_id: uuid.UUID, *, now: datetime | None = None
+) -> int:
+    """Unexpired email invitations this user has outstanding.
+
+    Only addressed, single-use invitations count: those are the ones that
+    send mail on someone else's behalf, which is what the cap exists to
+    limit. A reusable share link is handed out by the inviter themselves and
+    mails nobody, so it is not rationed.
+    """
+    moment: datetime = now or datetime.now(UTC)
     invitations: int | None = await session.scalar(
         select(func.count())
         .select_from(Invitation)
@@ -345,7 +362,7 @@ async def friend_slots_used(
             ),
         )
     )
-    return int(connections or 0) + int(invitations or 0)
+    return int(invitations or 0)
 
 
 async def ensure_friend_capacity(
@@ -362,7 +379,30 @@ async def ensure_friend_capacity(
     raise HTTPException(
         status.HTTP_409_CONFLICT,
         f"You've reached the {cfg.max_friends}-friend limit. Remove a friend "
-        f"or cancel a pending invite to make room.",
+        f"to make room.",
+    )
+
+
+async def ensure_invite_capacity(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    settings: Settings | None = None,
+) -> None:
+    """Raise 409 when a user has too many invitations still outstanding.
+
+    Separate from :func:`ensure_friend_capacity` on purpose: this one is
+    about how much mail an account can put in flight, and clears itself as
+    invitations are accepted or expire.
+    """
+    cfg: Settings = settings or get_settings()
+    used: int = await pending_invites_used(session, user_id)
+    if used < cfg.max_pending_invites:
+        return
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        f"You have {used} invitations still outstanding, the most allowed at "
+        f"once. They free up as people accept, or you can cancel one.",
     )
 
 

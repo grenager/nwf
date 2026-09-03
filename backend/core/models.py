@@ -714,6 +714,13 @@ class Invitation(Base):
     last_opened_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Watermark for the note sent to the *inviter* when their share link was
+    # opened but nobody joined. Distinct from last_activity_email_at, which
+    # nudges the invitee -- a share-tray link has no invitee to nudge. Set
+    # once, so the follow-up never repeats for the same link.
+    inviter_reach_email_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class EmailSuppression(Base):

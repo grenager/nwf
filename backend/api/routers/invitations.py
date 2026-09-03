@@ -15,6 +15,7 @@ from api.deps import CurrentUser, OptionalUser, SessionDep, SettingsDep
 from api.friends import (
     display_name,
     ensure_friend_capacity,
+    ensure_invite_capacity,
     friend_slots_used,
     is_email_suppressed,
 )
@@ -52,11 +53,12 @@ router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 _TOKEN_BYTES = 24
 _DEFAULT_EXPIRY = timedelta(days=14)
-_DEFAULT_SHARE_PREFIX = (
-    "I'm using NewsWithFriends to discuss articles privately with friends. "
-    "I'd like to invite you to my private discussion about this article."
-)
-# A standalone invite has no article to point at, so it invites to the app.
+# Trailing footnote, not the opening line: the message has to read like one
+# friend sending another an article, because that is what it is. Leading with
+# the product turns a share into an app pitch, and an app pitch from a friend
+# is easy to ignore.
+_APP_FOOTER = "(Shared via NewsWithFriends — reading the news with friends.)"
+# A standalone invite has no article to lead with, so the app is the subject.
 _DEFAULT_INVITE_PREFIX = (
     "I'm using NewsWithFriends to discuss articles privately with friends. "
     "Come join me."
@@ -69,17 +71,33 @@ def _new_token() -> str:
 
 def _share_message(
     *,
-    inviter_name: str,
     headline: str | None,
     take: str | None,
     personal: str | None,
     invite_url: str,
 ) -> str:
-    # The link renders a rich preview (headline + image) in messaging apps, so
-    # keep the text itself to a short note plus the invite URL.
-    default: str = _DEFAULT_SHARE_PREFIX if headline else _DEFAULT_INVITE_PREFIX
-    body: str = (personal or "").strip() or default
-    return f"{body}\n{invite_url}"
+    """The text handed to the OS share sheet or clipboard.
+
+    Shaped as: what the article is, what the sender thinks of it, the link,
+    and only then a one-line note about where the link goes. The recipient
+    already knows who is texting them, so the sender's name is left out.
+
+    A note the inviter typed wins over the take attached to the post — it was
+    written for this person. The link still carries a rich preview in most
+    messaging apps; repeating the headline is deliberate, since plain SMS and
+    a few clients render no preview at all.
+    """
+    lines: list[str] = []
+    if headline:
+        lines.append(headline.strip())
+    note: str = (personal or "").strip() or (take or "").strip()
+    if note:
+        lines.append(note)
+    if not lines:
+        lines.append(_DEFAULT_INVITE_PREFIX)
+    lines.append(invite_url)
+    lines.append(_APP_FOOTER)
+    return "\n".join(lines)
 
 
 async def _find_connection(
@@ -297,9 +315,19 @@ async def accept_invitation_for_user(
             became_friend=False,
         )
 
-    # The inviter's slot was reserved when they sent this invitation, so only
-    # the person accepting needs room.
     await ensure_friend_capacity(session, user_id)
+    # Sending an invitation no longer reserves a friend slot -- it is capped as
+    # outbound mail instead -- so the inviter can genuinely be full by the time
+    # this is redeemed. Degrade to reading rather than pushing them over their
+    # own limit, matching what a reusable link does.
+    if not await _inviter_has_room(session, invitation.inviter_id):
+        return InvitationAcceptResult(
+            status="view_only",
+            inviter_id=invitation.inviter_id,
+            post_id=invitation.post_id,
+            message="You can keep browsing — their friend list is full right now.",
+            became_friend=False,
+        )
     await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
     if invitation.post_id is not None:
         await _add_participant(session, invitation.post_id, user_id)
@@ -463,7 +491,6 @@ async def create_invitation(
         await session.flush()
         durable_url: str = _durable_invite_url(settings, token)
         share = _share_message(
-            inviter_name=inviter_name,
             headline=story.full_headline if story else None,
             take=take,
             personal=personal,
@@ -534,6 +561,9 @@ async def create_invitation(
         )
 
     await ensure_friend_capacity(session, user.id, settings=settings)
+    # This path is the one that actually sends mail, so it is also the one
+    # the outbound-invite cap applies to.
+    await ensure_invite_capacity(session, user.id, settings=settings)
 
     # Someone who unsubscribed must not be re-invited by anyone.
     if await is_email_suppressed(session, email):
@@ -586,7 +616,6 @@ async def create_invitation(
     )
 
     share = _share_message(
-        inviter_name=inviter_name,
         headline=story.full_headline if story else None,
         take=take,
         personal=personal,
