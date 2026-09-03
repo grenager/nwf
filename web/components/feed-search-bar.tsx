@@ -49,7 +49,7 @@ export function FeedSearchBar() {
       {/* Keeps the first post clear of the fixed bar above it. */}
       <div className="h-12 sm:hidden" aria-hidden />
       <div
-        className={`fixed inset-x-0 top-0 z-30 border-b border-zinc-200 bg-white/95 px-3 pb-2 backdrop-blur transition-transform duration-200 sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95 ${
+        className={`fixed inset-x-0 top-0 z-30 bg-white/95 px-3 pb-2 backdrop-blur transition-transform duration-200 sm:hidden dark:bg-zinc-950/95 ${
           hidden ? "-translate-y-full" : "translate-y-0"
         }`}
         style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top))" }}
