@@ -19,6 +19,14 @@ const sourceSerif = Source_Serif_4({
 export const metadata: Metadata = {
   title: "NewsWithFriends",
   description: "Read the news with your friends. Sources, feeds, stars, and comments.",
+  // iOS reads none of the manifest for the home screen tile: the icon comes
+  // from app/apple-icon.png and the label from `title` here, which is why
+  // it is set separately and short enough not to be truncated.
+  appleWebApp: {
+    capable: true,
+    title: "NewsWithFriends",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

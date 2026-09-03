@@ -5,6 +5,8 @@ import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { shareInviteLink } from "@/lib/invite-share";
+import { isPinnable } from "@/lib/home-screen";
+import type { RibbonKind } from "@/lib/standards";
 import { dismissStandard, isStandardDismissed } from "@/lib/standards";
 import type { InvitationCreateResult, StandardsNudge } from "@/lib/types";
 import { useEffect, useState } from "react";
@@ -47,15 +49,23 @@ export function StandardsRibbon({
   const [inviting, setInviting] = useState<boolean>(false);
   const [acted, setActed] = useState<boolean>(false);
 
+  // The pin ask only applies when the server has nothing to ask for, and only
+  // on a platform that can do it. Both facts are client-only, so like the
+  // dismissals they are resolved in an effect rather than during render.
+  const [kind, setKind] = useState<RibbonKind | null>(null);
+
   useEffect(() => {
-    setHidden(nudge === null || isStandardDismissed(nudge.kind));
+    const candidate: RibbonKind | null =
+      nudge !== null ? nudge.kind : isPinnable() ? "pin" : null;
+    setHidden(candidate === null || isStandardDismissed(candidate));
+    setKind(candidate);
   }, [nudge]);
 
-  if (nudge === null || hidden || acted) return null;
+  if (kind === null || hidden || acted) return null;
 
   function dismiss(): void {
-    if (nudge === null) return;
-    dismissStandard(nudge.kind);
+    if (kind === null) return;
+    dismissStandard(kind);
     setHidden(true);
   }
 
@@ -73,7 +83,8 @@ export function StandardsRibbon({
       }
       const result = await shareInviteLink(created);
       if (result === "copied") notify("Invite link copied", "success");
-      if (result === "failed") notify("Could not copy the invite link", "error");
+      if (result === "failed")
+        notify("Could not copy the invite link", "error");
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Could not create an invite",
@@ -88,6 +99,11 @@ export function StandardsRibbon({
     if (!requireAuth("add stories")) return;
     setAddOpen(true);
   }
+
+  if (kind === "pin") {
+    return <PinRibbon onDismiss={dismiss} />;
+  }
+  if (nudge === null) return null;
 
   const isInvite: boolean = nudge.kind === "invite";
   const isFirstPost: boolean = nudge.kind === "first_post";
@@ -187,4 +203,68 @@ function shareConsequence(days: number, friendName: string | null): string {
   return friendName
     ? `${friendName} hasn't seen anything from you in ${span}.`
     : `You haven't shared anything in ${span}.`;
+}
+
+/**
+ * The one ask with no button to press.
+ *
+ * iOS exposes no install prompt to a web page, so there is nothing to wire an
+ * action to — the whole job is telling someone which menu to open. The
+ * sticking point in practice is the Share button itself, which people don't
+ * think of as the place apps get installed, so it's drawn inline rather than
+ * named and left to be hunted for.
+ */
+function PinRibbon({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <section
+      aria-label="Add NewsWithFriends to your home screen"
+      className="mb-4 flex items-start gap-3 border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-zinc-800 dark:text-zinc-100">
+          Keep NewsWithFriends on your home screen.
+        </p>
+        <p className="mt-0.5 text-sm text-zinc-500">
+          Tap <ShareGlyph /> in the browser bar, then “Add to Home Screen”. It
+          opens like an app, with no address bar in the way.
+        </p>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="mt-2.5 bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          Got it
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="shrink-0 px-1 text-xs leading-none text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+      >
+        ✕
+      </button>
+    </section>
+  );
+}
+
+/** iOS's share control: a box with an arrow leaving the top of it. */
+function ShareGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-label="the Share button"
+      role="img"
+      className="inline-block h-[1.05em] w-[1.05em] -translate-y-px align-text-bottom"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3v12" />
+      <path d="M8.5 6.5 12 3l3.5 3.5" />
+      <path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 10H17" />
+    </svg>
+  );
 }
