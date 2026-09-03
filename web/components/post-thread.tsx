@@ -73,7 +73,6 @@ function FofReasonLine({ reason }: { reason: FofReason }) {
   return (
     <div className="mt-0.5 flex items-center text-xs text-zinc-500 dark:text-zinc-400">
       <span className="min-w-0 truncate">
-        Your friend{" "}
         <PersonLink
           userId={reason.friend_id}
           className="font-semibold text-emerald-700 dark:text-emerald-400"
