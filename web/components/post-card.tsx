@@ -92,6 +92,7 @@ export function PostCard({
         articleUrl={card.article_url}
         headline={card.full_headline}
         summary={post.shared_text?.trim() ? null : card.summary}
+        quote={post.quote}
         imageUrl={card.image_url}
         sourceName={card.source_name}
         sourceImageUrl={card.source_image_url}

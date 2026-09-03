@@ -352,6 +352,7 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
             articleUrl={articleUrl}
             headline={headline}
             summary={post?.shared_text?.trim() ? null : summary}
+            quote={post?.quote}
             imageUrl={imageUrl}
             sourceName={sourceName}
             imageHeightClassName="h-56 sm:h-64"

@@ -208,6 +208,10 @@ class Post(Base):
     # Article text the author pasted from a page they can read (e.g. behind a
     # paywall). Rendered as a teaser + a reader view; we always link back.
     shared_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A short excerpt the author picked from the article. Unlike shared_text
+    # (the whole piece), this is one line meant to stand in for the
+    # og:description under the link preview.
+    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[PostVisibility] = mapped_column(
         Enum(PostVisibility, name="post_visibility", create_type=False),
         nullable=False,

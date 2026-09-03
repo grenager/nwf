@@ -15,6 +15,8 @@ interface ArticleCardProps {
   articleUrl: string;
   headline: string;
   summary?: string | null;
+  /** Excerpt the author picked from the article. Replaces the summary. */
+  quote?: string | null;
   imageUrl?: string | null;
   sourceName?: string | null;
   sourceImageUrl?: string | null;
@@ -30,11 +32,15 @@ interface ArticleCardProps {
  * Substack-style link preview: full-width image, then a bordered footer with the
  * source (logo + name) and the headline. Shared by the feed, the post detail
  * view, and the invite landing so the article always reads the same way.
+ *
+ * Under the headline it shows the author's picked quote when there is one,
+ * and otherwise falls back to the article's own og:description.
  */
 export function ArticleCard({
   articleUrl,
   headline,
   summary = null,
+  quote = null,
   imageUrl = null,
   sourceName = null,
   sourceImageUrl = null,
@@ -75,7 +81,13 @@ export function ArticleCard({
         <h3 className="mt-1 font-serif text-lg font-semibold leading-snug tracking-tight text-zinc-900 group-hover:underline dark:text-zinc-50">
           {headline}
         </h3>
-        {summary ? (
+        {quote && quote.trim() ? (
+          <blockquote className="mt-2 border-l-2 border-zinc-300 pl-3 dark:border-zinc-700">
+            <p className="whitespace-pre-line font-serif text-sm italic leading-relaxed text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
+              {stripHtml(quote)}
+            </p>
+          </blockquote>
+        ) : summary ? (
           <p
             className={`mt-1 text-sm text-zinc-500 dark:text-zinc-400 ${summaryClampClassName}`}
           >

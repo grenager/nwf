@@ -466,6 +466,7 @@ async def serialize_post(
         author_image_url=author.image_url if author else None,
         take=post.take,
         shared_text=post.shared_text,
+        quote=post.quote,
         visibility=post.visibility,
         last_activity_at=post.last_activity_at,
         created_at=post.created_at,
@@ -591,6 +592,7 @@ async def create_post(
         author_id=user.id,
         take=(payload.take or "").strip() or None,
         shared_text=(payload.shared_text or "").strip() or None,
+        quote=(payload.quote or "").strip() or None,
         visibility=PostVisibility.private,
         last_activity_at=datetime.now(UTC),
     )
@@ -834,6 +836,8 @@ async def update_post(
         await _sync_post_mentions(session, post)
     if "shared_text" in fields:
         post.shared_text = (payload.shared_text or "").strip() or None
+    if "quote" in fields:
+        post.quote = (payload.quote or "").strip() or None
     post.updated_at = datetime.now(UTC)
     await session.flush()
     await session.refresh(post)

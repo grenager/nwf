@@ -17,6 +17,12 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+#: Max length of a post's pull-quote. Kept short so it reads as one picked
+#: line under the link preview rather than a second take. Mirrored by
+#: ``QUOTE_MAX_LENGTH`` in ``web/lib/types.ts``.
+QUOTE_MAX_LENGTH: int = 300
+
+
 # --- Profiles / me --------------------------------------------------------
 class ProfileOut(ORMModel):
     id: uuid.UUID
@@ -306,6 +312,9 @@ class PostCreate(BaseModel):
     # Article text the author pasted from a page they can read; shown as a
     # teaser + reader view. The author chooses to share their own copy.
     shared_text: str | None = Field(default=None, max_length=100_000)
+    # A short excerpt the author picked from the article; replaces the
+    # og:description under the link preview when set.
+    quote: str | None = Field(default=None, max_length=QUOTE_MAX_LENGTH)
     kind: StoryKind = StoryKind.news
     title: str | None = None
     # Optional preview metadata — skips re-enrichment on create
@@ -339,10 +348,11 @@ class PreviewOut(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    """Edit a post's take or shared reader text (author only)."""
+    """Edit a post's take, shared reader text, or quote (author only)."""
 
     take: str | None = Field(default=None, max_length=2_000)
     shared_text: str | None = Field(default=None, max_length=100_000)
+    quote: str | None = Field(default=None, max_length=QUOTE_MAX_LENGTH)
 
 
 class PostOut(ORMModel):
@@ -354,6 +364,7 @@ class PostOut(ORMModel):
     take: str | None = None
     shared_text: str | None = None
     shared_text_truncated: bool = False
+    quote: str | None = None
     visibility: PostVisibility
     last_activity_at: datetime
     created_at: datetime

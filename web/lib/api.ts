@@ -179,6 +179,7 @@ export const api = {
     url?: string;
     take?: string | null;
     shared_text?: string | null;
+    quote?: string | null;
     kind?: StoryKind;
     title?: string;
     canonical_url?: string;
@@ -197,6 +198,7 @@ export const api = {
     payload: {
       take?: string | null;
       shared_text?: string | null;
+      quote?: string | null;
     },
   ): Promise<Post> =>
     request<Post>(`/posts/${id}`, {
