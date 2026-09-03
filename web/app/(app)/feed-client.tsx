@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { FeedSearchBar } from "@/components/feed-search-bar";
 import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
 import { FeedSkeleton } from "@/components/skeleton";
@@ -173,6 +174,8 @@ export function FeedClient() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
+      {isSignedIn ? <FeedSearchBar /> : null}
+
       {!isSignedIn && postItems.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
