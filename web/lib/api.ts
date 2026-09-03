@@ -209,6 +209,13 @@ export const api = {
     }),
   deletePost: (id: UUID): Promise<void> =>
     request<void>(`/posts/${id}`, { method: "DELETE" }),
+  /** Flag a post for a content violation; emails moderators immediately.
+   *  `emailed` is false when no moderation address is reachable. */
+  reportPost: (id: UUID, reason: string | null): Promise<{ emailed: boolean }> =>
+    request<{ emailed: boolean }>(`/posts/${id}/report`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 
   // --- comments (replies) ---
   listComments: (opts?: { postId?: UUID; storyId?: UUID }): Promise<Comment[]> => {

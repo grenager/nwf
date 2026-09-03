@@ -5,6 +5,7 @@ import { Avatar } from "@/components/avatar";
 import { CommentAudienceModal } from "@/components/comment-audience-modal";
 import { LikeButton } from "@/components/like-button";
 import { PersonLink } from "@/components/person-link";
+import { ReportPostModal } from "@/components/report-post-modal";
 import { MentionInput } from "@/components/mention-input";
 import { MentionText } from "@/components/mention-text";
 import { PostEngagementRow } from "@/components/post-engagement-row";
@@ -211,10 +212,13 @@ export function PostThread({
   const scrolledUnreadRef = useRef<boolean>(false);
   const scrolledCommentRef = useRef<UUID | null>(null);
   const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
+  const [reportOpen, setReportOpen] = useState<boolean>(false);
   const [shareAfterReply, setShareAfterReply] = useState<boolean>(false);
   const { typers, notifyTyping } = useTypingIndicator(post.id);
 
   const isAuthor: boolean = user != null && user.id === post.author_id;
+  /** Admins can take down anyone's post — how a content report gets acted on. */
+  const canModerate: boolean = me?.is_admin === true;
   const isPreviewMode: boolean =
     compact || (maxTopLevelComments !== undefined && maxTopLevelComments > 0);
 
@@ -479,7 +483,10 @@ export function PostThread({
 
   async function remove(): Promise<void> {
     setMenuOpen(false);
-    if (!window.confirm("Delete this post?")) return;
+    const prompt: string = isAuthor
+      ? "Delete this post?"
+      : `Delete ${post.author_name}'s post? They will not be notified.`;
+    if (!window.confirm(prompt)) return;
     try {
       await api.deletePost(post.id);
       onDelete();
@@ -572,13 +579,20 @@ export function PostThread({
               {fofReason ? <FofReasonLine reason={fofReason} /> : null}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              {isAuthor ? (
+              {/* Everyone gets the menu: the author edits and deletes, other
+                  readers report, and an admin can take a post down. Guests
+                  have nothing to do in it, so they don't get it. */}
+              {!isGuest ? (
                 <div className="relative">
                   <button
                     type="button"
                     aria-label="Post options"
                     onClick={() => setMenuOpen((v) => !v)}
-                    className="rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+                    // h-5/leading-none pins the button to the author line's
+                    // own 20px line box. With padding it was taller, and
+                    // items-start stretched the whole header row — which is
+                    // why an author's post sat lower than everyone else's.
+                    className="flex h-5 w-6 items-center justify-center rounded leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
                   >
                     ⋯
                   </button>
@@ -588,31 +602,47 @@ export function PostThread({
                         className="fixed inset-0 z-10"
                         onClick={() => setMenuOpen(false)}
                       />
-                      <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            // The feed preview shows a trimmed thread, so edit
-                            // happens on the full post — ?edit=1 opens it
-                            // focused there instead of on a read-only view.
-                            if (isPreviewMode) {
-                              router.push(`/post/${post.id}?edit=1`);
-                              return;
-                            }
-                            beginEdit();
-                          }}
-                          className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void remove()}
-                          className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                        >
-                          Delete post
-                        </button>
+                      <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                        {isAuthor ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              // The feed preview shows a trimmed thread, so
+                              // edit happens on the full post — ?edit=1 opens
+                              // it focused there instead of on a read-only
+                              // view.
+                              if (isPreviewMode) {
+                                router.push(`/post/${post.id}?edit=1`);
+                                return;
+                              }
+                              beginEdit();
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            Edit
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setReportOpen(true);
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            Report content violation
+                          </button>
+                        )}
+                        {isAuthor || canModerate ? (
+                          <button
+                            type="button"
+                            onClick={() => void remove()}
+                            className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                          >
+                            {isAuthor ? "Delete post" : "Delete post (admin)"}
+                          </button>
+                        ) : null}
                       </div>
                     </>
                   ) : null}
@@ -993,6 +1023,14 @@ export function PostThread({
             </div>
           </div>
       )}
+      {reportOpen ? (
+        <ReportPostModal
+          postId={post.id}
+          authorName={post.author_name}
+          onClose={() => setReportOpen(false)}
+        />
+      ) : null}
+
       {audienceOpen ? (
         <CommentAudienceModal
           postId={post.id}
@@ -1127,7 +1165,7 @@ function CommentRow({
         ) : (
           <MentionText
             text={comment.text}
-            className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+            className="mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
           />
         )}
         {editing ? null : (

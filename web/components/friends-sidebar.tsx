@@ -322,7 +322,10 @@ export function FriendsSidebar() {
           No friends yet. Invite someone to compare coverage.
         </p>
       ) : (
-        <div className="max-h-[50vh] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
+        // No height cap or inner scroller here: the <aside> in (app)/layout.tsx
+        // is the sidebar's single full-height scroll area, so the list runs to
+        // the bottom of the screen instead of stopping halfway down it.
+        <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {friends.map((friend) => (
             <FriendRow key={friend.user_id} friend={friend} onOpen={setOpenId} />
           ))}
