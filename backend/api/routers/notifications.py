@@ -19,19 +19,26 @@ from core.models import Comment, Notification, Profile, Story
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
+DEFAULT_LIMIT: int = 30
+MAX_LIMIT: int = 100
 
-@router.get("", response_model=NotificationList)
-async def list_notifications(
-    session: SessionDep,
-    user: CurrentUser,
-    limit: int = Query(default=30, le=100, ge=1),
+
+async def _load_notifications(
+    session: SessionDep, user_id: uuid.UUID, limit: int
 ) -> NotificationList:
-    """Recent directed alerts for the signed-in user."""
+    """Build the alert list for one user.
+
+    A plain function, deliberately: the route below is a thin shell around it
+    so nothing ever calls a *route handler* directly. FastAPI resolves a
+    ``Query(...)`` default only when it dispatches the request, so an internal
+    call would receive the ``Query`` object itself rather than an int -- which
+    is exactly how ``POST /notifications/read`` came to 500 on every request.
+    """
     rows = list(
         (
             await session.scalars(
                 select(Notification)
-                .where(Notification.recipient_id == user.id)
+                .where(Notification.recipient_id == user_id)
                 .order_by(Notification.created_at.desc())
                 .limit(limit)
             )
@@ -43,7 +50,7 @@ async def list_notifications(
                 select(func.count())
                 .select_from(Notification)
                 .where(
-                    Notification.recipient_id == user.id,
+                    Notification.recipient_id == user_id,
                     Notification.read_at.is_(None),
                 )
             )
@@ -119,6 +126,16 @@ async def list_notifications(
     return NotificationList(items=items, unread_count=unread_count)
 
 
+@router.get("", response_model=NotificationList)
+async def list_notifications(
+    session: SessionDep,
+    user: CurrentUser,
+    limit: int = Query(default=DEFAULT_LIMIT, le=MAX_LIMIT, ge=1),
+) -> NotificationList:
+    """Recent directed alerts for the signed-in user."""
+    return await _load_notifications(session, user.id, limit)
+
+
 @router.post("/read", response_model=NotificationList)
 async def mark_notifications_read(
     payload: NotificationsReadRequest,
@@ -139,4 +156,4 @@ async def mark_notifications_read(
         stmt = stmt.where(Notification.id.in_(payload.notification_ids))
     await session.execute(stmt)
     await session.flush()
-    return await list_notifications(session, user)
+    return await _load_notifications(session, user.id, DEFAULT_LIMIT)
