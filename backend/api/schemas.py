@@ -345,6 +345,18 @@ class PostUpdate(BaseModel):
     shared_text: str | None = Field(default=None, max_length=100_000)
 
 
+class PostReportCreate(BaseModel):
+    """Flag a post for a content violation. Reason is optional context."""
+
+    reason: str | None = Field(default=None, max_length=2_000)
+
+
+class PostReportOut(BaseModel):
+    """Outcome of a report: whether moderators were actually emailed."""
+
+    emailed: bool
+
+
 class PostOut(ORMModel):
     id: uuid.UUID
     story_id: uuid.UUID

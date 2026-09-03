@@ -63,6 +63,20 @@ async def get_optional_user(
 OptionalUser = Annotated[AuthUser | None, Depends(get_optional_user)]
 
 
+async def is_admin_user(session: AsyncSession, user: AuthUser) -> bool:
+    """True when the JWT claims admin, or the user's profile row does.
+
+    The profile flag is the fallback so admin can be granted without
+    re-issuing tokens (app_metadata claims need a fresh session). Endpoints
+    that merely widen a permission for admins use this; endpoints that are
+    admin-only use :data:`AdminUser`.
+    """
+    if user.is_admin:
+        return True
+    profile = await session.get(Profile, user.id)
+    return profile is not None and profile.is_admin
+
+
 async def require_admin(
     user: CurrentUser,
     settings: SettingsDep,
@@ -70,18 +84,13 @@ async def require_admin(
     x_admin_secret: Annotated[str | None, Header(alias="X-Admin-Secret")] = None,
 ) -> AuthUser:
     """Allow admins (JWT claim or profiles.is_admin), or a shared secret header."""
-    if user.is_admin:
-        return user
     if (
         settings.admin_api_secret
         and x_admin_secret
         and x_admin_secret == settings.admin_api_secret
     ):
         return user
-    # Fall back to the DB profile flag so admin can be granted without
-    # re-issuing tokens (app_metadata claims require a fresh session).
-    profile = await session.get(Profile, user.id)
-    if profile is not None and profile.is_admin:
+    if await is_admin_user(session, user):
         return user
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
