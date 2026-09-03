@@ -25,7 +25,12 @@ from api.routers.invitations import (
 )
 from api.schemas import InvitationCreate
 from core.email import InviteEmailContent, _html_body, _plain_text, send_invite_email
-from core.models import Invitation, InvitationStatus
+from core.models import (
+    Connection,
+    ConnectionStatus,
+    Invitation,
+    InvitationStatus,
+)
 from core.supabase_admin import generate_magic_link
 
 
@@ -339,8 +344,9 @@ async def test_accept_invitation_refuses_when_accepter_is_full() -> None:
         reusable=False,
     )
     session = AsyncMock()
-    # One count now: the friend limit no longer consults invitations.
-    session.scalar = AsyncMock(side_effect=[50])
+    # No existing connection, then one count: the friend limit no longer
+    # consults invitations.
+    session.scalar = AsyncMock(side_effect=[None, 50])
     session.add = MagicMock()
 
     with (
@@ -370,8 +376,8 @@ async def test_email_invite_degrades_to_view_only_when_inviter_is_full() -> None
         reusable=False,
     )
     session = AsyncMock()
-    # The redeemer has room; the inviter does not.
-    session.scalar = AsyncMock(side_effect=[0, 50])
+    # No existing connection; the redeemer has room, the inviter does not.
+    session.scalar = AsyncMock(side_effect=[None, 0, 50])
     session.execute = AsyncMock()
     session.flush = AsyncMock()
     session.add = MagicMock()
@@ -405,8 +411,9 @@ async def test_reusable_link_degrades_to_view_only_when_inviter_is_full() -> Non
         become_friend=True,
     )
     session = AsyncMock()
-    # existing redemption lookup, then the redeemer's count, then the inviter's
-    session.scalar = AsyncMock(side_effect=[None, 0, 50, None])
+    # redemption lookup, connection lookup, the redeemer's count, the
+    # inviter's, then the redemption lookup again
+    session.scalar = AsyncMock(side_effect=[None, None, 0, 50, None])
     session.execute = AsyncMock()
     session.flush = AsyncMock()
     session.add = MagicMock()
@@ -581,3 +588,82 @@ def test_recommended_and_requests_require_auth() -> None:
     assert client.get("/connections/requests").status_code == 401
     assert client.get("/connections/recommended").status_code == 401
     assert client.post("/invitations", json={"email": "a@b.com"}).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_accept_reusable_skips_alert_when_already_friends() -> None:
+    """Sharing a link with an existing friend must not re-announce them."""
+    inviter = uuid.uuid4()
+    invitee = uuid.uuid4()
+    post_id = uuid.uuid4()
+    invitation = Invitation(
+        token="tok-friend",
+        inviter_id=inviter,
+        invitee_email=None,
+        post_id=post_id,
+        status=InvitationStatus.pending,
+        reusable=True,
+        become_friend=True,
+    )
+
+    session = AsyncMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+    # 1) redemption lookup, 2) _find_connection, 3) redemption lookup again.
+    session.scalar = AsyncMock(
+        side_effect=[
+            None,
+            Connection(
+                first_id=inviter,
+                second_id=invitee,
+                status=ConnectionStatus.accepted,
+            ),
+            None,
+        ]
+    )
+
+    with patch(
+        "api.routers.invitations._notify_new_friendship", new=AsyncMock()
+    ) as notify:
+        result = await accept_invitation_for_user(session, invitation, invitee)
+
+    notify.assert_not_awaited()
+    assert result.status == "already_friends"
+    assert result.became_friend is True
+    assert result.post_id == post_id
+    session.execute.assert_awaited()  # still joined to the shared post
+
+
+@pytest.mark.asyncio
+async def test_accept_single_use_skips_alert_when_already_friends() -> None:
+    """Same for a single-use email invite sent to an existing friend."""
+    inviter = uuid.uuid4()
+    invitee = uuid.uuid4()
+    invitation = Invitation(
+        token="tok-friend-2",
+        inviter_id=inviter,
+        invitee_email="friend@example.com",
+        status=InvitationStatus.pending,
+        reusable=False,
+    )
+
+    session = AsyncMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+    session.scalar = AsyncMock(
+        return_value=Connection(
+            first_id=inviter, second_id=invitee, status=ConnectionStatus.accepted
+        )
+    )
+
+    with patch(
+        "api.routers.invitations._notify_new_friendship", new=AsyncMock()
+    ) as notify:
+        result = await accept_invitation_for_user(session, invitation, invitee)
+
+    notify.assert_not_awaited()
+    assert result.status == "already_friends"
+    assert result.became_friend is True
+    assert invitation.status == InvitationStatus.accepted
