@@ -47,16 +47,18 @@ export function FeedSearchBar() {
   return (
     <>
       {/* Keeps the first post clear of the fixed bar above it. */}
-      <div className="h-12 sm:hidden" aria-hidden />
+      <div className="h-10 sm:hidden" aria-hidden />
       <div
-        className={`fixed inset-x-0 top-0 z-30 bg-white/95 px-3 pb-2 backdrop-blur transition-transform duration-200 sm:hidden dark:bg-zinc-950/95 ${
-          hidden ? "-translate-y-full" : "translate-y-0"
+        className={`fixed inset-x-0 top-0 z-30 bg-white px-3 pb-1.5 shadow-[0_1px_6px_rgba(0,0,0,0.07)] transition-transform duration-200 sm:hidden dark:bg-zinc-950 dark:shadow-[0_1px_6px_rgba(0,0,0,0.6)] ${
+          // Overshoot far enough that the soft shadow under the bar clears
+          // the top edge too — otherwise it lingers as a grey smudge.
+          hidden ? "-translate-y-[calc(100%+12px)]" : "translate-y-0"
         }`}
-        style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top))" }}
+        style={{ paddingTop: "calc(0.375rem + env(safe-area-inset-top))" }}
       >
         <Link
           href="/search"
-          className="flex w-full items-center gap-2 border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+          className="flex w-full items-center gap-2 bg-zinc-100 px-3 py-1.5 text-[13px] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
