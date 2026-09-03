@@ -1101,7 +1101,7 @@ function CommentRow({
         ) : (
           <MentionText
             text={comment.text}
-            className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
+            className="mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
           />
         )}
         {editing ? null : (
