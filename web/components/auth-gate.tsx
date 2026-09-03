@@ -52,17 +52,21 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
       {actionLabel ? (
         <ModalShell
           onClose={() => setActionLabel(null)}
-          label="Create a free account"
+          label={`Sign in to ${actionLabel}`}
           onTop
         >
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            Create a free account
+            Sign in to {actionLabel}
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Create a free account and verify your email to {actionLabel}.
+            It&apos;s free, and anything you&apos;ve already written is saved
+            until you do.
           </p>
+          {/* Google is the fast path and used to go unmentioned here, which
+              made signing up sound like more work than it is. */}
           <p className="mt-2 text-xs text-slate-400">
-            We&apos;ll send you a magic link — no password needed.
+            One tap with Google, or we&apos;ll email you a link — no password
+            either way.
           </p>
           <div className="mt-5 flex justify-end gap-2">
             <button
@@ -77,7 +81,7 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
               onClick={() => setActionLabel(null)}
               className="bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
             >
-              Create free account
+              Continue
             </Link>
           </div>
         </ModalShell>
