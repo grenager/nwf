@@ -113,6 +113,12 @@ async def _find_connection(
     return connection
 
 
+async def _are_friends(session: SessionDep, a: uuid.UUID, b: uuid.UUID) -> bool:
+    """Whether an *accepted* connection already links the two users."""
+    connection: Connection | None = await _find_connection(session, a, b)
+    return connection is not None and connection.status == ConnectionStatus.accepted
+
+
 async def _ensure_accepted_connection(
     session: SessionDep, inviter_id: uuid.UUID, invitee_id: uuid.UUID
 ) -> Connection:
@@ -262,26 +268,42 @@ async def accept_invitation_for_user(
                 message="You can keep browsing. Add them as a friend to join.",
                 became_friend=False,
             )
-        await ensure_friend_capacity(session, user_id)
-        # Share links reserve no slot when minted, so the inviter may have
-        # filled up before redeemers arrive. Let them keep reading regardless.
-        if not await _inviter_has_room(session, invitation.inviter_id):
-            await _record_redemption(
-                session, invitation.id, user_id, became_friend=False
-            )
-            return InvitationAcceptResult(
-                status="view_only",
-                inviter_id=invitation.inviter_id,
-                post_id=invitation.post_id,
-                message=(
-                    "You can keep browsing — their friend list is full right now."
-                ),
-                became_friend=False,
-            )
-        await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
+        # A link texted to someone who is already a friend (the common case
+        # when you share an article with a friend) still joins them to the
+        # post, but forms no new friendship: no slot is consumed, and above
+        # all no "is now your friend" alert or email fires on either side.
+        already_friends: bool = await _are_friends(
+            session, invitation.inviter_id, user_id
+        )
+        if not already_friends:
+            await ensure_friend_capacity(session, user_id)
+            # Share links reserve no slot when minted, so the inviter may have
+            # filled up before redeemers arrive. Let them keep reading anyway.
+            if not await _inviter_has_room(session, invitation.inviter_id):
+                await _record_redemption(
+                    session, invitation.id, user_id, became_friend=False
+                )
+                return InvitationAcceptResult(
+                    status="view_only",
+                    inviter_id=invitation.inviter_id,
+                    post_id=invitation.post_id,
+                    message=(
+                        "You can keep browsing — their friend list is full right now."
+                    ),
+                    became_friend=False,
+                )
+            await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
         if invitation.post_id is not None:
             await _add_participant(session, invitation.post_id, user_id)
         await _record_redemption(session, invitation.id, user_id, became_friend=True)
+        if already_friends:
+            return InvitationAcceptResult(
+                status="already_friends",
+                inviter_id=invitation.inviter_id,
+                post_id=invitation.post_id,
+                message="You're already friends.",
+                became_friend=True,
+            )
         await _notify_new_friendship(session, invitation.inviter_id, user_id)
         return InvitationAcceptResult(
             status="accepted",
@@ -315,20 +337,22 @@ async def accept_invitation_for_user(
             became_friend=False,
         )
 
-    await ensure_friend_capacity(session, user_id)
-    # Sending an invitation no longer reserves a friend slot -- it is capped as
-    # outbound mail instead -- so the inviter can genuinely be full by the time
-    # this is redeemed. Degrade to reading rather than pushing them over their
-    # own limit, matching what a reusable link does.
-    if not await _inviter_has_room(session, invitation.inviter_id):
-        return InvitationAcceptResult(
-            status="view_only",
-            inviter_id=invitation.inviter_id,
-            post_id=invitation.post_id,
-            message="You can keep browsing — their friend list is full right now.",
-            became_friend=False,
-        )
-    await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
+    already_friends = await _are_friends(session, invitation.inviter_id, user_id)
+    if not already_friends:
+        await ensure_friend_capacity(session, user_id)
+        # Sending an invitation no longer reserves a friend slot -- it is capped
+        # as outbound mail instead -- so the inviter can genuinely be full by the
+        # time this is redeemed. Degrade to reading rather than pushing them over
+        # their own limit, matching what a reusable link does.
+        if not await _inviter_has_room(session, invitation.inviter_id):
+            return InvitationAcceptResult(
+                status="view_only",
+                inviter_id=invitation.inviter_id,
+                post_id=invitation.post_id,
+                message="You can keep browsing — their friend list is full right now.",
+                became_friend=False,
+            )
+        await _ensure_accepted_connection(session, invitation.inviter_id, user_id)
     if invitation.post_id is not None:
         await _add_participant(session, invitation.post_id, user_id)
 
@@ -336,6 +360,14 @@ async def accept_invitation_for_user(
     invitation.accepted_user_id = user_id
     invitation.accepted_at = datetime.now(UTC)
     await session.flush()
+    if already_friends:
+        return InvitationAcceptResult(
+            status="already_friends",
+            inviter_id=invitation.inviter_id,
+            post_id=invitation.post_id,
+            message="You're already friends.",
+            became_friend=True,
+        )
     await _notify_new_friendship(session, invitation.inviter_id, user_id)
 
     return InvitationAcceptResult(
@@ -379,7 +411,7 @@ async def redeem_pending_invitations_for_email(
                 user_id,
                 add_friend=True,
             )
-            if result.status in ("accepted", "already_accepted"):
+            if result.status in ("accepted", "already_accepted", "already_friends"):
                 accepted += 1
         except HTTPException:
             continue

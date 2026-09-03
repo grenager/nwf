@@ -71,11 +71,12 @@ async def create_notification(
     elif kind in {
         NotificationKind.friend_request,
         NotificationKind.friend_accepted,
+        NotificationKind.friend_connected,
     }:
         stmt = stmt.on_conflict_do_update(
             index_elements=["recipient_id", "actor_id", "kind"],
             index_where=text(
-                "kind IN ('friend_request', 'friend_accepted')"
+                "kind IN ('friend_request', 'friend_accepted', 'friend_connected')"
             ),
             set_={"read_at": None, "created_at": now},
         )
