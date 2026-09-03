@@ -91,11 +91,11 @@ export function SharePostModal({
       // Cancelled — stay on the modal with the link still available.
       if (shareResult === "cancelled") return;
       if (shareResult === "failed") {
-        notify("Could not copy the message", "error");
+        notify("Could not copy the link", "error");
         return;
       }
       setCopied(true);
-      notify("Message copied — paste it anywhere", "success");
+      notify("Link copied — paste it anywhere", "success");
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Failed to create share link",
@@ -205,7 +205,7 @@ export function SharePostModal({
             ? "Preparing…"
             : canUseWebShare()
               ? "Share…"
-              : "Copy share message"}
+              : "Copy share link"}
         </button>
 
         {result?.invite_url ? (
