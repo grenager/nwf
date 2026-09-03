@@ -42,7 +42,16 @@ export async function shareOrCopyLink(payload: {
 }): Promise<ShareResult> {
   if (canUseWebShare()) {
     try {
-      await navigator.share(payload);
+      // An invite's text already ends with the link, and passing `url`
+      // alongside it makes the link appear twice in the composed message.
+      // The text is the richer of the two, so it wins and `url` is only
+      // handed over when it would add something.
+      const alreadyLinked: boolean = payload.text.includes(payload.url);
+      await navigator.share(
+        alreadyLinked
+          ? { title: payload.title, text: payload.text }
+          : payload,
+      );
       return "shared";
     } catch (err) {
       // Dismissing the tray is a deliberate no-op, not a failure.

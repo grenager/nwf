@@ -68,12 +68,26 @@ class Settings(BaseSettings):
 
     # --- Friend graph -----------------------------------------------------
     max_friends: int = Field(
-        default=50,
+        default=150,
         ge=1,
         description=(
-            "Friend slots per account, counting accepted friends plus the "
-            "requests and invitations they have outstanding. Keeps anyone from "
-            "using invitations to send bulk email."
+            "Friend slots per account: accepted friends plus friend requests "
+            "still awaiting an answer. Outstanding invitations are capped "
+            "separately by max_pending_invites, so inviting people can no "
+            "longer use up the room they are being invited into."
+        ),
+    )
+    # Split out of max_friends: the cap on outbound email exists to stop
+    # someone blasting invitations, which is a different concern from how
+    # many friends an account may hold. Counting them together punished
+    # exactly the people this app needs -- the ones actively inviting.
+    max_pending_invites: int = Field(
+        default=25,
+        ge=1,
+        description=(
+            "Unexpired, unanswered email invitations an account may have "
+            "outstanding at once. Keeps anyone from using invitations to "
+            "send bulk email."
         ),
     )
 

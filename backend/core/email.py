@@ -925,3 +925,154 @@ async def send_activity_email(
         to=content.to_email,
     )
     return True
+
+
+# --- Invite reach (your link was opened, nobody joined) -------------------
+
+
+@dataclass(frozen=True)
+class InviteReachEmailContent:
+    """Told to the inviter when a share link reached someone who didn't join."""
+
+    to_email: str
+    recipient_first: str | None
+    #: Opens, not people. One person opening a link three times counts three
+    #: times, so the copy must never say "people".
+    open_count: int
+    link_count: int
+    headline: str | None
+    action_url: str
+    unsubscribe_url: str
+    #: Matches where ``action_url`` actually goes — a standalone invite has no
+    #: conversation to send anyone back to.
+    cta_label: str = "See the conversation"
+
+
+def _reach_times(open_count: int) -> str:
+    """" 3 times", or nothing at all for a single open."""
+    return "" if open_count <= 1 else f" {open_count} times"
+
+
+def _reach_subject(content: InviteReachEmailContent) -> str:
+    subject: str = (
+        "Your invite links were" if content.link_count > 1 else "Your invite link was"
+    )
+    return f"{subject} opened{_reach_times(content.open_count)} — nobody joined yet"
+
+
+def _reach_lead(content: InviteReachEmailContent) -> str:
+    """One sentence stating exactly what was observed, and nothing more.
+
+    The link is the subject of the sentence, never a person: the counter
+    records opens, so one person clicking twice is indistinguishable from two
+    people, and "someone" would be a claim the data cannot support.
+    """
+    times: str = _reach_times(content.open_count)
+    if content.link_count > 1:
+        return (
+            f"Your {content.link_count} invite links were opened{times} between "
+            f"them, but nobody has joined yet."
+        )
+    what: str = (
+        f"Your link to “{content.headline}”"
+        if content.headline
+        else "Your invite link"
+    )
+    return f"{what} was opened{times}, but nobody has joined yet."
+
+
+_REACH_NUDGE = (
+    "Links get lost in a thread. A quick follow-up where you sent it tends "
+    "to work better than another invite."
+)
+
+
+def _reach_plain(content: InviteReachEmailContent) -> str:
+    greeting: str = f"Hi {content.recipient_first},\n\n" if content.recipient_first else ""
+    footer: str = _footer_text(unsubscribe_url=content.unsubscribe_url)
+    return (
+        f"{greeting}{_reach_lead(content)}\n\n{_REACH_NUDGE}\n\n"
+        f"{content.cta_label}: {content.action_url}\n\n{footer}\n"
+    )
+
+
+def _reach_html(content: InviteReachEmailContent) -> str:
+    url: str = html.escape(content.action_url, quote=True)
+    greeting: str = ""
+    if content.recipient_first:
+        greeting = (
+            f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+            f'sans-serif;font-size:14px;color:#52525b;margin:0 0 12px;">'
+            f"Hi {html.escape(content.recipient_first)},</p>"
+        )
+    return (
+        '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
+        f"{greeting}"
+        f'<p style="font-family:Georgia,serif;font-size:18px;line-height:1.5;'
+        f'color:#18181b;margin:0 0 12px;">{html.escape(_reach_lead(content))}</p>'
+        f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+        f'sans-serif;font-size:14px;line-height:1.6;color:#52525b;'
+        f'margin:0 0 20px;">{html.escape(_REACH_NUDGE)}</p>'
+        f'<p style="margin:24px 0 8px;">'
+        f'<a href="{url}" style="display:inline-block;background:#18181b;'
+        f'color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+        f'sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;'
+        f'text-transform:uppercase;text-decoration:none;padding:12px 20px;'
+        f'border-radius:4px;">{html.escape(content.cta_label)}</a></p>'
+        + _footer_html(
+            action_url=content.action_url,
+            unsubscribe_url=content.unsubscribe_url,
+        )
+        + "</div>"
+    )
+
+
+async def send_invite_reach_email(
+    content: InviteReachEmailContent,
+    *,
+    settings: Settings | None = None,
+) -> bool:
+    """Tell an inviter their share link was opened but converted nobody."""
+    cfg: Settings = settings or get_settings()
+    if not cfg.resend_api_key:
+        log.info(
+            "email.invite_reach.skip",
+            reason="no_resend_api_key",
+            to=content.to_email,
+        )
+        return False
+
+    payload: dict[str, object] = {
+        "from": cfg.email_from,
+        "to": [content.to_email],
+        "subject": _reach_subject(content),
+        "html": _reach_html(content),
+        "text": _reach_plain(content),
+        "headers": _unsubscribe_headers(content.unsubscribe_url),
+    }
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {cfg.resend_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        log.warning(
+            "email.invite_reach.failed", error=str(exc), to=content.to_email
+        )
+        return False
+
+    log.info(
+        "email.invite_reach.sent",
+        to=content.to_email,
+        opens=content.open_count,
+        links=content.link_count,
+    )
+    return True

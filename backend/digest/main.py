@@ -21,7 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import Settings, get_settings
 from core.db import dispose_engine, get_sessionmaker
-from core.email import DigestLineInput, digest_email_from_user_digest, send_digest_email
+from core.email import (
+    DigestLineInput,
+    InviteReachEmailContent,
+    digest_email_from_user_digest,
+    send_digest_email,
+    send_invite_reach_email,
+)
+from core.invite_reach import InviteReach, load_invite_reach, mark_reach_notified
 from core.logging import get_logger
 from core.models import Profile
 from digest.builder import UserDigest, build_user_digest
@@ -191,6 +198,70 @@ async def run_digest_cycle(
     log.info("digest.cycle_done", **counts)
 
 
+async def run_invite_reach_cycle(dry_run: bool = False) -> None:
+    """Tell inviters when a share link was opened but brought nobody in.
+
+    Rides along with the daily digest rather than running on its own
+    schedule: it is the same once-a-day, unprompted summary mail, and the
+    worker already holds a session here. Best effort throughout -- a failure
+    to send this note must never take the digest down with it.
+    """
+    settings = get_settings()
+    factory = get_sessionmaker()
+    sent: int = 0
+    async with factory() as session:
+        try:
+            reaches: list[InviteReach] = await load_invite_reach(session)
+        except SQLAlchemyError as exc:
+            log.warning("invite_reach.query_failed", error=str(exc))
+            return
+        if not reaches:
+            log.info("invite_reach.cycle_empty")
+            return
+        emails: dict[uuid.UUID, str] = await _load_emails(session)
+
+        for reach in reaches:
+            email: str | None = emails.get(reach.inviter_id)
+            profile: Profile | None = await session.get(Profile, reach.inviter_id)
+            if not email or profile is None:
+                continue
+            if dry_run:
+                log.info(
+                    "invite_reach.dry_run",
+                    inviter_id=str(reach.inviter_id),
+                    links=reach.link_count,
+                    opens=reach.open_count,
+                )
+                continue
+            content = InviteReachEmailContent(
+                to_email=email,
+                recipient_first=profile.first,
+                open_count=reach.open_count,
+                link_count=reach.link_count,
+                headline=reach.headline,
+                action_url=settings.app_url(
+                    f"/post/{reach.post_id}" if reach.post_id else "/friends"
+                ),
+                cta_label=(
+                    "See the conversation" if reach.post_id else "See your friends"
+                ),
+                unsubscribe_url=settings.app_url(
+                    f"/unsubscribe/{profile.unsubscribe_token}"
+                ),
+            )
+            delivered: bool = await send_invite_reach_email(
+                content, settings=settings
+            )
+            # Stamp on a real send only. Marking a failed send would burn the
+            # one follow-up this link ever gets.
+            if delivered:
+                await mark_reach_notified(session, reach.invitation_ids)
+                sent += 1
+        if sent:
+            await session.commit()
+    log.info("invite_reach.cycle_done", inviters=len(reaches), sent=sent)
+
+
 async def _scheduled_cycle() -> None:
     """Run one cycle, then hand the connections back.
 
@@ -202,6 +273,10 @@ async def _scheduled_cycle() -> None:
     """
     try:
         await run_digest_cycle()
+        try:
+            await run_invite_reach_cycle()
+        except Exception as exc:  # a nudge must never take the job down
+            log.error("invite_reach.cycle_failed", error=str(exc))
     finally:
         await dispose_engine()
 
@@ -253,6 +328,10 @@ async def _run_once(dry_run: bool, since_hours: int | None) -> None:
     )
     try:
         await run_digest_cycle(dry_run=dry_run, since_hours=since_hours)
+        try:
+            await run_invite_reach_cycle(dry_run=dry_run)
+        except Exception as exc:  # a nudge must never take the job down
+            log.error("invite_reach.cycle_failed", error=str(exc))
     finally:
         await dispose_engine()
 

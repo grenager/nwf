@@ -9,9 +9,6 @@ import { ModalShell } from "@/components/modal-shell";
 import { shareInviteLink } from "@/lib/invite-share";
 import { canUseWebShare } from "@/lib/share";
 
-const DEFAULT_SHARE_NOTE =
-  "I'm using NewsWithFriends to discuss articles privately with friends. I'd like to invite you to my private discussion about this article.";
-
 interface SharePostModalProps {
   postId: UUID;
   headline: string;
@@ -20,10 +17,6 @@ interface SharePostModalProps {
   sourceName: string | null;
   take: string | null;
   onClose: () => void;
-}
-
-function composeShareMessage(note: string, inviteUrl: string): string {
-  return `${note.trim()}\n${inviteUrl}`;
 }
 
 export function SharePostModal({
@@ -38,13 +31,16 @@ export function SharePostModal({
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const [becomeFriend, setBecomeFriend] = useState<boolean>(true);
-  const [shareNote, setShareNote] = useState<string>(DEFAULT_SHARE_NOTE);
+  // Deliberately empty. This box used to be prefilled with a pitch for the
+  // app, and a default nobody edits is what actually gets sent — so the
+  // typical share read as an ad rather than as a friend passing on a story.
+  // Left blank, the server falls back to the headline and the poster's take.
+  const [shareNote, setShareNote] = useState<string>("");
   const [sharing, setSharing] = useState<boolean>(false);
   const [result, setResult] = useState<InvitationCreateResult | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
   const trimmedNote: string = shareNote.trim();
-  const canShare: boolean = trimmedNote.length > 0;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -62,14 +58,14 @@ export function SharePostModal({
     return api.createInvitation({
       post_id: postId,
       become_friend: becomeFriend,
-      message: trimmedNote,
+      message: trimmedNote || null,
       email: null,
     });
   }
 
   async function share(): Promise<void> {
     if (!requireAuth("share this conversation")) return;
-    if (!canShare || sharing) return;
+    if (sharing) return;
     setSharing(true);
     setCopied(false);
     try {
@@ -81,13 +77,11 @@ export function SharePostModal({
         return;
       }
 
-      // The note must carry the URL: this same text is what lands on the
-      // clipboard when the share sheet isn't available, and a note without
-      // the link is useless.
-      const shareResult = await shareInviteLink(created, {
-        title: headline,
-        text: composeShareMessage(trimmedNote, url),
-      });
+      // The server composes the message — headline, then the note or the
+      // poster's take, then the link — so every share path produces the same
+      // text. It carries the URL because it is also what lands on the
+      // clipboard when the share sheet isn't available.
+      const shareResult = await shareInviteLink(created, { title: headline });
 
       if (shareResult === "shared") {
         notify("Shared", "success");
@@ -113,10 +107,10 @@ export function SharePostModal({
   }
 
   async function copyAgain(): Promise<void> {
-    if (!result?.invite_url || !canShare) return;
+    if (!result?.invite_url) return;
     try {
       await navigator.clipboard.writeText(
-        composeShareMessage(trimmedNote, result.invite_url),
+        result.share_message || result.invite_url,
       );
       setCopied(true);
       notify("Copied", "success");
@@ -176,14 +170,13 @@ export function SharePostModal({
 
         <label className="mb-4 block">
           <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            What do you want to say?
+            Add a note
           </span>
           <textarea
             value={shareNote}
             onChange={(e) => setShareNote(e.target.value)}
-            required
             rows={3}
-            placeholder="Add a short note for your friend…"
+            placeholder="Optional — why should they read it?"
             className="mt-2 w-full resize-none border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-100"
           />
         </label>
@@ -205,7 +198,7 @@ export function SharePostModal({
         <button
           type="button"
           onClick={() => void share()}
-          disabled={sharing || !canShare}
+          disabled={sharing}
           className="w-full bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
           {sharing
@@ -221,7 +214,6 @@ export function SharePostModal({
             <button
               type="button"
               onClick={() => void copyAgain()}
-              disabled={!canShare}
               className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 disabled:opacity-40 dark:text-emerald-400"
             >
               {copied ? "Copied!" : "Copy again"}
