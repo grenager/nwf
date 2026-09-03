@@ -1,5 +1,7 @@
 "use client";
 
+import { PersonLink } from "@/components/person-link";
+import type { UUID } from "@/lib/types";
 import { Fragment, type ReactNode } from "react";
 
 // Matches react-mentions markup `@[Display Name](user-uuid)`, or a bare URL.
@@ -35,8 +37,8 @@ function splitTrailingPunctuation(raw: string): { url: string; trailing: string 
 
 /**
  * Render post takes / comment bodies, turning `@[Name](uuid)` mention markup
- * into styled labels and bare URLs into clickable links, while leaving all
- * other text (and newlines) intact.
+ * into links to the mentioned person and bare URLs into clickable links, while
+ * leaving all other text (and newlines) intact.
  */
 export function MentionText({
   text,
@@ -62,16 +64,18 @@ export function MentionText({
     }
 
     const mentionDisplay = match[1];
+    const mentionUserId = match[2];
     const rawUrl = match[3];
 
-    if (mentionDisplay !== undefined) {
+    if (mentionDisplay !== undefined && mentionUserId !== undefined) {
       nodes.push(
-        <span
+        <PersonLink
           key={`m${key}`}
+          userId={mentionUserId as UUID}
           className="font-semibold text-zinc-900 dark:text-zinc-100"
         >
           @{mentionDisplay}
-        </span>,
+        </PersonLink>,
       );
       lastIndex = match.index + match[0].length;
     } else {
