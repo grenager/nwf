@@ -27,9 +27,12 @@ const GLYPHS: Record<ReactionKind, ReactNode> = {
   haha: (
     <>
       <circle cx="12" cy="12" r="9" />
-      <path d="M8 9.6c.55-1 1.65-1 2.2 0" />
-      <path d="M13.8 9.6c.55-1 1.65-1 2.2 0" />
-      <path d="M7.3 14.1c1.1 2.6 2.9 3.7 4.7 3.7s3.6-1.1 4.7-3.7" />
+      {/* Eyes squeezed shut, plus a wide open mouth with a tongue — the bits
+          that separate a laugh from a plain smile. */}
+      <path d="M7.5 10.9c.75-1.5 2.15-1.5 2.9 0" />
+      <path d="M13.6 10.9c.75-1.5 2.15-1.5 2.9 0" />
+      <path d="M7 13.4h10a5 5 0 0 1-10 0z" />
+      <path d="M10.4 17.5c.45 1 2.75 1 3.2 0" />
     </>
   ),
   wow: (
