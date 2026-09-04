@@ -322,6 +322,25 @@ export interface FeedCard {
   fof_reason: FofReason | null;
 }
 
+/**
+ * The one thing worth asking this member to do, if anything.
+ *
+ * Ordered by priority on the server: never having posted outranks a thin
+ * circle, which outranks a recent quiet spell.
+ */
+export type StandardsKind = "first_post" | "invite" | "share";
+
+export interface StandardsNudge {
+  kind: StandardsKind;
+  /**
+   * Friend count for "first_post" and "invite"; whole days since the last
+   * post for "share".
+   */
+  value: number;
+  /** A friend to name, so silence costs a person rather than a statistic. */
+  friend_name: string | null;
+}
+
 export interface FeedPayload {
   items: FeedCard[];
   caught_up_after: number;
@@ -329,6 +348,8 @@ export interface FeedPayload {
   aggregate_readers: number;
   aggregate_private_conversations: number;
   new_since: string | null;
+  /** Null when this member is doing exactly what the app wants. */
+  standards: StandardsNudge | null;
 }
 
 export interface ConversationItem {
@@ -406,6 +427,11 @@ export interface FriendSummary {
 
 export interface FriendsOverview {
   friends: FriendSummary[];
+  /**
+   * The viewer, described exactly as their friends are. Null when they have
+   * no friends, where there is nothing to compare against.
+   */
+  you: FriendSummary | null;
   total: number;
   online: number;
   /** Friends plus outstanding requests and invitations. */

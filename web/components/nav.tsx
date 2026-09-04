@@ -2,6 +2,7 @@
 
 import { AddStoryModal } from "@/components/add-story-modal";
 import { BrandLink } from "@/components/brand-mark";
+import { SearchIcon } from "@/components/search-icon";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
 import { ShareAfterPostModal } from "@/components/share-after-post-modal";
@@ -165,7 +166,10 @@ function IconFriends({
       aria-hidden
     >
       <circle cx="9" cy="8" r="3.25" />
-      <path d="M3.5 18.5c1-2.5 2.9-3.75 5.5-3.75s4.5 1.25 5.5 3.75" strokeLinecap="round" />
+      <path
+        d="M3.5 18.5c1-2.5 2.9-3.75 5.5-3.75s4.5 1.25 5.5 3.75"
+        strokeLinecap="round"
+      />
       <circle cx="17.25" cy="9.25" r="2.25" />
       <path d="M17 14.75c2 0 3.4.9 4.25 2.75" strokeLinecap="round" />
     </svg>
@@ -378,17 +382,7 @@ export function Nav() {
                   title="Search"
                   className="flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="h-4 w-4"
-                  >
-                    <circle cx="9" cy="9" r="6" />
-                    <path d="m14 14 4 4" strokeLinecap="round" />
-                  </svg>
+                  <SearchIcon className="h-5 w-5" />
                 </Link>
                 <Link
                   href="/profile"
@@ -415,8 +409,11 @@ export function Nav() {
 
       {/* Mobile bottom tab bar */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="edge-safe-x fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
+        style={{
+          paddingBottom:
+            "calc(env(safe-area-inset-bottom) + var(--tabbar-inset))",
+        }}
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 items-stretch">
           <Link

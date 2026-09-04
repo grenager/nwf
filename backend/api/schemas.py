@@ -434,6 +434,24 @@ class FeedCardOut(BaseModel):
     fof_reason: FofReasonOut | None = None
 
 
+class StandardsNudgeOut(BaseModel):
+    """The one thing worth asking this viewer to do, if anything.
+
+    ``kind`` is "first_post" when they have never posted at all, "invite"
+    when their circle is too thin for the feed to work, or "share" when they
+    have posted before but not lately -- in that priority order. Only ever
+    one at a time: a list of a member's shortcomings is not an ask.
+    """
+
+    kind: str
+    #: Friend count for "first_post" and "invite"; whole days since the last
+    #: post for "share".
+    value: int
+    #: A friend to name, so the cost of silence is a person rather than a
+    #: statistic. Null when there is nobody to name.
+    friend_name: str | None = None
+
+
 class FeedOut(BaseModel):
     """Unified feed payload."""
 
@@ -443,6 +461,7 @@ class FeedOut(BaseModel):
     aggregate_readers: int = 0
     aggregate_private_conversations: int = 0
     new_since: datetime | None = None
+    standards: StandardsNudgeOut | None = None
 
 
 class TakeMark(BaseModel):
@@ -482,6 +501,10 @@ class FriendSummaryOut(BaseModel):
 
 class FriendsOverviewOut(BaseModel):
     friends: list[FriendSummaryOut]
+    #: The viewer, described exactly as their friends are, so the sidebar can
+    #: show them their own standing without the app having to editorialise.
+    #: Null when they have no friends, where the comparison means nothing.
+    you: FriendSummaryOut | None = None
     total: int
     online: int
     # Friends plus outstanding requests/invitations, against the account cap.

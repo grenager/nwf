@@ -4,10 +4,50 @@
 
 :root {
   --font-sans: var(--font-libre-franklin), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-source-serif), ui-serif, Georgia, "Times New Roman",
-    serif;
+  --font-serif:
+    var(--font-source-serif), ui-serif, Georgia, "Times New Roman", serif;
   --rule: #d4d4d8;
   --rule-strong: #18181b;
+  /* Height of the sm+ sticky header: a 36px control row (h-9) inside py-3,
+     plus its bottom border. Anything that pins below the header offsets by
+     this; see components/standards-strip.tsx. */
+  --nav-h: 61px;
+
+  /* How much room the top of a phone screen still owes the notch. Declared
+     here rather than written as a var() fallback at each use: Tailwind
+     silently generates no CSS at all for an arbitrary value containing a
+     comma, so `pt-[calc(0.5rem+var(--top-inset,0px))]` compiles to nothing. */
+  --top-inset: env(safe-area-inset-top);
+
+  /* Extra room under the bottom tab bar. Zero in a browser tab, where Safari's
+     own chrome sits below the page. */
+  --tabbar-inset: 0px;
+}
+
+/* Pinned to the home screen there is no browser chrome, so the tab bar sits
+   against the physical bottom of the display. The safe-area inset clears the
+   home indicator but not the rounded corners of the screen, which cut into the
+   outermost tabs — the two at the far left and right. This buys them room. */
+@media (display-mode: standalone) {
+  :root {
+    --tabbar-inset: 0.625rem;
+  }
+}
+
+/* With `viewport-fit: cover` the page also extends under the notch in
+   landscape, so anything pinned to an edge has to keep clear of it itself.
+   Written here rather than as a utility because Tailwind generates no CSS at
+   all for an arbitrary value containing a comma, which `max(a, b)` needs. */
+.edge-safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Set by components/standards-strip.tsx for as long as a strip is on screen.
+   The strip sits above everything below `sm` and pads past the notch itself,
+   so <main> must not pad for it again. */
+html[data-strip] {
+  --top-inset: 0px;
 }
 
 html,
