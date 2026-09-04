@@ -4,43 +4,35 @@ import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { shareInviteLink } from "@/lib/invite-share";
+import { useStandardsValue } from "@/components/standards-context";
 import { useStandards } from "@/lib/use-standards";
-import type {
-  InvitationCreateResult,
-  Profile,
-  StandardsNudge,
-} from "@/lib/types";
+import type { InvitationCreateResult } from "@/lib/types";
 import { useState } from "react";
 
 /**
  * A single line pinned to the top of the feed, for the two asks a composer
  * cannot answer: too few friends, and an unpinned home screen.
  *
- * Inverted rather than coloured. The app has no accent hue at all — the
- * Tailwind config says so outright, and the whole thing reads as ink on paper
- * — so a coloured bar would be the only colour in the product and would land
- * as a cookie banner or an error. Black on white flips to white on black and
- * gets the same salience while still looking like it belongs.
+ * This is the one coloured thing in an otherwise monochrome product, and the
+ * colour is a warm newspaper red rather than a UI red — the point is to be
+ * unmissable, not to imply something has gone wrong. Because it is the only
+ * accent, it stays loud; spend the same colour on a second element and this
+ * one goes quiet.
  *
- * It stays one line at every width. Anything taller stops being a rule across
- * the top of the page and becomes another box to scroll past, which is the
- * thing this replaced.
+ * It runs the full width of the window and stays one line at every size.
+ * Anything taller stops being a rule across the top of the page and becomes
+ * another box to scroll past, which is the thing this replaced.
  */
-export function StandardsStrip({
-  me,
-  nudge,
-}: {
-  me: Profile | null;
-  nudge: StandardsNudge | null;
-}) {
+export function StandardsStrip() {
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
   const [inviting, setInviting] = useState<boolean>(false);
+  const published = useStandardsValue();
   const {
     kind,
     nudge: shown,
     dismiss,
-  } = useStandards(nudge, me?.is_admin === true);
+  } = useStandards(published?.nudge ?? null, published?.me?.is_admin === true);
 
   if (kind !== "invite" && kind !== "pin") return null;
 
@@ -75,13 +67,17 @@ export function StandardsStrip({
       // Below `sm` the nav is a bottom bar, so the top of the viewport is
       // free; from `sm` a sticky header occupies it; at `lg` the main column
       // becomes its own scroll container and the offset resets to zero.
-      className="sticky top-0 z-30 -mx-3 bg-zinc-900 text-white sm:top-[var(--nav-h)] lg:top-0 sm:mx-0 dark:bg-zinc-100 dark:text-zinc-900"
+      className="sticky top-0 z-30 bg-masthead text-white sm:top-[var(--nav-h)] lg:top-0 dark:bg-masthead-dark"
     >
-      <div className="flex items-center gap-3 px-4 py-2">
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 lg:px-8">
         {/* Only the message may be clipped. The action sits outside it as its
             own flex child, because a strip that truncates away the one thing
             it is asking you to do is worse than no strip. */}
-        <p className="min-w-0 flex-1 truncate text-xs sm:text-sm">
+        {/* No `flex-1`: the sentence takes its natural width so the action
+            sits right beside it instead of drifting to the far edge of a wide
+            window, and `min-w-0` still lets it shrink and clip once the row
+            actually overflows on a phone. */}
+        <p className="min-w-0 truncate text-xs sm:text-sm">
           {kind === "invite" ? (
             <>
               {/* The reason a thin circle matters does not fit beside the
@@ -115,7 +111,7 @@ export function StandardsStrip({
           type="button"
           onClick={dismiss}
           aria-label="Dismiss"
-          className="shrink-0 px-1 text-xs leading-none opacity-70 transition hover:opacity-100"
+          className="ml-auto shrink-0 px-1 text-xs leading-none opacity-70 transition hover:opacity-100"
         >
           ✕
         </button>

@@ -6,7 +6,7 @@ import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
 import { FeedComposer } from "@/components/feed-composer";
 import { FeedSkeleton } from "@/components/skeleton";
-import { StandardsStrip } from "@/components/standards-strip";
+import { usePublishStandards } from "@/components/standards-context";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
@@ -71,6 +71,8 @@ export function FeedClient() {
     },
     [isSignedIn, notify],
   );
+
+  usePublishStandards(data?.standards ?? null, me);
 
   useEffect(() => {
     if (authLoading) return;
@@ -190,7 +192,6 @@ export function FeedClient() {
         <>
           {/* First in the column so it is already pinned on load, rather
               than sliding up into place on the first scroll. */}
-          <StandardsStrip me={me} nudge={data?.standards ?? null} />
           {/* Composer above search: the two are both bordered fields with
               grey placeholder text, and stacked the other way round they read
               as a pair of search boxes. */}
