@@ -192,15 +192,18 @@ export function FeedClient() {
         <>
           {/* First in the column so it is already pinned on load, rather
               than sliding up into place on the first scroll. */}
-          {/* Composer above search: the two are both bordered fields with
-              grey placeholder text, and stacked the other way round they read
-              as a pair of search boxes. */}
+          {/* Search first, and not for visual reasons: below `sm` the bar is
+              fixed to the top of the screen and reserves its own height with
+              a spacer, so anything rendered above that spacer ends up
+              underneath the bar. Above `sm` it renders nothing at all —
+              search lives in the nav there — so the composer leads the column
+              on desktop regardless. */}
+          <FeedSearchBar />
           <FeedComposer
             me={me}
             nudge={data?.standards ?? null}
             onPosted={() => void load({ silent: true })}
           />
-          <FeedSearchBar />
         </>
       ) : null}
 

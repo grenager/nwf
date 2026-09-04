@@ -4,14 +4,31 @@
 
 :root {
   --font-sans: var(--font-libre-franklin), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-source-serif), ui-serif, Georgia, "Times New Roman",
-    serif;
+  --font-serif:
+    var(--font-source-serif), ui-serif, Georgia, "Times New Roman", serif;
   --rule: #d4d4d8;
   --rule-strong: #18181b;
   /* Height of the sm+ sticky header: a 36px control row (h-9) inside py-3,
      plus its bottom border. Anything that pins below the header offsets by
      this; see components/standards-strip.tsx. */
   --nav-h: 61px;
+
+  /* Top chrome below `sm`, where the expectation strip and the feed's search
+     bar both want the top of the screen. Defaulted here rather than written
+     as var() fallbacks at each use: Tailwind silently generates no CSS at all
+     for an arbitrary value containing a comma, so `h-[var(--strip-h,0px)]`
+     compiles to nothing. */
+  --strip-h: 0px;
+  --top-inset: env(safe-area-inset-top);
+}
+
+/* Set by components/standards-strip.tsx for as long as a strip is on screen.
+   The height is declared, not measured: the strip is one line at every width
+   by design, so `py-2` around `text-xs` is 2rem and stays 2rem. If that
+   padding changes, change it here too — the two are a pair. */
+html[data-strip] {
+  --strip-h: calc(2rem + env(safe-area-inset-top));
+  --top-inset: 0px;
 }
 
 html,

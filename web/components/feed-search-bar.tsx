@@ -47,18 +47,26 @@ export function FeedSearchBar() {
   return (
     <>
       {/* Keeps the first post clear of the fixed bar above it. */}
-      <div className="h-10 sm:hidden" aria-hidden />
+      <div className="h-[3.25rem] sm:hidden" aria-hidden />
       <div
-        className={`fixed inset-x-0 top-0 z-30 bg-white px-3 pb-1.5 shadow-[0_1px_6px_rgba(0,0,0,0.07)] transition-transform duration-200 sm:hidden dark:bg-zinc-950 dark:shadow-[0_1px_6px_rgba(0,0,0,0.6)] ${
+        // Sits below the standing-expectation strip when there is one; both
+        // are fixed to the top of a phone screen, and `--strip-h` is the
+        // height that strip measured for itself.
+        className={`fixed inset-x-0 top-[var(--strip-h)] z-30 bg-white px-3 pb-1.5 shadow-[0_1px_6px_rgba(0,0,0,0.07)] transition-transform duration-200 sm:hidden dark:bg-zinc-950 dark:shadow-[0_1px_6px_rgba(0,0,0,0.6)] ${
           // Overshoot far enough that the soft shadow under the bar clears
           // the top edge too — otherwise it lingers as a grey smudge.
           hidden ? "-translate-y-[calc(100%+12px)]" : "translate-y-0"
         }`}
-        style={{ paddingTop: "calc(0.375rem + env(safe-area-inset-top))" }}
+        // Only clears the notch itself when nothing above it already has.
+        style={{
+          paddingTop: "calc(0.375rem + var(--top-inset))",
+        }}
       >
         <Link
           href="/search"
-          className="flex w-full items-center gap-2 bg-zinc-100 px-3 py-1.5 text-[13px] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400"
+          // 13px in a 26px-tall pill was too small to read and too small to
+          // hit; this clears the 44px touch-target minimum.
+          className="flex min-h-11 w-full items-center gap-2 bg-zinc-100 px-3 py-2.5 text-[15px] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -66,7 +74,7 @@ export function FeedSearchBar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="1.75"
-            className="h-4 w-4 shrink-0"
+            className="h-[1.15rem] w-[1.15rem] shrink-0"
             aria-hidden
           >
             <circle cx="10.5" cy="10.5" r="6.5" />

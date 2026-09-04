@@ -33,7 +33,7 @@ export default async function AppLayout({
             lg scroll container so it simply never moves there. */}
           <StandardsStrip />
           <div className="mx-auto flex w-full min-h-0 max-w-7xl flex-1 gap-0 px-4 max-sm:px-0 lg:px-8">
-            <main className="min-h-0 min-w-0 flex-1 pb-6 pt-2 max-sm:px-3 max-sm:pb-[calc(4.5rem+env(safe-area-inset-bottom))] max-sm:pt-[calc(0.5rem+env(safe-area-inset-top))] lg:overflow-x-hidden lg:overflow-y-auto">
+            <main className="min-h-0 min-w-0 flex-1 pb-6 pt-2 max-sm:px-3 max-sm:pb-[calc(4.5rem+env(safe-area-inset-bottom))] max-sm:pt-[calc(0.5rem+var(--top-inset))] lg:overflow-x-hidden lg:overflow-y-auto">
               {children}
             </main>
             <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-zinc-200 py-6 pl-8 lg:block dark:border-zinc-800">
