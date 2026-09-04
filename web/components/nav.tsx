@@ -409,8 +409,11 @@ export function Nav() {
 
       {/* Mobile bottom tab bar */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="edge-safe-x fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur sm:hidden dark:border-zinc-800 dark:bg-zinc-950/95"
+        style={{
+          paddingBottom:
+            "calc(env(safe-area-inset-bottom) + var(--tabbar-inset))",
+        }}
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 items-stretch">
           <Link
