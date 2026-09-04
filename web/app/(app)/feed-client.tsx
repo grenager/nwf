@@ -1,10 +1,11 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
-import { FeedSearchBar } from "@/components/feed-search-bar";
 import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
+import { FeedComposer } from "@/components/feed-composer";
 import { FeedSkeleton } from "@/components/skeleton";
+import { usePublishStandards } from "@/components/standards-context";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
@@ -42,7 +43,10 @@ export function FeedClient() {
       setMe(null);
       return;
     }
-    void api.getMe().then(setMe).catch(() => undefined);
+    void api
+      .getMe()
+      .then(setMe)
+      .catch(() => undefined);
   }, [isSignedIn]);
 
   const load = useCallback(
@@ -66,6 +70,8 @@ export function FeedClient() {
     },
     [isSignedIn, notify],
   );
+
+  usePublishStandards(data?.standards ?? null, me, data !== null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -115,6 +121,7 @@ export function FeedClient() {
             aggregate_readers: 0,
             aggregate_private_conversations: 0,
             new_since: null,
+            standards: null,
           };
         }
         const withoutDup: FeedCard[] = prev.items.filter(
@@ -122,13 +129,19 @@ export function FeedClient() {
         );
         return {
           ...prev,
+          // They just posted, so any ask about posting is answered — don't
+          // leave the ribbon standing until the next full fetch. The invite
+          // ask survives: posting doesn't widen anyone's circle.
+          standards:
+            prev.standards !== null && prev.standards.kind !== "invite"
+              ? null
+              : prev.standards,
           items: [card, ...withoutDup],
         };
       });
     }
     window.addEventListener("nwf:post-created", onPostCreated);
-    return () =>
-      window.removeEventListener("nwf:post-created", onPostCreated);
+    return () => window.removeEventListener("nwf:post-created", onPostCreated);
   }, [load]);
 
   // Coming back after a long break, the feed on screen is stale — pull the
@@ -174,7 +187,17 @@ export function FeedClient() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
-      {isSignedIn ? <FeedSearchBar /> : null}
+      {isSignedIn ? (
+        <>
+          {/* First in the column so it is already pinned on load, rather
+              than sliding up into place on the first scroll. */}
+          <FeedComposer
+            me={me}
+            nudge={data?.standards ?? null}
+            onPosted={() => void load({ silent: true })}
+          />
+        </>
+      ) : null}
 
       {!isSignedIn && postItems.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center">
@@ -192,8 +215,13 @@ export function FeedClient() {
 
       {isSignedIn && postItems.length === 0 ? (
         <div className="border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
-          No posts yet. Share an article with the Add button to start a
-          conversation.
+          {/* The ribbon directly above already makes the ask; repeating it
+              here would say the same thing twice in two inches. */}
+          {data?.standards ? (
+            <>Nothing here yet — your friends haven&apos;t posted.</>
+          ) : (
+            <>No posts yet. Share an article to start a conversation.</>
+          )}
           {data && data.aggregate_private_conversations > 0 ? (
             <p className="mt-2 text-xs">
               {data.aggregate_private_conversations} private conversations
@@ -213,7 +241,9 @@ export function FeedClient() {
             data?.new_since !== null &&
             data?.new_since !== undefined;
           const showSuggestions: boolean =
-            isSignedIn && !suggestionsAtTop && index === SUGGESTIONS_AFTER_POSTS;
+            isSignedIn &&
+            !suggestionsAtTop &&
+            index === SUGGESTIONS_AFTER_POSTS;
           // The strip carries its own top border, so a second one here would
           // double up.
           const showTopBorder: boolean =

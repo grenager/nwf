@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchIcon } from "@/components/search-icon";
 import { StoryCard } from "@/components/story-card";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -77,14 +78,21 @@ function SearchInner() {
         Search
       </h1>
       <div className="sticky top-0 z-10 bg-white pb-3 dark:bg-slate-950">
-        <input
-          type="search"
-          autoFocus
-          value={query}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Search posts from you and your friends…"
-          className="w-full border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        />
+        {/* The magnifier is the thing tapped to get here, so it is the thing
+            that should still be on screen once you arrive. */}
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+            <SearchIcon className="h-5 w-5" />
+          </span>
+          <input
+            type="search"
+            autoFocus
+            value={query}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search posts from you and your friends…"
+            className="w-full border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-[15px] text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </div>
       </div>
 
       {loading ? (

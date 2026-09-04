@@ -42,9 +42,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string, kind: ToastKind = "info", action?: ToastAction) => {
       const id: number = Date.now() + Math.random();
       setToasts((prev) => [...prev, { id, kind, message, action }]);
-      window.setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, action ? 6000 : 4000);
+      window.setTimeout(
+        () => {
+          setToasts((prev) => prev.filter((t) => t.id !== id));
+        },
+        action ? 6000 : 4000,
+      );
     },
     [],
   );
@@ -54,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-end gap-2 max-sm:bottom-[calc(4.5rem+env(safe-area-inset-bottom)+1rem)] sm:inset-x-auto sm:right-4 sm:max-w-sm">
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-end gap-2 max-sm:bottom-[calc(4.5rem+env(safe-area-inset-bottom)+var(--tabbar-inset)+1rem)] sm:inset-x-auto sm:right-4 sm:max-w-sm">
         {toasts.map((t) => (
           <div
             key={t.id}
