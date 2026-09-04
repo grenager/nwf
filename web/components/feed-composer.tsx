@@ -3,8 +3,10 @@
 import { AddStoryModal } from "@/components/add-story-modal";
 import { useAuthGate } from "@/components/auth-gate";
 import { Avatar } from "@/components/avatar";
+import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { useStandards } from "@/lib/use-standards";
-import type { Profile, StandardsNudge } from "@/lib/types";
+import type { Post, Profile, StandardsNudge, UUID } from "@/lib/types";
+import Link from "next/link";
 import { useState } from "react";
 
 /**
@@ -20,6 +22,13 @@ import { useState } from "react";
  * The expectation itself survives as one quiet line underneath, and only for
  * the people it applies to. Someone who posts regularly sees a composer and
  * nothing else.
+ *
+ * Below `sm` this row also carries search, as a trailing icon. Search had a
+ * band of its own, which is a thing no comparable app does — Facebook,
+ * LinkedIn and Instagram all give it an icon in a row that already exists,
+ * because a dedicated bar costs 56px of the first screen for something used
+ * a fraction of the time. NWF has no top header on a phone, so this is that
+ * row. Above `sm` the nav header carries search and the icon is hidden.
  */
 export function FeedComposer({
   me,
@@ -32,6 +41,7 @@ export function FeedComposer({
 }) {
   const { requireAuth } = useAuthGate();
   const [open, setOpen] = useState<boolean>(false);
+  const [sharePostId, setSharePostId] = useState<UUID | null>(null);
   const { kind, nudge: shown } = useStandards(nudge, me?.is_admin === true);
 
   // Only the two asks about posting belong here; a thin circle or an unpinned
@@ -65,13 +75,36 @@ export function FeedComposer({
             imageUrl={me?.image_url ?? null}
             size="lg"
           />
+          {/* No box around the field. An outlined control here, under a
+              filled search pill, under a coloured strip, put three different
+              surfaces in the first 135px of the screen; grey text on the page
+              is what every app this borrows from actually does. */}
           <button
             type="button"
             onClick={openComposer}
-            className="min-w-0 flex-1 border border-zinc-300 px-3 py-2.5 text-left text-sm text-zinc-500 transition hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:border-zinc-600 dark:hover:bg-zinc-900"
+            className="min-h-11 min-w-0 flex-1 text-left text-[15px] text-zinc-500 transition hover:text-zinc-700 dark:hover:text-zinc-300"
           >
             {placeholder}
           </button>
+          <Link
+            href="/search"
+            aria-label="Search posts"
+            title="Search posts"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-zinc-400 transition hover:text-zinc-700 sm:hidden dark:hover:text-zinc-200"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              className="h-[1.15rem] w-[1.15rem]"
+              aria-hidden
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m15.5 15.5 4.5 4.5" strokeLinecap="round" />
+            </svg>
+          </Link>
         </div>
         {expectation !== null ? (
           <p className="mt-2 pl-[3.25rem] text-xs text-zinc-500">
@@ -83,10 +116,25 @@ export function FeedComposer({
       {open ? (
         <AddStoryModal
           onClose={() => setOpen(false)}
-          onAdded={() => {
+          onAdded={(post: Post) => {
+            // Same path as the nav's post button: the event drives the feed's
+            // optimistic insert, and the share step is the point of posting.
+            // Without both, which route you took changed what happened next.
             setOpen(false);
+            window.dispatchEvent(
+              new CustomEvent("nwf:post-created", { detail: post }),
+            );
+            setSharePostId(post.id);
             onPosted?.();
           }}
+        />
+      ) : null}
+
+      {sharePostId !== null ? (
+        <ShareAfterPostModal
+          postId={sharePostId}
+          kind="post"
+          onClose={() => setSharePostId(null)}
         />
       ) : null}
     </>

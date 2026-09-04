@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
-import { FeedSearchBar } from "@/components/feed-search-bar";
 import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
 import { FeedComposer } from "@/components/feed-composer";
@@ -192,13 +191,6 @@ export function FeedClient() {
         <>
           {/* First in the column so it is already pinned on load, rather
               than sliding up into place on the first scroll. */}
-          {/* Search first, and not for visual reasons: below `sm` the bar is
-              fixed to the top of the screen and reserves its own height with
-              a spacer, so anything rendered above that spacer ends up
-              underneath the bar. Above `sm` it renders nothing at all —
-              search lives in the nav there — so the composer leads the column
-              on desktop regardless. */}
-          <FeedSearchBar />
           <FeedComposer
             me={me}
             nudge={data?.standards ?? null}
@@ -228,10 +220,7 @@ export function FeedClient() {
           {data?.standards ? (
             <>Nothing here yet — your friends haven&apos;t posted.</>
           ) : (
-            <>
-              No posts yet. Share an article with the Add button to start a
-              conversation.
-            </>
+            <>No posts yet. Share an article to start a conversation.</>
           )}
           {data && data.aggregate_private_conversations > 0 ? (
             <p className="mt-2 text-xs">

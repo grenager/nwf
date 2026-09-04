@@ -13,21 +13,17 @@
      this; see components/standards-strip.tsx. */
   --nav-h: 61px;
 
-  /* Top chrome below `sm`, where the expectation strip and the feed's search
-     bar both want the top of the screen. Defaulted here rather than written
-     as var() fallbacks at each use: Tailwind silently generates no CSS at all
-     for an arbitrary value containing a comma, so `h-[var(--strip-h,0px)]`
-     compiles to nothing. */
-  --strip-h: 0px;
+  /* How much room the top of a phone screen still owes the notch. Declared
+     here rather than written as a var() fallback at each use: Tailwind
+     silently generates no CSS at all for an arbitrary value containing a
+     comma, so `pt-[calc(0.5rem+var(--top-inset,0px))]` compiles to nothing. */
   --top-inset: env(safe-area-inset-top);
 }
 
 /* Set by components/standards-strip.tsx for as long as a strip is on screen.
-   The height is declared, not measured: the strip is one line at every width
-   by design, so `py-2` around `text-xs` is 2rem and stays 2rem. If that
-   padding changes, change it here too — the two are a pair. */
+   The strip sits above everything below `sm` and pads past the notch itself,
+   so <main> must not pad for it again. */
 html[data-strip] {
-  --strip-h: calc(2rem + env(safe-area-inset-top));
   --top-inset: 0px;
 }
 

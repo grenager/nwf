@@ -10,14 +10,13 @@ import type { InvitationCreateResult } from "@/lib/types";
 import { useEffect, useState } from "react";
 
 /**
- * Tells the rest of the top chrome that the strip is there.
+ * Tells the layout that the strip is clearing the notch, so nothing below it
+ * pads for the notch a second time.
  *
- * Below `sm` the strip is fixed, because the search bar above the feed is
- * fixed too and one of them has to win the top of the screen. The offset the
- * search bar needs is declared in globals.css rather than measured here: the
- * strip is one line at every width by design, so its height is a constant,
- * and a ResizeObserver to rediscover that on every render was machinery
- * standing in for a number that does not change.
+ * This is all that is left of a larger coordination that existed only because
+ * a second element was also fixed to the top of a phone screen. With that
+ * gone the strip is a plain sticky element and needs no measuring, no spacer
+ * and no height to publish.
  */
 function useStripPresence(showing: boolean): void {
   useEffect(() => {
@@ -86,70 +85,64 @@ export function StandardsStrip() {
   }
 
   return (
-    <>
-      {/* Below `sm` the strip is fixed, so the flow needs its height handed
-          back or the feed starts underneath it. */}
-      <div className="h-[var(--strip-h)] sm:hidden" aria-hidden />
-      <div
-        // Below `sm` the nav is a bottom bar and the feed's search bar is
-        // itself fixed to the top, so the strip is fixed too and sits a layer
-        // above it — sharing `top-0` at the same z-index just hid the strip.
-        // From `sm` a sticky header occupies the top; at `lg` the main column
-        // becomes its own scroll container and the offset resets to zero.
-        className="fixed inset-x-0 top-0 z-40 bg-masthead text-white sm:sticky sm:top-[var(--nav-h)] sm:z-30 lg:top-0 dark:bg-masthead-dark"
-        // The strip is the topmost thing on a phone, so it is the thing that
-        // has to clear the notch.
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
-      >
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 lg:px-8">
-          {/* Only the message may be clipped. The action sits outside it as its
+    <div
+      // Below `sm` the nav is a bottom bar, so the top of the viewport is
+      // free and plain sticky is enough. From `sm` a sticky header occupies
+      // it; at `lg` the main column becomes its own scroll container and the
+      // offset resets to zero.
+      className="sticky top-0 z-30 bg-masthead text-white sm:top-[var(--nav-h)] lg:top-0 dark:bg-masthead-dark"
+      // The strip is the topmost thing on a phone, so it is the thing that
+      // has to clear the notch.
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 lg:px-8">
+        {/* Only the message may be clipped. The action sits outside it as its
             own flex child, because a strip that truncates away the one thing
             it is asking you to do is worse than no strip. */}
-          {/* No `flex-1`: the sentence takes its natural width so the action
+        {/* No `flex-1`: the sentence takes its natural width so the action
             sits right beside it instead of drifting to the far edge of a wide
             window, and `min-w-0` still lets it shrink and clip once the row
             actually overflows on a phone. */}
-          <p className="min-w-0 truncate text-xs sm:text-sm">
-            {kind === "invite" ? (
-              <>
-                {/* The reason a thin circle matters does not fit beside the
+        <p className="min-w-0 truncate text-xs sm:text-sm">
+          {kind === "invite" ? (
+            <>
+              {/* The reason a thin circle matters does not fit beside the
                   action on a phone, and half a sentence followed by an
                   ellipsis reads worse than a short one that finishes. */}
-                <span className="sm:hidden">
-                  {shortInviteLine(shown?.value ?? 0)}
-                </span>
-                <span className="hidden sm:inline">
-                  {inviteLine(shown?.value ?? 0)}
-                </span>
-              </>
-            ) : (
-              <>
-                Tap <ShareGlyph /> then{" "}
-                <span className="font-semibold">Add to Home Screen</span>.
-              </>
-            )}
-          </p>
-          {kind === "invite" ? (
-            <button
-              type="button"
-              onClick={() => void invite()}
-              disabled={inviting}
-              className="shrink-0 text-xs font-semibold underline underline-offset-2 disabled:opacity-60 sm:text-sm"
-            >
-              {inviting ? "Creating…" : "Invite someone"}
-            </button>
-          ) : null}
+              <span className="sm:hidden">
+                {shortInviteLine(shown?.value ?? 0)}
+              </span>
+              <span className="hidden sm:inline">
+                {inviteLine(shown?.value ?? 0)}
+              </span>
+            </>
+          ) : (
+            <>
+              Tap <ShareGlyph /> then{" "}
+              <span className="font-semibold">Add to Home Screen</span>.
+            </>
+          )}
+        </p>
+        {kind === "invite" ? (
           <button
             type="button"
-            onClick={dismiss}
-            aria-label="Dismiss"
-            className="ml-auto shrink-0 px-1 text-xs leading-none opacity-70 transition hover:opacity-100"
+            onClick={() => void invite()}
+            disabled={inviting}
+            className="shrink-0 text-xs font-semibold underline underline-offset-2 disabled:opacity-60 sm:text-sm"
           >
-            ✕
+            {inviting ? "Creating…" : "Invite someone"}
           </button>
-        </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Dismiss"
+          className="ml-auto shrink-0 px-1 text-xs leading-none opacity-70 transition hover:opacity-100"
+        >
+          ✕
+        </button>
       </div>
-    </>
+    </div>
   );
 }
 
