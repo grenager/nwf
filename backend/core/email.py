@@ -602,9 +602,10 @@ def _friend_notice_html(content: FriendNoticeEmailContent) -> str:
     if content.actor_image_url:
         img: str = html.escape(content.actor_image_url, quote=True)
         avatar_block = (
-            f'<img src="{img}" alt="" width="56" height="56" '
+            f'<img src="{img}" alt="" width="56" height="56" border="0" '
             f'style="width:56px;height:56px;border-radius:999px;object-fit:cover;'
-            f'display:block;margin:0 0 16px;background:#e4e4e7;" />'
+            f'display:block;margin:0 0 16px;background:#e4e4e7;border:0;'
+            f'outline:none;text-decoration:none;" />'
         )
 
     return (
@@ -765,16 +766,17 @@ def _activity_plain(content: ActivityEmailContent) -> str:
 
 
 def _activity_article_card_html(content: ActivityEmailContent) -> str:
-    """Article tile matching digest styling."""
+    """Article tile matching digest styling, wrapped as one clickable block."""
     if not (content.headline or content.story_image_url):
         return ""
+    href: str = html.escape(content.action_url, quote=True)
     image_block: str = ""
     if content.story_image_url:
         img: str = html.escape(content.story_image_url, quote=True)
         image_block = (
-            f'<img src="{img}" alt="" width="100%" '
+            f'<img src="{img}" alt="" width="100%" border="0" '
             f'style="width:100%;max-height:180px;object-fit:cover;display:block;'
-            f'background:#f4f4f5;" />'
+            f'background:#f4f4f5;border:0;outline:none;text-decoration:none;" />'
         )
     source_block: str = ""
     if content.source_label:
@@ -792,11 +794,12 @@ def _activity_article_card_html(content: ActivityEmailContent) -> str:
             f'color:#18181b;line-height:1.3;">{headline}</div>'
         )
     return (
-        f'<div style="border:1px solid #e4e4e7;border-radius:8px;overflow:hidden;'
-        f'background:#fff;margin:0 0 16px;">'
+        f'<a href="{href}" style="display:block;text-decoration:none;'
+        f'color:inherit;border:1px solid #e4e4e7;border-radius:8px;'
+        f'overflow:hidden;background:#fff;margin:0 0 16px;">'
         f"{image_block}"
         f'<div style="padding:12px 14px;">{source_block}{headline_block}</div>'
-        f"</div>"
+        f"</a>"
     )
 
 
@@ -824,19 +827,22 @@ def _activity_html(content: ActivityEmailContent) -> str:
     if content.actor_image_url:
         img: str = html.escape(content.actor_image_url, quote=True)
         avatar_block = (
-            f'<img src="{img}" alt="" width="56" height="56" '
+            f'<img src="{img}" alt="" width="56" height="56" border="0" '
             f'style="width:56px;height:56px;border-radius:999px;object-fit:cover;'
-            f'display:block;margin:0 0 16px;background:#e4e4e7;" />'
+            f'display:block;margin:0 0 16px;background:#e4e4e7;border:0;'
+            f'outline:none;text-decoration:none;" />'
         )
 
     excerpt_block: str = ""
     if content.excerpt:
         excerpt: str = html.escape(content.excerpt)
         excerpt_block = (
-            f'<p style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
+            f'<a href="{url}" style="display:block;text-decoration:none;'
+            f'color:inherit;">'
+            f'<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,'
             f'sans-serif;font-size:15px;line-height:1.5;color:#3f3f46;margin:0 0 16px;'
             f'padding:12px 14px;background:#fafafa;border-left:3px solid #18181b;">'
-            f'<strong>{actor}</strong>: “{excerpt}”</p>'
+            f'<strong>{actor}</strong>: “{excerpt}”</div></a>'
         )
 
     pending_block: str = ""
@@ -850,9 +856,12 @@ def _activity_html(content: ActivityEmailContent) -> str:
 
     return (
         '<div style="max-width:520px;margin:0 auto;padding:24px 16px;">'
+        f'<a href="{url}" style="display:block;text-decoration:none;'
+        f'color:inherit;">'
         f"{avatar_block}"
-        f'<p style="font-family:Georgia,serif;font-size:18px;line-height:1.5;'
-        f'color:#18181b;margin:0 0 16px;">{lead}</p>'
+        f'<div style="font-family:Georgia,serif;font-size:18px;line-height:1.5;'
+        f'color:#18181b;margin:0 0 16px;">{lead}</div>'
+        f"</a>"
         f"{_activity_article_card_html(content)}"
         f"{excerpt_block}"
         f"{pending_block}"
