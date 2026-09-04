@@ -53,7 +53,11 @@ export function StandardsStrip() {
     nudge: shown,
     dismiss,
   } = useStandards(published?.nudge ?? null, published?.me?.is_admin === true);
-  const showing: boolean = kind === "invite" || kind === "pin";
+  // Nothing published means nobody has worked out what to ask yet — a page
+  // that never publishes, or a feed still in flight. Neither is the same as
+  // having nothing to ask, so no strip is drawn on a guess.
+  const showing: boolean =
+    published !== null && (kind === "invite" || kind === "pin");
   useStripPresence(showing);
 
   if (!showing) return null;

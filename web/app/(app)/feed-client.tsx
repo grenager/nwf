@@ -71,7 +71,7 @@ export function FeedClient() {
     [isSignedIn, notify],
   );
 
-  usePublishStandards(data?.standards ?? null, me);
+  usePublishStandards(data?.standards ?? null, me, data !== null);
 
   useEffect(() => {
     if (authLoading) return;
