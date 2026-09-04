@@ -3,6 +3,7 @@
 import { AddStoryModal } from "@/components/add-story-modal";
 import { useAuthGate } from "@/components/auth-gate";
 import { Avatar } from "@/components/avatar";
+import { SearchIcon } from "@/components/search-icon";
 import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { useStandards } from "@/lib/use-standards";
 import type { Post, Profile, StandardsNudge, UUID } from "@/lib/types";
@@ -90,20 +91,9 @@ export function FeedComposer({
             href="/search"
             aria-label="Search posts"
             title="Search posts"
-            className="flex h-11 w-11 shrink-0 items-center justify-center text-zinc-400 transition hover:text-zinc-700 sm:hidden dark:hover:text-zinc-200"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-zinc-500 transition hover:text-zinc-800 sm:hidden dark:text-zinc-400 dark:hover:text-zinc-200"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              className="h-[1.15rem] w-[1.15rem]"
-              aria-hidden
-            >
-              <circle cx="10.5" cy="10.5" r="6.5" />
-              <path d="m15.5 15.5 4.5 4.5" strokeLinecap="round" />
-            </svg>
+            <SearchIcon className="h-6 w-6" />
           </Link>
         </div>
         {expectation !== null ? (

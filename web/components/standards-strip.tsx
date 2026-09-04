@@ -103,7 +103,7 @@ export function StandardsStrip() {
             sits right beside it instead of drifting to the far edge of a wide
             window, and `min-w-0` still lets it shrink and clip once the row
             actually overflows on a phone. */}
-        <p className="min-w-0 truncate text-xs sm:text-sm">
+        <p className="min-w-0 truncate text-[15px] sm:text-base">
           {kind === "invite" ? (
             <>
               {/* The reason a thin circle matters does not fit beside the
@@ -128,7 +128,7 @@ export function StandardsStrip() {
             type="button"
             onClick={() => void invite()}
             disabled={inviting}
-            className="shrink-0 text-xs font-semibold underline underline-offset-2 disabled:opacity-60 sm:text-sm"
+            className="shrink-0 text-[15px] font-semibold underline underline-offset-2 disabled:opacity-60 sm:text-base"
           >
             {inviting ? "Creating…" : "Invite someone"}
           </button>
@@ -137,7 +137,7 @@ export function StandardsStrip() {
           type="button"
           onClick={dismiss}
           aria-label="Dismiss"
-          className="ml-auto shrink-0 px-1 text-xs leading-none opacity-70 transition hover:opacity-100"
+          className="ml-auto shrink-0 px-1 text-sm leading-none opacity-70 transition hover:opacity-100"
         >
           ✕
         </button>
