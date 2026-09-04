@@ -16,8 +16,8 @@ import type {
   UUID,
 } from "@/lib/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 
 function SidebarAvatar({
   name,
@@ -68,18 +68,25 @@ function FriendAvatar({ friend }: { friend: FriendSummary }) {
 function FriendRow({
   friend,
   onOpen,
+  showMeta = true,
 }: {
   friend: FriendSummary;
   onOpen: (id: UUID) => void;
+  /** Off for the viewer's own row: telling someone they are online, or when
+   * they were last active, is noise — they are reading the page. Only the
+   * activity subtitle carries anything they don't already know. */
+  showMeta?: boolean;
 }) {
   const subtitle: string = friend.last_activity
     ? friend.last_activity
     : "No activity yet";
-  const meta: string = friend.online
-    ? "Online"
-    : friend.last_active_at
-      ? relativeTime(friend.last_active_at)
-      : "";
+  const meta: string = !showMeta
+    ? ""
+    : friend.online
+      ? "Online"
+      : friend.last_active_at
+        ? relativeTime(friend.last_active_at)
+        : "";
 
   return (
     <button
@@ -158,7 +165,9 @@ export function FriendsSidebar() {
   const { session } = useAuth();
   const { requireAuth } = useAuthGate();
   const { notify } = useToast();
+  const router = useRouter();
   const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [you, setYou] = useState<FriendSummary | null>(null);
   const [total, setTotal] = useState<number>(0);
   const [online, setOnline] = useState<number>(0);
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
@@ -187,6 +196,7 @@ export function FriendsSidebar() {
         api.getRecommendedFriends(),
       ]);
       setFriends(data.friends);
+      setYou(data.you);
       setTotal(data.total);
       setOnline(data.online);
       setIncoming(requests.incoming);
@@ -234,7 +244,8 @@ export function FriendsSidebar() {
       }
       const outcome = await shareInviteLink(created);
       if (outcome === "copied") notify("Invite link copied", "success");
-      if (outcome === "failed") notify("Could not copy the invite link", "error");
+      if (outcome === "failed")
+        notify("Could not copy the invite link", "error");
     } catch (err) {
       notify(
         err instanceof ApiError ? err.message : "Could not create an invite",
@@ -281,10 +292,7 @@ export function FriendsSidebar() {
       notify("Friend request sent", "success");
       void load();
     } catch (err) {
-      notify(
-        err instanceof ApiError ? err.message : "Failed to add",
-        "error",
-      );
+      notify(err instanceof ApiError ? err.message : "Failed to add", "error");
     } finally {
       endPending(userId);
     }
@@ -326,8 +334,26 @@ export function FriendsSidebar() {
         // is the sidebar's single full-height scroll area, so the list runs to
         // the bottom of the screen instead of stopping halfway down it.
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+          {/* The viewer sits in the list, in the same row and the same words
+              as everyone else. That likeness is the entire mechanism: a
+              person reading "You — no activity yet" directly above six
+              friends who posted this week draws their own conclusion, which
+              lands harder than the app telling them to post and costs no
+              space in the feed. Anything that styled this row as special
+              would turn it back into the app talking. */}
+          {you !== null ? (
+            <FriendRow
+              friend={you}
+              onOpen={() => router.push("/profile")}
+              showMeta={false}
+            />
+          ) : null}
           {friends.map((friend) => (
-            <FriendRow key={friend.user_id} friend={friend} onOpen={setOpenId} />
+            <FriendRow
+              key={friend.user_id}
+              friend={friend}
+              onOpen={setOpenId}
+            />
           ))}
         </div>
       )}

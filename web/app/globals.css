@@ -8,6 +8,10 @@
     serif;
   --rule: #d4d4d8;
   --rule-strong: #18181b;
+  /* Height of the sm+ sticky header: a 36px control row (h-9) inside py-3,
+     plus its bottom border. Anything that pins below the header offsets by
+     this; see components/standards-strip.tsx. */
+  --nav-h: 61px;
 }
 
 html,

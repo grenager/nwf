@@ -501,6 +501,10 @@ class FriendSummaryOut(BaseModel):
 
 class FriendsOverviewOut(BaseModel):
     friends: list[FriendSummaryOut]
+    #: The viewer, described exactly as their friends are, so the sidebar can
+    #: show them their own standing without the app having to editorialise.
+    #: Null when they have no friends, where the comparison means nothing.
+    you: FriendSummaryOut | None = None
     total: int
     online: int
     # Friends plus outstanding requests/invitations, against the account cap.

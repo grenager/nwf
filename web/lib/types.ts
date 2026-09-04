@@ -427,6 +427,11 @@ export interface FriendSummary {
 
 export interface FriendsOverview {
   friends: FriendSummary[];
+  /**
+   * The viewer, described exactly as their friends are. Null when they have
+   * no friends, where there is nothing to compare against.
+   */
+  you: FriendSummary | null;
   total: number;
   online: number;
   /** Friends plus outstanding requests and invitations. */

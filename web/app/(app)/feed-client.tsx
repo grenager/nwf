@@ -4,8 +4,9 @@ import { useAuth } from "@/components/auth-provider";
 import { FeedSearchBar } from "@/components/feed-search-bar";
 import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
+import { FeedComposer } from "@/components/feed-composer";
 import { FeedSkeleton } from "@/components/skeleton";
-import { StandardsRibbon } from "@/components/standards-ribbon";
+import { StandardsStrip } from "@/components/standards-strip";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
@@ -43,7 +44,10 @@ export function FeedClient() {
       setMe(null);
       return;
     }
-    void api.getMe().then(setMe).catch(() => undefined);
+    void api
+      .getMe()
+      .then(setMe)
+      .catch(() => undefined);
   }, [isSignedIn]);
 
   const load = useCallback(
@@ -136,8 +140,7 @@ export function FeedClient() {
       });
     }
     window.addEventListener("nwf:post-created", onPostCreated);
-    return () =>
-      window.removeEventListener("nwf:post-created", onPostCreated);
+    return () => window.removeEventListener("nwf:post-created", onPostCreated);
   }, [load]);
 
   // Coming back after a long break, the feed on screen is stale — pull the
@@ -183,14 +186,21 @@ export function FeedClient() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-2">
-      {isSignedIn ? <FeedSearchBar /> : null}
-
       {isSignedIn ? (
-        <StandardsRibbon
-          nudge={data?.standards ?? null}
-          isAdmin={me?.is_admin === true}
-          onPosted={() => void load({ silent: true })}
-        />
+        <>
+          {/* First in the column so it is already pinned on load, rather
+              than sliding up into place on the first scroll. */}
+          <StandardsStrip me={me} nudge={data?.standards ?? null} />
+          {/* Composer above search: the two are both bordered fields with
+              grey placeholder text, and stacked the other way round they read
+              as a pair of search boxes. */}
+          <FeedComposer
+            me={me}
+            nudge={data?.standards ?? null}
+            onPosted={() => void load({ silent: true })}
+          />
+          <FeedSearchBar />
+        </>
       ) : null}
 
       {!isSignedIn && postItems.length === 0 ? (
@@ -238,7 +248,9 @@ export function FeedClient() {
             data?.new_since !== null &&
             data?.new_since !== undefined;
           const showSuggestions: boolean =
-            isSignedIn && !suggestionsAtTop && index === SUGGESTIONS_AFTER_POSTS;
+            isSignedIn &&
+            !suggestionsAtTop &&
+            index === SUGGESTIONS_AFTER_POSTS;
           // The strip carries its own top border, so a second one here would
           // double up.
           const showTopBorder: boolean =

@@ -336,10 +336,14 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
             friend_limit=settings.max_friends,
         )
 
+    # The viewer is measured alongside their friends so the sidebar can show
+    # them their own standing in the same words it uses for everyone else.
+    subject_ids: list[uuid.UUID] = [*friend_ids, user.id]
+
     profiles: dict[uuid.UUID, Profile] = {
         p.id: p
         for p in (
-            await session.scalars(select(Profile).where(Profile.id.in_(friend_ids)))
+            await session.scalars(select(Profile).where(Profile.id.in_(subject_ids)))
         ).all()
     }
 
@@ -347,7 +351,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         (
             await session.execute(
                 select(Comment.user_id, func.max(Comment.created_at))
-                .where(Comment.user_id.in_(friend_ids))
+                .where(Comment.user_id.in_(subject_ids))
                 .group_by(Comment.user_id)
             )
         )
@@ -358,7 +362,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         (
             await session.execute(
                 select(PostReaction.user_id, func.max(PostReaction.updated_at))
-                .where(PostReaction.user_id.in_(friend_ids))
+                .where(PostReaction.user_id.in_(subject_ids))
                 .group_by(PostReaction.user_id)
             )
         )
@@ -371,7 +375,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
                 select(
                     CommentReaction.user_id, func.max(CommentReaction.updated_at)
                 )
-                .where(CommentReaction.user_id.in_(friend_ids))
+                .where(CommentReaction.user_id.in_(subject_ids))
                 .group_by(CommentReaction.user_id)
             )
         )
@@ -390,7 +394,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         (
             await session.execute(
                 select(Post.author_id, func.max(Post.created_at))
-                .where(Post.author_id.in_(friend_ids))
+                .where(Post.author_id.in_(subject_ids))
                 .group_by(Post.author_id)
             )
         )
@@ -402,7 +406,7 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         (
             await session.execute(
                 select(StoryStatus.user_id, func.max(StoryStatus.updated_at))
-                .where(StoryStatus.user_id.in_(friend_ids))
+                .where(StoryStatus.user_id.in_(subject_ids))
                 .group_by(StoryStatus.user_id)
             )
         )
@@ -424,31 +428,35 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
         return events[0][1]
 
     now = datetime.now(UTC)
-    summaries: list[FriendSummaryOut] = []
-    for fid in friend_ids:
-        profile = profiles.get(fid)
+
+    async def _summary(
+        uid: uuid.UUID, *, display_name: str | None = None
+    ) -> FriendSummaryOut:
+        profile = profiles.get(uid)
         candidates = [
             t
             for t in (
-                status_last.get(fid),
-                comment_last.get(fid),
-                reaction_last.get(fid),
-                post_last.get(fid),
+                status_last.get(uid),
+                comment_last.get(uid),
+                reaction_last.get(uid),
+                post_last.get(uid),
             )
             if t is not None
         ]
         last_active = max(candidates) if candidates else None
         online = last_active is not None and (now - last_active) <= _ONLINE_WINDOW
-        summaries.append(
-            FriendSummaryOut(
-                user_id=fid,
-                display_name=await identify(session, profile),
-                image_url=profile.image_url if profile else None,
-                online=online,
-                last_active_at=last_active,
-                last_activity=_activity_label(fid),
-            )
+        return FriendSummaryOut(
+            user_id=uid,
+            display_name=display_name or await identify(session, profile),
+            image_url=profile.image_url if profile else None,
+            online=online,
+            last_active_at=last_active,
+            last_activity=_activity_label(uid),
         )
+
+    summaries: list[FriendSummaryOut] = [
+        await _summary(fid) for fid in friend_ids
+    ]
 
     summaries.sort(
         key=lambda f: (
@@ -459,6 +467,9 @@ async def list_friends(session: SessionDep, user: CurrentUser) -> FriendsOvervie
     online_count = sum(1 for f in summaries if f.online)
     return FriendsOverviewOut(
         friends=summaries,
+        # The viewer's own row, in the same shape and the same words as the
+        # friends above it -- the comparison only lands if it is like for like.
+        you=await _summary(user.id, display_name="You"),
         total=len(summaries),
         online=online_count,
         slots_used=slots_used,
