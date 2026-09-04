@@ -157,7 +157,7 @@ export function PostThread({
   fofReason?: FofReason | null;
   /** Stamp the read cursor only when the thread is actually opened (detail page). */
   markSeenOnMount?: boolean;
-  /** Scroll the "New replies" divider into view once (from ?focus=unread). */
+  /** Scroll the first unread reply into view once (from ?focus=unread). */
   focusUnread?: boolean;
   /** Scroll to and highlight one comment (from ?comment=<id>). */
   focusCommentId?: UUID | null;
@@ -208,7 +208,7 @@ export function PostThread({
   const editTakeRef = useRef<HTMLTextAreaElement | null>(null);
   const startedEditRef = useRef<boolean>(false);
   const markedSeenRef = useRef<boolean>(false);
-  const unreadDividerRef = useRef<HTMLDivElement | null>(null);
+  const firstUnreadRef = useRef<HTMLDivElement | null>(null);
   const scrolledUnreadRef = useRef<boolean>(false);
   const scrolledCommentRef = useRef<UUID | null>(null);
   const [audienceOpen, setAudienceOpen] = useState<boolean>(false);
@@ -292,33 +292,35 @@ export function PostThread({
     return post.replies.find((r) => r.id === draftParentId) ?? null;
   }, [draftParentId, post.replies]);
 
-  const firstUnreadTopId: UUID | null = useMemo(() => {
-    if (!user) return null;
-    // No prior cursor and nothing flagged unread — skip the divider.
-    if (seenBoundary === null && post.unread_reply_count <= 0) return null;
+  // Replies the viewer hasn't seen yet, by id — each one gets its own "New"
+  // badge, so the unread ones are marked where they actually sit in the thread.
+  const unreadCommentIds: Set<UUID> = useMemo(() => {
+    const ids: Set<UUID> = new Set();
+    if (!user) return ids;
+    // No prior cursor and nothing flagged unread — nothing is new.
+    if (seenBoundary === null && post.unread_reply_count <= 0) return ids;
     const boundaryMs: number | null =
       seenBoundary !== null ? Date.parse(seenBoundary) : null;
-    for (const top of tops) {
-      const topIsUnread: boolean =
-        top.user_id !== user.id &&
-        (boundaryMs === null || Date.parse(top.created_at) > boundaryMs);
-      if (topIsUnread) return top.id;
-      const kids: Comment[] = childrenByParent.get(top.id) ?? [];
-      for (const child of kids) {
-        const childUnread: boolean =
-          child.user_id !== user.id &&
-          (boundaryMs === null || Date.parse(child.created_at) > boundaryMs);
-        if (childUnread) return top.id;
+    for (const r of post.replies) {
+      if (r.user_id === user.id) continue;
+      if (boundaryMs === null || Date.parse(r.created_at) > boundaryMs) {
+        ids.add(r.id);
       }
     }
+    return ids;
+  }, [user, seenBoundary, post.unread_reply_count, post.replies]);
+
+  // Top-level comment whose group holds the first unread reply — the scroll
+  // target for ?focus=unread.
+  const firstUnreadTopId: UUID | null = useMemo(() => {
+    if (unreadCommentIds.size === 0) return null;
+    for (const top of tops) {
+      if (unreadCommentIds.has(top.id)) return top.id;
+      const kids: Comment[] = childrenByParent.get(top.id) ?? [];
+      if (kids.some((child) => unreadCommentIds.has(child.id))) return top.id;
+    }
     return null;
-  }, [
-    user,
-    seenBoundary,
-    post.unread_reply_count,
-    tops,
-    childrenByParent,
-  ]);
+  }, [unreadCommentIds, tops, childrenByParent]);
 
   const visibleTops: Comment[] = useMemo(() => {
     if (maxTopLevelComments === undefined || maxTopLevelComments <= 0) {
@@ -347,7 +349,7 @@ export function PostThread({
     }
     scrolledUnreadRef.current = true;
     requestAnimationFrame(() => {
-      unreadDividerRef.current?.scrollIntoView({
+      firstUnreadRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
@@ -838,22 +840,14 @@ export function PostThread({
             const kids: Comment[] = childrenByParent.get(r.id) ?? [];
             return (
               <Fragment key={r.id}>
-                {firstUnreadTopId === r.id ? (
-                  <div
-                    ref={unreadDividerRef}
-                    className="my-2 flex items-center gap-3"
-                  >
-                    <div className="h-px flex-1 bg-zinc-300 dark:bg-zinc-700" />
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-900 dark:text-zinc-100">
-                      New replies
-                    </span>
-                    <div className="h-px flex-1 bg-zinc-300 dark:bg-zinc-700" />
-                  </div>
-                ) : null}
-                <div className="space-y-2">
+                <div
+                  ref={firstUnreadTopId === r.id ? firstUnreadRef : undefined}
+                  className="space-y-2"
+                >
                   <CommentRow
                     comment={r}
                     userId={user?.id ?? null}
+                    unread={unreadCommentIds.has(r.id)}
                     anchored={!isPreviewMode}
                     highlighted={focusCommentId === r.id}
                     reacting={reacting}
@@ -885,6 +879,7 @@ export function PostThread({
                           key={child.id}
                           comment={child}
                           userId={user?.id ?? null}
+                          unread={unreadCommentIds.has(child.id)}
                           anchored={!isPreviewMode}
                           highlighted={focusCommentId === child.id}
                           reacting={reacting}
@@ -1053,6 +1048,7 @@ function CommentRow({
   comment,
   userId,
   reacting,
+  unread = false,
   anchored = false,
   highlighted = false,
   onReply,
@@ -1063,6 +1059,8 @@ function CommentRow({
   comment: Comment;
   userId: UUID | null;
   reacting: boolean;
+  /** Flag a reply the viewer hasn't read yet with a "New" badge. */
+  unread?: boolean;
   /** Carry the `#comment-<id>` anchor (full thread only, to keep ids unique). */
   anchored?: boolean;
   /** Tint the row when it is the comment the link pointed at. */
@@ -1128,6 +1126,11 @@ function CommentRow({
           >
             {comment.author_name}
           </PersonLink>
+          {unread ? (
+            <span className="inline-flex items-center rounded-[9999px] bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
+              New
+            </span>
+          ) : null}
           <span className="text-zinc-400">
             {relativeTime(comment.created_at)}
           </span>
