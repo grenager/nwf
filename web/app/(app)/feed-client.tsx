@@ -188,6 +188,7 @@ export function FeedClient() {
       {isSignedIn ? (
         <StandardsRibbon
           nudge={data?.standards ?? null}
+          isAdmin={me?.is_admin === true}
           onPosted={() => void load({ silent: true })}
         />
       ) : null}
