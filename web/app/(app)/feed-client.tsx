@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { PeopleYouMayKnow } from "@/components/people-you-may-know";
 import { PostCard } from "@/components/post-card";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { FeedComposer } from "@/components/feed-composer";
 import { FeedSkeleton } from "@/components/skeleton";
 import { usePublishStandards } from "@/components/standards-context";
@@ -186,93 +187,95 @@ export function FeedClient() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-2">
-      {isSignedIn ? (
-        <>
-          {/* First in the column so it is already pinned on load, rather
-              than sliding up into place on the first scroll. */}
-          <FeedComposer
-            me={me}
-            nudge={data?.standards ?? null}
-            onPosted={() => void load({ silent: true })}
-          />
-        </>
-      ) : null}
+    <PullToRefresh onRefresh={() => load({ silent: true })}>
+      <div className="mx-auto max-w-2xl space-y-2">
+        {isSignedIn ? (
+          <>
+            {/* First in the column so it is already pinned on load, rather
+                than sliding up into place on the first scroll. */}
+            <FeedComposer
+              me={me}
+              nudge={data?.standards ?? null}
+              onPosted={() => void load({ silent: true })}
+            />
+          </>
+        ) : null}
 
-      {!isSignedIn && postItems.length === 0 ? (
-        <div className="border border-dashed border-zinc-300 p-8 text-center">
-          <p className="text-sm text-zinc-600 dark:text-zinc-300">
-            Private conversations with friends — sign up to start one.
-          </p>
-          <Link
-            href="/signin"
-            className="mt-4 inline-block bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
-            Create free account
-          </Link>
-        </div>
-      ) : null}
-
-      {isSignedIn && postItems.length === 0 ? (
-        <div className="border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
-          {/* The ribbon directly above already makes the ask; repeating it
-              here would say the same thing twice in two inches. */}
-          {data?.standards ? (
-            <>Nothing here yet — your friends haven&apos;t posted.</>
-          ) : (
-            <>No posts yet. Share an article to start a conversation.</>
-          )}
-          {data && data.aggregate_private_conversations > 0 ? (
-            <p className="mt-2 text-xs">
-              {data.aggregate_private_conversations} private conversations
-              elsewhere on the site.
+        {!isSignedIn && postItems.length === 0 ? (
+          <div className="border border-dashed border-zinc-300 p-8 text-center">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              Private conversations with friends — sign up to start one.
             </p>
-          ) : null}
+            <Link
+              href="/signin"
+              className="mt-4 inline-block bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              Create free account
+            </Link>
+          </div>
+        ) : null}
+
+        {isSignedIn && postItems.length === 0 ? (
+          <div className="border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">
+            {/* The ribbon directly above already makes the ask; repeating it
+                here would say the same thing twice in two inches. */}
+            {data?.standards ? (
+              <>Nothing here yet — your friends haven&apos;t posted.</>
+            ) : (
+              <>No posts yet. Share an article to start a conversation.</>
+            )}
+            {data && data.aggregate_private_conversations > 0 ? (
+              <p className="mt-2 text-xs">
+                {data.aggregate_private_conversations} private conversations
+                elsewhere on the site.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {isSignedIn && suggestionsAtTop ? <PeopleYouMayKnow /> : null}
+
+        <div className="[&>article:first-child]:pt-1">
+          {postItems.map((card, index) => {
+            const showNewSinceDivider: boolean =
+              index === dividerBeforeIndex &&
+              dividerBeforeIndex > 0 &&
+              data?.new_since !== null &&
+              data?.new_since !== undefined;
+            const showSuggestions: boolean =
+              isSignedIn &&
+              !suggestionsAtTop &&
+              index === SUGGESTIONS_AFTER_POSTS;
+            // The strip carries its own top border, so a second one here would
+            // double up.
+            const showTopBorder: boolean =
+              index > 0 && !showNewSinceDivider && !showSuggestions;
+
+            return (
+              <Fragment key={card.card_id}>
+                {showSuggestions ? <PeopleYouMayKnow /> : null}
+                {showNewSinceDivider ? (
+                  <div
+                    className="relative border-t border-zinc-200 py-7 dark:border-zinc-800"
+                    role="separator"
+                    aria-label={`New since ${formatNewSince(data!.new_since!)}`}
+                  >
+                    <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:bg-zinc-950">
+                      New since {formatNewSince(data!.new_since!)}
+                    </span>
+                  </div>
+                ) : null}
+                <PostCard
+                  card={card}
+                  me={me}
+                  onCardChange={onCardChange}
+                  showTopBorder={showTopBorder}
+                />
+              </Fragment>
+            );
+          })}
         </div>
-      ) : null}
-
-      {isSignedIn && suggestionsAtTop ? <PeopleYouMayKnow /> : null}
-
-      <div className="[&>article:first-child]:pt-1">
-        {postItems.map((card, index) => {
-          const showNewSinceDivider: boolean =
-            index === dividerBeforeIndex &&
-            dividerBeforeIndex > 0 &&
-            data?.new_since !== null &&
-            data?.new_since !== undefined;
-          const showSuggestions: boolean =
-            isSignedIn &&
-            !suggestionsAtTop &&
-            index === SUGGESTIONS_AFTER_POSTS;
-          // The strip carries its own top border, so a second one here would
-          // double up.
-          const showTopBorder: boolean =
-            index > 0 && !showNewSinceDivider && !showSuggestions;
-
-          return (
-            <Fragment key={card.card_id}>
-              {showSuggestions ? <PeopleYouMayKnow /> : null}
-              {showNewSinceDivider ? (
-                <div
-                  className="relative border-t border-zinc-200 py-7 dark:border-zinc-800"
-                  role="separator"
-                  aria-label={`New since ${formatNewSince(data!.new_since!)}`}
-                >
-                  <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:bg-zinc-950">
-                    New since {formatNewSince(data!.new_since!)}
-                  </span>
-                </div>
-              ) : null}
-              <PostCard
-                card={card}
-                me={me}
-                onCardChange={onCardChange}
-                showTopBorder={showTopBorder}
-              />
-            </Fragment>
-          );
-        })}
       </div>
-    </div>
+    </PullToRefresh>
   );
 }
