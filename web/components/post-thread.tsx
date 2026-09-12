@@ -52,12 +52,44 @@ function profileName(me: Profile | null): string {
   return full || "You";
 }
 
+/** Full names, not first names - the avatars beside the label are the typers',
+ * so a truncated name reads as a mismatch with the face next to it. */
 function typingLabel(typers: PostTyper[]): string | null {
   if (typers.length === 0) return null;
-  const names: string[] = typers.map((t) => t.display_name.split(/\s+/)[0] ?? t.display_name);
+  const names: string[] = typers.map((t) => t.display_name);
   if (names.length === 1) return `${names[0]} is typing…`;
   if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
   return `${names[0]}, ${names[1]} and ${names.length - 2} others are typing…`;
+}
+
+/** How many typer avatars to show before the label's "and N others" carries
+ * the rest - a long overlap stack stops reading as faces. */
+const MAX_TYPER_AVATARS = 3;
+
+/** Its own row above the composer: the typers' own avatars, then their names.
+ * Inside the composer row it sat next to the *viewer's* avatar, which read as
+ * the viewer typing under someone else's name. */
+function TypingIndicator({ typers }: { typers: PostTyper[] }) {
+  const label: string | null = typingLabel(typers);
+  if (!label) return null;
+  return (
+    <div className="flex items-center gap-2" aria-live="polite">
+      <div className="flex shrink-0 -space-x-2">
+        {typers.slice(0, MAX_TYPER_AVATARS).map((t) => (
+          <span
+            key={t.user_id}
+            className="rounded-[9999px] ring-2 ring-white dark:ring-zinc-950"
+            title={t.display_name}
+          >
+            <Avatar name={t.display_name} imageUrl={t.image_url} />
+          </span>
+        ))}
+      </div>
+      <p className="min-w-0 truncate text-xs italic text-zinc-400 dark:text-zinc-500">
+        {label}
+      </p>
+    </div>
+  );
 }
 
 const FOF_ACTION_LABEL: Record<FofActionKind, string> = {
@@ -908,6 +940,8 @@ export function PostThread({
           </>
         )}
 
+      <TypingIndicator typers={typers} />
+
       {isGuest ? null : (
       <div
         className="flex items-start gap-2"
@@ -935,11 +969,6 @@ export function PostThread({
                     Cancel
                   </button>
                 </div>
-              ) : null}
-              {typingLabel(typers) ? (
-                <p className="text-xs italic text-zinc-400 dark:text-zinc-500">
-                  {typingLabel(typers)}
-                </p>
               ) : null}
               <div className="flex items-end gap-2">
                 <div
