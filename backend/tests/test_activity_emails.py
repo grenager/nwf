@@ -777,3 +777,17 @@ async def test_email_db_failure_does_not_poison_caller_transaction() -> None:
 
     # The savepoint saw the exception, so only the email work was undone.
     assert rolled_back == [True]
+
+
+def test_activity_html_makes_card_and_lead_clickable() -> None:
+    """The headline, image, lead line and excerpt all link to the post."""
+    content = _content(kind="comment", actor_name="Teg")
+    body = _activity_html(content)
+    anchor = f'<a href="{content.action_url}"'
+    # lead + avatar, article card, excerpt, button, and the plain-text fallback
+    assert body.count(anchor) == 5
+    headline_start = body.index("Quiet week in AI")
+    card_anchor = body.rindex(anchor, 0, headline_start)
+    assert "</a>" not in body[card_anchor:headline_start]
+    # images inside anchors must not pick up a link border in Outlook/Gmail
+    assert body.count('border="0"') == 2
