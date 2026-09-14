@@ -12,6 +12,13 @@ import { ModalShell } from "@/components/modal-shell";
 interface AddStoryModalProps {
   onClose: () => void;
   onAdded?: (post: Post) => void;
+  /**
+   * Post the link with no take. Set for the editorial seeding account, whose
+   * posts are supply for the Discover tab rather than one person's opinion —
+   * ten curated links a morning is not ten opinions. Everyone else is asked
+   * for a take, which is the whole point of sharing with friends.
+   */
+  allowEmptyTake?: boolean;
 }
 
 const PREVIEW_DEBOUNCE_MS: number = 500;
@@ -33,7 +40,11 @@ function hostFromUrl(url: string): string {
   }
 }
 
-export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
+export function AddStoryModal({
+  onClose,
+  onAdded,
+  allowEmptyTake = false,
+}: AddStoryModalProps) {
   const { notify } = useToast();
   const { requireAuth } = useAuthGate();
   const [url, setUrl] = useState<string>("");
@@ -108,14 +119,19 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
     e.preventDefault();
     if (!requireAuth("post")) return;
     const trimmedUrl: string = url.trim();
-    if (!take.trim() || !trimmedUrl || preview === null || previewLoading) {
+    if (
+      (!take.trim() && !allowEmptyTake) ||
+      !trimmedUrl ||
+      preview === null ||
+      previewLoading
+    ) {
       return;
     }
     setSaving(true);
     try {
       const post: Post = await api.createPost({
         url: trimmedUrl,
-        take: take.trim(),
+        take: take.trim() || null,
         shared_text: paywalled ? sharedText.trim() || null : null,
         quote: quote.trim() || null,
         kind: "news",
@@ -137,7 +153,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
   }
 
   const canPost: boolean =
-    !!take.trim() &&
+    (!!take.trim() || allowEmptyTake) &&
     !!url.trim() &&
     preview !== null &&
     !previewLoading &&
@@ -337,7 +353,7 @@ export function AddStoryModal({ onClose, onAdded }: AddStoryModalProps) {
 
           <label className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Your take
+              Your take{allowEmptyTake ? " (optional)" : ""}
             </span>
             <MentionInput
               value={take}

@@ -9,6 +9,12 @@ export interface Profile {
   phone: string | null;
   image_url: string | null;
   is_admin: boolean;
+  /**
+   * Editorial seeding account: posts curated links that fill the Discover
+   * tab. The composer lets it post a bare link with no take, since a seeded
+   * item is supply rather than one person's opinion.
+   */
+  is_editorial: boolean;
   dense_mode: boolean;
   dark_mode: boolean;
   digest_opt_out: boolean;
@@ -320,6 +326,43 @@ export interface FeedCard {
   score: number;
   unread_reply_count: number;
   fof_reason: FofReason | null;
+}
+
+/**
+ * One card on the Discover tab: a story, with how much the whole platform is
+ * doing with it.
+ *
+ * Counts only, never names. Discover spans every member, so naming who
+ * reacted would leak activity from outside the viewer's friend graph; who
+ * they may actually read is decided on the story itself.
+ */
+export interface DiscoverCard {
+  story_id: UUID;
+  full_headline: string;
+  article_url: string;
+  summary: string | null;
+  image_url: string | null;
+  source_name: string | null;
+  source_image_url: string | null;
+  kind: StoryKind;
+  post_count: number;
+  reactor_count: number;
+  commenter_count: number;
+  reader_count: number;
+  comment_count: number;
+  latest_activity_at: string | null;
+  score: number;
+  read: boolean;
+}
+
+export interface DiscoverPayload {
+  items: DiscoverCard[];
+  /**
+   * The window the ranking settled on: widens past 24h when the platform is
+   * quiet, so the header can say "this week" instead of implying everything
+   * here happened today.
+   */
+  window_hours: number;
 }
 
 /**

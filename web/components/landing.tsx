@@ -1,4 +1,5 @@
 import { BrandLink } from "@/components/brand-mark";
+import { DiscoverList } from "@/components/discover-list";
 import Link from "next/link";
 
 const primaryButtonClass: string =
@@ -59,6 +60,19 @@ export function Landing() {
           <p className="mt-4 text-xs text-zinc-400">
             No password — just a magic link.
           </p>
+        </section>
+
+        {/* Real stories, above the pitch: a visitor should see what the app
+            is full of before being told what it is. Guest-readable and
+            edge-cached, so this costs the page nothing. */}
+        <section className="border-t border-zinc-200 py-10 dark:border-zinc-800">
+          <div className="mx-auto max-w-2xl px-4 sm:px-6">
+            <DiscoverList embedded />
+            <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              Sign in to talk about any of these — privately, with your own
+              friends.
+            </p>
+          </div>
         </section>
 
         <section className="border-t border-zinc-200 bg-zinc-50 py-12 sm:py-16 dark:border-zinc-800 dark:bg-zinc-900/40">

@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 const BADGE_POLL_MS: number = 60_000;
 
 const DESKTOP_LINKS: { href: string; label: string }[] = [
-  { href: "/", label: "Feed" },
+  { href: "/", label: "Discover" },
+  { href: "/conversations", label: "Conversations" },
   { href: "/notifications", label: "Alerts" },
   { href: "/friends", label: "People" },
 ];
@@ -87,6 +88,46 @@ function IconFeed({
       <path
         d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconDiscover({
+  className,
+  filled = false,
+}: {
+  className?: string;
+  filled?: boolean;
+}) {
+  if (filled) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+        aria-hidden
+      >
+        <path d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5Zm4.3 4.86-2.2 5.05a1.5 1.5 0 0 1-.77.78l-5.05 2.2a.75.75 0 0 1-.99-.99l2.2-5.05a1.5 1.5 0 0 1 .78-.77l5.05-2.2a.75.75 0 0 1 .98.98Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      className={className}
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path
+        d="m15.5 8.5-2 5-5 2 2-5 5-2Z"
+        strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
@@ -326,7 +367,10 @@ export function Nav() {
   }
 
   function badgeFor(href: string): number {
-    if (href === "/notifications") return alertsUnread + convosUnread;
+    // Threads with unread replies belong to the Conversations tab; the Alerts
+    // badge is left with what is only ever an alert (mentions, reactions).
+    if (href === "/conversations") return convosUnread;
+    if (href === "/notifications") return alertsUnread;
     if (href === "/friends") return incomingCount;
     return 0;
   }
@@ -415,7 +459,7 @@ export function Nav() {
             "calc(env(safe-area-inset-bottom) + var(--tabbar-inset))",
         }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-5 items-stretch">
+        <div className="mx-auto grid max-w-lg grid-cols-6 items-stretch">
           <Link
             href="/"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
@@ -425,9 +469,25 @@ export function Nav() {
             }`}
           >
             <TabIcon>
-              <IconFeed className="h-5 w-5" filled={tabActive("/")} />
+              <IconDiscover className="h-5 w-5" filled={tabActive("/")} />
             </TabIcon>
-            Feed
+            Discover
+          </Link>
+          <Link
+            href="/conversations"
+            className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
+              tabActive("/conversations")
+                ? "font-semibold text-zinc-900 dark:text-zinc-50"
+                : "font-medium text-zinc-500"
+            }`}
+          >
+            <TabIcon badge={convosUnread}>
+              <IconFeed
+                className="h-5 w-5"
+                filled={tabActive("/conversations")}
+              />
+            </TabIcon>
+            Talk
           </Link>
           <Link
             href="/friends"
@@ -460,7 +520,7 @@ export function Nav() {
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={alertsUnread + convosUnread}>
+            <TabIcon badge={alertsUnread}>
               <IconAlerts
                 className="h-5 w-5"
                 filled={tabActive("/notifications")}
@@ -507,6 +567,7 @@ export function Nav() {
 
       {addOpen ? (
         <AddStoryModal
+          allowEmptyTake={profile?.is_editorial ?? false}
           onClose={() => setAddOpen(false)}
           onAdded={(post) => {
             window.dispatchEvent(

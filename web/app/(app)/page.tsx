@@ -1,10 +1,14 @@
+import { DiscoverList } from "@/components/discover-list";
 import { Landing } from "@/components/landing";
 import { getServerUser } from "@/lib/supabase/server";
 
-import { FeedClient } from "./feed-client";
-
-export default async function FeedPage() {
+/**
+ * Discover is the app's front door: the most active stories platform-wide.
+ * Guests see it too, under the marketing hero, so the first thing a visitor
+ * reads is actual news rather than a description of a news app.
+ */
+export default async function DiscoverPage() {
   const user = await getServerUser();
 
-  return user ? <FeedClient /> : <Landing />;
+  return user ? <DiscoverList /> : <Landing />;
 }

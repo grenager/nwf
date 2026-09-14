@@ -9,6 +9,7 @@ import type {
   ConnectionStatus,
   CommunityStats,
   ConversationList,
+  DiscoverPayload,
   FeedPayload,
   FriendProfile,
   FriendRequests,
@@ -155,6 +156,11 @@ export const api = {
    * for the live "reading now" indicator. */
   getStoryReaders: (storyId: UUID): Promise<StoryReader[]> =>
     request<StoryReader[]>(`/stories/${storyId}/readers`),
+
+  // --- discover ---
+  /** Platform-wide trending stories. Readable by guests. */
+  getDiscover: (): Promise<DiscoverPayload> =>
+    request<DiscoverPayload>("/discover"),
 
   // --- feed / posts ---
   getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
