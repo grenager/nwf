@@ -54,44 +54,6 @@ function TabIcon({
   );
 }
 
-function IconFeed({
-  className,
-  filled = false,
-}: {
-  className?: string;
-  filled?: boolean;
-}) {
-  if (filled) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className={className}
-        aria-hidden
-      >
-        <path d="M11.47 3.84a.75.75 0 0 1 1.06 0l8.25 7.5a.75.75 0 1 1-1.01 1.11l-.77-.7V19.5A1.5 1.5 0 0 1 17.5 21h-3.75v-5.25a.75.75 0 0 0-.75-.75h-1.5a.75.75 0 0 0-.75.75V21H6.5A1.5 1.5 0 0 1 5 19.5v-7.75l-.77.7a.75.75 0 1 1-1.01-1.11l8.25-7.5Z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function IconDiscover({
   className,
   filled = false,
@@ -108,7 +70,16 @@ function IconDiscover({
         className={className}
         aria-hidden
       >
-        <path d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5Zm4.3 4.86-2.2 5.05a1.5 1.5 0 0 1-.77.78l-5.05 2.2a.75.75 0 0 1-.99-.99l2.2-5.05a1.5 1.5 0 0 1 .78-.77l5.05-2.2a.75.75 0 0 1 .98.98Z" />
+        {/* The needle is knocked out of the disc (hence evenodd) as a rhombus
+            whose four points average to exactly (12,12), so it sits centred
+            however the icon is scaled. The earlier path was hand-drawn and
+            averaged to (12.7, 10.7), which read as a needle pushed up and to
+            the right. */}
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5ZM16 8l-2.3 5.7L8 16l2.3-5.7L16 8Z"
+        />
       </svg>
     );
   }
@@ -124,10 +95,62 @@ function IconDiscover({
     >
       <circle cx="12" cy="12" r="9" />
       <path
-        d="m15.5 8.5-2 5-5 2 2-5 5-2Z"
+        d="M15.8 8.2 13.6 13.6 8.2 15.8l2.2-5.4 5.4-2.2Z"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function IconConversations({
+  className,
+  filled = false,
+}: {
+  className?: string;
+  filled?: boolean;
+}) {
+  // Two overlapping speech bubbles: the back one offset up-right, the front
+  // one carrying the tail. Both states use the same geometry so the icon does
+  // not shift when the tab becomes active.
+  const back: string =
+    "M9 3.5h9A2.5 2.5 0 0 1 20.5 6v3A2.5 2.5 0 0 1 18 11.5H9A2.5 2.5 0 0 1 6.5 9V6A2.5 2.5 0 0 1 9 3.5Z";
+  // Stroked, a closed back bubble draws its edges straight through the front
+  // one and the pair reads as a grid. Open it where the front bubble covers
+  // it, and it reads as one bubble sitting behind another.
+  const backOpen: string =
+    "M8.2 9V6A2.5 2.5 0 0 1 10.7 3.5H18A2.5 2.5 0 0 1 20.5 6v3A2.5 2.5 0 0 1 18 11.5h-.6";
+  const front: string =
+    "M6 9h9a2.5 2.5 0 0 1 2.5 2.5V15a2.5 2.5 0 0 1-2.5 2.5H9.6l-3 2.9v-2.9H6A2.5 2.5 0 0 1 3.5 15v-3.5A2.5 2.5 0 0 1 6 9Z";
+
+  if (filled) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+        aria-hidden
+      >
+        {/* evenodd leaves the overlap unfilled, which is what separates the
+            two bubbles without needing a background-coloured stroke — the tab
+            bar sits on both light and dark grounds. */}
+        <path fillRule="evenodd" clipRule="evenodd" d={`${back} ${front}`} />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      className={className}
+      aria-hidden
+    >
+      <path d={backOpen} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={front} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -440,12 +463,12 @@ export function Nav() {
             }`}
           >
             <TabIcon badge={convosUnread + threadAlerts}>
-              <IconFeed
+              <IconConversations
                 className="h-5 w-5"
                 filled={tabActive("/conversations")}
               />
             </TabIcon>
-            Talk
+            Conversations
           </Link>
           <button
             type="button"
