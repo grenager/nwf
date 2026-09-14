@@ -4,18 +4,12 @@ import { AddStoryModal } from "@/components/add-story-modal";
 import { ArticleCard } from "@/components/article-card";
 import { useAuth } from "@/components/auth-provider";
 import { useAuthGate } from "@/components/auth-gate";
-import { PostCard } from "@/components/post-card";
+import { StoryConversationRow } from "@/components/story-conversation-row";
 import { ShareAfterPostModal } from "@/components/share-after-post-modal";
 import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type {
-  Post,
-  Profile,
-  Story,
-  StoryConversations,
-  UUID,
-} from "@/lib/types";
+import type { Post, Story, StoryConversations, UUID } from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -45,18 +39,6 @@ export function StoryDetail({ storyId, inModal = false }: StoryDetailProps) {
   const [loading, setLoading] = useState<boolean>(true);
   const [composerOpen, setComposerOpen] = useState<boolean>(false);
   const [sharePostId, setSharePostId] = useState<UUID | null>(null);
-  const [me, setMe] = useState<Profile | null>(null);
-
-  useEffect(() => {
-    if (!isSignedIn) {
-      setMe(null);
-      return;
-    }
-    void api
-      .getMe()
-      .then(setMe)
-      .catch(() => undefined);
-  }, [isSignedIn]);
 
   const load = useCallback(
     async (opts?: { silent?: boolean }): Promise<void> => {
@@ -133,8 +115,8 @@ export function StoryDetail({ storyId, inModal = false }: StoryDetailProps) {
               {items.length === 0
                 ? "No conversations you can see yet"
                 : items.length === 1
-                  ? "1 conversation"
-                  : `${items.length} conversations`}
+                  ? "1 conversation you can join"
+                  : `${items.length} separate conversations`}
             </h2>
             <button
               type="button"
@@ -151,25 +133,9 @@ export function StoryDetail({ storyId, inModal = false }: StoryDetailProps) {
               thread.
             </p>
           ) : (
-            <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            <div className="border-t border-zinc-200 dark:border-zinc-800">
               {items.map((card) => (
-                <PostCard
-                  key={card.card_id}
-                  card={card}
-                  me={me}
-                  onCardChange={(next) =>
-                    setConvos((prev) =>
-                      prev === null
-                        ? prev
-                        : {
-                            ...prev,
-                            items: prev.items.map((c) =>
-                              c.card_id === next.card_id ? next : c,
-                            ),
-                          },
-                    )
-                  }
-                />
+                <StoryConversationRow key={card.card_id} card={card} />
               ))}
             </div>
           )}
