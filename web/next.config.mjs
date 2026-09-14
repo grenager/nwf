@@ -5,12 +5,10 @@ const nextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
-  // Convos merged into Alerts; keep old links and bookmarks working.
-  async redirects() {
-    return [
-      { source: "/conversations", destination: "/notifications", permanent: true },
-    ];
-  },
+  // /conversations is a real page again (the Conversations tab), and Alerts
+  // is what folded into it — the reverse of the earlier merge. The redirect
+  // lives in app/(app)/notifications/page.tsx rather than here, so leaving a
+  // rule for /conversations would make an infinite loop.
 };
 
 export default nextConfig;

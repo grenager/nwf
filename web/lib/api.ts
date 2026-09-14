@@ -11,6 +11,7 @@ import type {
   ConversationList,
   DiscoverPayload,
   FeedPayload,
+  FeedSort,
   FriendProfile,
   FriendRequests,
   FriendsOverview,
@@ -169,7 +170,8 @@ export const api = {
     request<DiscoverPayload>("/discover"),
 
   // --- feed / posts ---
-  getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
+  getFeed: (sort: FeedSort = "activity"): Promise<FeedPayload> =>
+    request<FeedPayload>(`/feed?sort=${sort}`),
   getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
   getPostAudience: (id: UUID): Promise<PostAudience> =>
     request<PostAudience>(`/posts/${id}/audience`),

@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update
 
 from api.deps import CurrentUser, SessionDep
 from api.friends import identify
+from api.routers.feed import THREAD_ALERT_KINDS
 from api.schemas import (
     NotificationList,
     NotificationOut,
@@ -57,8 +58,28 @@ async def _load_notifications(
         )
         or 0
     )
+    # Split out the alerts that now appear on their own Conversations card, so
+    # the same mention is not counted on two tabs at once.
+    unread_thread_count = int(
+        (
+            await session.scalar(
+                select(func.count())
+                .select_from(Notification)
+                .where(
+                    Notification.recipient_id == user_id,
+                    Notification.read_at.is_(None),
+                    Notification.kind.in_(THREAD_ALERT_KINDS),
+                )
+            )
+        )
+        or 0
+    )
     if not rows:
-        return NotificationList(items=[], unread_count=unread_count)
+        return NotificationList(
+            items=[],
+            unread_count=unread_count,
+            unread_thread_count=unread_thread_count,
+        )
 
     actor_ids: set[uuid.UUID] = {n.actor_id for n in rows}
     story_ids: set[uuid.UUID] = {n.story_id for n in rows if n.story_id}
@@ -123,7 +144,11 @@ async def _load_notifications(
             )
         )
 
-    return NotificationList(items=items, unread_count=unread_count)
+    return NotificationList(
+        items=items,
+        unread_count=unread_count,
+        unread_thread_count=unread_thread_count,
+    )
 
 
 @router.get("", response_model=NotificationList)

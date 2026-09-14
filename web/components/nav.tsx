@@ -18,7 +18,6 @@ const BADGE_POLL_MS: number = 60_000;
 const DESKTOP_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Discover" },
   { href: "/conversations", label: "Conversations" },
-  { href: "/notifications", label: "Alerts" },
   { href: "/friends", label: "People" },
 ];
 
@@ -133,46 +132,6 @@ function IconDiscover({
   );
 }
 
-function IconAlerts({
-  className,
-  filled = false,
-}: {
-  className?: string;
-  filled?: boolean;
-}) {
-  if (filled) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className={className}
-        aria-hidden
-      >
-        <path d="M12 2.5a6.5 6.5 0 0 0-6.5 6.5c0 3.2-1.2 4.85-1.85 5.75A1 1 0 0 0 4.45 16.5h15.1a1 1 0 0 0 .8-1.75C19.7 13.85 18.5 12.2 18.5 9A6.5 6.5 0 0 0 12 2.5Z" />
-        <path d="M9.75 18.25a2.25 2.25 0 0 0 4.5 0h-4.5Z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"
-        strokeLinejoin="round"
-      />
-      <path d="M10 19a2 2 0 0 0 4 0" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function IconFriends({
   className,
   filled = false,
@@ -266,7 +225,7 @@ export function Nav() {
   const [sharePostId, setSharePostId] = useState<UUID | null>(null);
   const [incomingCount, setIncomingCount] = useState<number>(0);
   const [convosUnread, setConvosUnread] = useState<number>(0);
-  const [alertsUnread, setAlertsUnread] = useState<number>(0);
+  const [threadAlerts, setThreadAlerts] = useState<number>(0);
 
   const isGuest: boolean = !session;
 
@@ -274,7 +233,7 @@ export function Nav() {
     if (!user?.id) {
       setIncomingCount(0);
       setConvosUnread(0);
-      setAlertsUnread(0);
+      setThreadAlerts(0);
       return;
     }
     const [reqs, convos, alerts] = await Promise.all([
@@ -284,7 +243,9 @@ export function Nav() {
     ]);
     if (reqs) setIncomingCount(reqs.incoming.length);
     if (convos) setConvosUnread(convos.threads_with_unread);
-    if (alerts) setAlertsUnread(alerts.unread_count);
+    // Mentions and reactions are counted on Conversations, where they are now
+    // shown, so they must not also be counted here.
+    if (alerts) setThreadAlerts(alerts.unread_thread_count);
   }, [user?.id]);
 
   useEffect(() => {
@@ -292,7 +253,7 @@ export function Nav() {
       setProfile(null);
       setIncomingCount(0);
       setConvosUnread(0);
-      setAlertsUnread(0);
+      setThreadAlerts(0);
       return;
     }
     let active = true;
@@ -326,21 +287,19 @@ export function Nav() {
     void refreshBadges();
   });
 
-  // Replying in the feed stamps the read cursor, answering a friend request
-  // settles one, and visiting the Alerts tab clears its own unread state —
-  // all without a route change, so the badge needs telling directly instead
-  // of waiting for the next poll or pathname change.
+  // Replying in the feed stamps the read cursor and answering a friend
+  // request settles one, both without a route change, so the badge needs
+  // telling directly instead of waiting for the next poll or pathname
+  // change.
   useEffect(() => {
     function onStale(): void {
       void refreshBadges();
     }
     window.addEventListener("nwf:thread-seen", onStale);
     window.addEventListener("nwf:connections-changed", onStale);
-    window.addEventListener("nwf:alerts-viewed", onStale);
     return () => {
       window.removeEventListener("nwf:thread-seen", onStale);
       window.removeEventListener("nwf:connections-changed", onStale);
-      window.removeEventListener("nwf:alerts-viewed", onStale);
     };
   }, [refreshBadges]);
 
@@ -367,10 +326,9 @@ export function Nav() {
   }
 
   function badgeFor(href: string): number {
-    // Threads with unread replies belong to the Conversations tab; the Alerts
-    // badge is left with what is only ever an alert (mentions, reactions).
-    if (href === "/conversations") return convosUnread;
-    if (href === "/notifications") return alertsUnread;
+    // One number, one meaning: everything that happened in a thread counts on
+    // Conversations, and friend requests count on People.
+    if (href === "/conversations") return convosUnread + threadAlerts;
     if (href === "/friends") return incomingCount;
     return 0;
   }
@@ -459,7 +417,7 @@ export function Nav() {
             "calc(env(safe-area-inset-bottom) + var(--tabbar-inset))",
         }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-6 items-stretch">
+        <div className="mx-auto grid max-w-lg grid-cols-5 items-stretch">
           <Link
             href="/"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
@@ -481,7 +439,7 @@ export function Nav() {
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={convosUnread}>
+            <TabIcon badge={convosUnread + threadAlerts}>
               <IconFeed
                 className="h-5 w-5"
                 filled={tabActive("/conversations")}
@@ -512,22 +470,6 @@ export function Nav() {
               +
             </span>
           </button>
-          <Link
-            href="/notifications"
-            className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/notifications")
-                ? "font-semibold text-zinc-900 dark:text-zinc-50"
-                : "font-medium text-zinc-500"
-            }`}
-          >
-            <TabIcon badge={alertsUnread}>
-              <IconAlerts
-                className="h-5 w-5"
-                filled={tabActive("/notifications")}
-              />
-            </TabIcon>
-            Alerts
-          </Link>
           {isGuest ? (
             <Link
               href="/signin"

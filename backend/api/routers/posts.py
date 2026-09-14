@@ -950,6 +950,10 @@ async def set_post_reaction(
         post_id=post.id,
         story_id=post.story_id,
     )
+    # A reaction is activity: with Alerts folded into Conversations, it has to
+    # move the thread under the "Last updated" sort or it is invisible.
+    # Clearing one does not, since un-reacting is not news.
+    post.last_activity_at = datetime.now(UTC)
     await session.flush()
     return await serialize_post(session, post, viewer_id=user.id)
 

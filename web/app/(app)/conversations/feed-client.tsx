@@ -9,7 +9,13 @@ import { FeedSkeleton } from "@/components/skeleton";
 import { usePublishStandards } from "@/components/standards-context";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
-import type { FeedCard, FeedPayload, Post, Profile } from "@/lib/types";
+import type {
+  FeedCard,
+  FeedPayload,
+  FeedSort,
+  Post,
+  Profile,
+} from "@/lib/types";
 import { useAwayRefresh } from "@/lib/use-away-refresh";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
@@ -20,6 +26,19 @@ import { Fragment, useCallback, useEffect, useState } from "react";
  * that you reach it in a normal scroll.
  */
 const SUGGESTIONS_AFTER_POSTS: number = 3;
+
+/** Remembers the sort across visits; a per-viewer convenience, not state. */
+const SORT_STORAGE_KEY: string = "nwf:feed-sort";
+
+function storedSort(): FeedSort {
+  try {
+    return window.localStorage.getItem(SORT_STORAGE_KEY) === "created"
+      ? "created"
+      : "activity";
+  } catch {
+    return "activity";
+  }
+}
 
 function formatNewSince(iso: string): string {
   const date: Date = new Date(iso);
@@ -38,6 +57,12 @@ export function FeedClient() {
   const [data, setData] = useState<FeedPayload | null>(null);
   const [me, setMe] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [sort, setSort] = useState<FeedSort>("activity");
+
+  // Read after mount: localStorage does not exist during the server render.
+  useEffect(() => {
+    setSort(storedSort());
+  }, []);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -55,7 +80,7 @@ export function FeedClient() {
       if (!opts?.silent) setLoading(true);
       try {
         if (isSignedIn) {
-          const payload: FeedPayload = await api.getFeed();
+          const payload: FeedPayload = await api.getFeed(sort);
           setData(payload);
         } else {
           setData(null);
@@ -69,7 +94,7 @@ export function FeedClient() {
         setLoading(false);
       }
     },
-    [isSignedIn, notify],
+    [isSignedIn, notify, sort],
   );
 
   usePublishStandards(data?.standards ?? null, me, data !== null);
@@ -111,6 +136,7 @@ export function FeedClient() {
         ],
         score: Number.MAX_SAFE_INTEGER,
         unread_reply_count: 0,
+        recent_activity: [],
         fof_reason: null,
       };
       setData((prev) => {
@@ -180,8 +206,12 @@ export function FeedClient() {
     const newSinceMs: number = Date.parse(data.new_since);
     if (!Number.isNaN(newSinceMs)) {
       dividerBeforeIndex = postItems.findIndex((card) => {
-        const createdMs: number = Date.parse(card.posts[0]?.created_at ?? "");
-        return !Number.isNaN(createdMs) && createdMs <= newSinceMs;
+        const post = card.posts[0];
+        const stamp: string =
+          (sort === "activity" ? post?.last_activity_at : post?.created_at) ??
+          "";
+        const stampMs: number = Date.parse(stamp);
+        return !Number.isNaN(stampMs) && stampMs <= newSinceMs;
       });
     }
   }
@@ -198,6 +228,39 @@ export function FeedClient() {
               nudge={data?.standards ?? null}
               onPosted={() => void load({ silent: true })}
             />
+
+            {postItems.length > 1 ? (
+              <div className="flex items-center justify-end gap-1 pb-1 text-xs">
+                {(
+                  [
+                    ["activity", "Last updated"],
+                    ["created", "Recently posted"],
+                  ] as [FeedSort, string][]
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      if (value === sort) return;
+                      setSort(value);
+                      try {
+                        window.localStorage.setItem(SORT_STORAGE_KEY, value);
+                      } catch {
+                        // A viewer with storage blocked just loses the memory.
+                      }
+                    }}
+                    className={
+                      value === sort
+                        ? "border border-zinc-900 px-2 py-1 font-semibold text-zinc-900 dark:border-zinc-100 dark:text-zinc-50"
+                        : "border border-transparent px-2 py-1 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                    }
+                    aria-pressed={value === sort}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </>
         ) : null}
 

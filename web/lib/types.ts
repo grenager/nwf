@@ -308,6 +308,20 @@ export interface PreviewCard {
   platform: string | null;
 }
 
+/**
+ * One unread alert about a thread, shown on its Conversations card.
+ *
+ * Mentions and reactions used to live on a separate Alerts screen, which
+ * meant the same event was listed twice: once as an alert and once as the
+ * thread it happened in.
+ */
+export interface CardActivity {
+  kind: string;
+  actor_name: string;
+  actor_image_url: string | null;
+  created_at: string;
+}
+
 export interface FeedCard {
   card_id: UUID;
   story_id: UUID;
@@ -325,8 +339,13 @@ export interface FeedCard {
   posts: Post[];
   score: number;
   unread_reply_count: number;
+  /** Unread mentions and reactions on this thread, newest first. */
+  recent_activity: CardActivity[];
   fof_reason: FofReason | null;
 }
+
+/** How the Conversations feed is ordered. */
+export type FeedSort = "activity" | "created";
 
 /**
  * The conversations about one story that the viewer is allowed to read.
@@ -459,6 +478,12 @@ export interface NotificationItem {
 export interface NotificationList {
   items: NotificationItem[];
   unread_count: number;
+  /**
+   * Unread alerts that belong to a thread. They now show on the
+   * Conversations card, so the Alerts badge subtracts them rather than
+   * counting the same mention on two tabs.
+   */
+  unread_thread_count: number;
 }
 
 export type ConnectionStatus = "pending" | "accepted" | "blocked";

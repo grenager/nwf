@@ -914,6 +914,13 @@ def audience_label(visibility: PostVisibility, participant_count: int) -> str:
     return f"visible to friends of {participant_count} participants"
 
 
+#: How the Conversations feed may be ordered. ``activity`` puts the thread
+#: someone just replied to or reacted on first, which is what folding Alerts
+#: into Conversations needs; ``created`` keeps the original "newest posted"
+#: reading, where an old thread never jumps the queue.
+FeedSort = Literal["activity", "created"]
+
+
 async def visible_post_ids_for_viewer(
     session: AsyncSession,
     viewer_id: uuid.UUID | None,
@@ -923,21 +930,23 @@ async def visible_post_ids_for_viewer(
     since_days: int = 14,
     min_results: int = 0,
     max_since_days: int | None = None,
+    sort: FeedSort = "created",
 ) -> list[uuid.UUID]:
-    """Candidate post ids the viewer may see, newest-posted first.
+    """Candidate post ids the viewer may see.
 
     Authenticated users see private posts where they are the author or a
     direct friend engaged with the post or its story (participant, reaction,
     or reading). Guests see nothing.
-    Sorted by ``created_at`` so a new reply - or a friend's later engagement -
-    does not bump a post to the top.
+
+    ``sort`` picks both the ordering and the column the lookback window
+    applies to, and the two must match: windowing on ``created_at`` while
+    ordering by ``last_activity_at`` would silently drop exactly the old
+    threads that a fresh reply is supposed to bring back.
 
     ``since_days`` keeps the common case cheap by only scanning recent posts. If
     that window yields fewer than ``min_results`` posts, the lookback widens to
     ``max_since_days`` (``None`` for no cutoff) so a quiet week still produces a
-    full feed instead of a near-empty one. Note this windows on the post's own
-    ``created_at``, not on when a friend engaged with it - a friend engaging
-    with a post outside the lookback window does not resurrect it.
+    full feed instead of a near-empty one.
     """
     if viewer_id is None:
         return []
@@ -946,6 +955,10 @@ async def visible_post_ids_for_viewer(
         friend_ids
         if friend_ids is not None
         else await accepted_friend_ids(session, viewer_id)
+    )
+
+    order_column = (
+        Post.last_activity_at if sort == "activity" else Post.created_at
     )
 
     def query(since: datetime | None) -> Select[tuple[uuid.UUID]]:
@@ -960,8 +973,8 @@ async def visible_post_ids_for_viewer(
             ),
         )
         if since is not None:
-            stmt = stmt.where(Post.created_at >= since)
-        return stmt.order_by(Post.created_at.desc()).limit(limit)
+            stmt = stmt.where(order_column >= since)
+        return stmt.order_by(order_column.desc()).limit(limit)
 
     now = datetime.now(UTC)
     recent = await session.scalars(query(now - timedelta(days=since_days)))

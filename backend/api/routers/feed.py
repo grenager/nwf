@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import OptionalUser, SessionDep
 from api.friends import (
+    FeedSort,
     StoryActivity,
     accepted_friend_ids,
     aggregate_engagement,
@@ -31,6 +32,7 @@ from api.friends import (
 from api.reactions import load_comment_reactions, load_post_reactions
 from api.schemas import (
     AttachmentOut,
+    CardActivityOut,
     CommentOut,
     FeedCardOut,
     FeedOut,
@@ -47,6 +49,8 @@ from core.config import get_settings
 from core.models import (
     Attachment,
     Comment,
+    Notification,
+    NotificationKind,
     Post,
     PostParticipant,
     PostRead,
@@ -451,6 +455,72 @@ def _nudge_out(
     return StandardsNudgeOut(kind=kind, value=value, friend_name=friend_name)
 
 
+#: Alert kinds that belong to a thread rather than to the friend graph, and
+#: so are shown on the Conversations card instead of a separate screen.
+THREAD_ALERT_KINDS: tuple[NotificationKind, ...] = (
+    NotificationKind.mention,
+    NotificationKind.post_reaction,
+    NotificationKind.comment_reaction,
+)
+
+
+async def _card_activity(
+    session: AsyncSession,
+    viewer_id: uuid.UUID,
+    post_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[CardActivityOut]]:
+    """Unread thread alerts for the viewer, grouped by post, newest first.
+
+    One query for every card. Friend-graph alerts are excluded: they have no
+    post to sit on and still belong on the People tab.
+    """
+    if not post_ids:
+        return {}
+
+    rows = list(
+        (
+            await session.scalars(
+                select(Notification)
+                .where(
+                    Notification.recipient_id == viewer_id,
+                    Notification.post_id.in_(post_ids),
+                    Notification.read_at.is_(None),
+                    Notification.kind.in_(THREAD_ALERT_KINDS),
+                )
+                .order_by(Notification.created_at.desc())
+            )
+        ).all()
+    )
+    if not rows:
+        return {}
+
+    actors: dict[uuid.UUID, Profile] = {
+        p.id: p
+        for p in (
+            await session.scalars(
+                select(Profile).where(
+                    Profile.id.in_({n.actor_id for n in rows})
+                )
+            )
+        ).all()
+    }
+
+    grouped: dict[uuid.UUID, list[CardActivityOut]] = {}
+    for note in rows:
+        if note.post_id is None:
+            continue
+        actor = actors.get(note.actor_id)
+        grouped.setdefault(note.post_id, []).append(
+            CardActivityOut(
+                kind=str(note.kind),
+                actor_name=display_name(actor) if actor else "Someone",
+                actor_image_url=actor.image_url if actor else None,
+                created_at=note.created_at,
+            )
+        )
+    return grouped
+
+
 async def build_feed_cards(
     session: AsyncSession,
     *,
@@ -539,6 +609,9 @@ async def build_feed_cards(
         [p.id for p in ordered_posts],
         participant_post_ids=participant_post_ids,
     )
+    activity_by_post = await _card_activity(
+        session, viewer_id, [p.id for p in ordered_posts]
+    )
 
     post_outs = await _build_post_outs(
         session,
@@ -610,6 +683,7 @@ async def build_feed_cards(
                 posts=[out],
                 score=0.0,
                 unread_reply_count=out.unread_reply_count,
+                recent_activity=activity_by_post.get(post.id, []),
                 fof_reason=fof_reasons.get(post.id),
             )
         )
@@ -622,8 +696,15 @@ async def get_feed(
     user: OptionalUser,
     response: Response,
     limit: int = Query(default=40, le=100, ge=1),
+    sort: FeedSort = Query(
+        default="activity",
+        description=(
+            "'activity' puts the most recently replied-to or reacted-on "
+            "thread first; 'created' keeps newest-posted order."
+        ),
+    ),
 ) -> FeedOut:
-    """Chronological feed of visible posts, newest-posted first."""
+    """The viewer's conversations: friends' and friends-of-friends' posts."""
     settings = get_settings()
     viewer_id: uuid.UUID | None = user.id if user is not None else None
 
@@ -645,6 +726,7 @@ async def get_feed(
         # further back until there is enough to fill it.
         min_results=settings.feed_min_items,
         max_since_days=settings.feed_max_lookback_days,
+        sort=sort,
     )
 
     # Aggregate counts are only rendered by the empty state, so only pay for

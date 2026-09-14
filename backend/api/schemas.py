@@ -412,6 +412,20 @@ class PostOut(ORMModel):
     last_seen_at: datetime | None = None
 
 
+class CardActivityOut(BaseModel):
+    """One unread alert about this thread, shown on its card.
+
+    Replaces the separate Alerts screen for anything that belongs to a
+    conversation: a mention or a reaction is news about a thread, so it reads
+    better on the thread than in a parallel list of the same events.
+    """
+
+    kind: str
+    actor_name: str
+    actor_image_url: str | None = None
+    created_at: datetime
+
+
 class FeedCardOut(BaseModel):
     """One card per post. Two posts about the same article are two cards."""
 
@@ -431,6 +445,8 @@ class FeedCardOut(BaseModel):
     posts: list[PostOut] = Field(default_factory=list)
     score: float = 0.0
     unread_reply_count: int = 0
+    #: Unread mentions and reactions on this thread, newest first.
+    recent_activity: list[CardActivityOut] = Field(default_factory=list)
     # Set only when the viewer has no other path to this post (not the author,
     # not a direct friend of the author, not already a participant) - explains
     # why a stranger's post is showing up, via the friend who engaged with it.
@@ -794,6 +810,10 @@ class NotificationOut(BaseModel):
 class NotificationList(BaseModel):
     items: list[NotificationOut]
     unread_count: int = 0
+    #: Unread alerts that belong to a thread (mentions and reactions). These
+    #: now surface on the Conversations card itself, so the Alerts badge
+    #: counts only what is left: friend-graph events.
+    unread_thread_count: int = 0
 
 
 class NotificationsReadRequest(BaseModel):

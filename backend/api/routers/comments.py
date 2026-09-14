@@ -357,6 +357,9 @@ async def set_comment_reaction(
         comment_id=comment.id,
         story_id=comment.story_id,
     )
+    # Same reasoning as a post reaction: reacting is activity and must move
+    # the thread; un-reacting is not.
+    post.last_activity_at = datetime.now(UTC)
     await session.flush()
     author = await session.get(Profile, comment.user_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)
