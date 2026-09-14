@@ -329,6 +329,19 @@ export interface FeedCard {
 }
 
 /**
+ * The conversations about one story that the viewer is allowed to read.
+ *
+ * Usually empty for a story found on Discover — a trending article is
+ * platform-wide, but the threads under it are private — which is exactly
+ * when starting one is the only thing to do.
+ */
+export interface StoryConversations {
+  items: FeedCard[];
+  /** The viewer already has a post here, so they add to it rather than start a second. */
+  viewer_has_post: boolean;
+}
+
+/**
  * One card on the Discover tab: a story, with how much the whole platform is
  * doing with it.
  *

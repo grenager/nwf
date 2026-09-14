@@ -810,7 +810,7 @@ def non_editorial_author_clause() -> ColumnElement[bool]:
 
     Editorial posts exist to fill the Discover tab, so they must never reach a
     friend/friend-of-friend surface. Having no friends is not enough on its
-    own: :func:`_fof_engagement_clause` unlocks *every* post on a story once a
+    own: :func:`fof_engagement_clause` unlocks *every* post on a story once a
     friend marks that story read, so an editorial post about a widely-read
     article would otherwise appear in Conversations.
     """
@@ -820,9 +820,12 @@ def non_editorial_author_clause() -> ColumnElement[bool]:
     )
 
 
-def _fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
+def fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
     """True when any of `user_ids` engaged with Post (via post_participants /
     post_reactions) or its Story (via story_statuses.read).
+
+    Shared by the feed's candidate query and the story page, so "which
+    conversations may I read" is decided in exactly one place.
 
     Story-level engagement (reading) unlocks every Post tied to that
     story_id, not just one - a friend reading an article is vouching for the
@@ -951,7 +954,7 @@ async def visible_post_ids_for_viewer(
             or_(
                 Post.author_id == viewer_id,
                 and_(
-                    _fof_engagement_clause(participant_filter),
+                    fof_engagement_clause(participant_filter),
                     non_editorial_author_clause(),
                 ),
             ),
@@ -1003,7 +1006,7 @@ async def viewer_visible_post_ids(
             or_(
                 Post.author_id == viewer_id,
                 and_(
-                    _fof_engagement_clause(participant_filter),
+                    fof_engagement_clause(participant_filter),
                     non_editorial_author_clause(),
                 ),
             ),
@@ -1037,7 +1040,7 @@ async def primary_post_ids_by_story(
                 or_(
                     Post.author_id == viewer_id,
                     and_(
-                        _fof_engagement_clause(participant_filter),
+                        fof_engagement_clause(participant_filter),
                         non_editorial_author_clause(),
                     ),
                 ),

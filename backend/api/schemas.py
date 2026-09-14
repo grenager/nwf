@@ -479,6 +479,21 @@ class DiscoverOut(BaseModel):
     window_hours: int
 
 
+class StoryConversationsOut(BaseModel):
+    """The conversations about one story that this viewer is allowed to read.
+
+    Empty for a guest, and for a member whose friends have not touched the
+    story — which is the normal case for a story found on Discover, and the
+    point at which "Start a conversation" is the only thing to do.
+    """
+
+    items: list[FeedCardOut] = Field(default_factory=list)
+    #: True when the viewer already has a post of their own about this story,
+    #: so the UI offers "Add to your conversation" rather than starting a
+    #: second one.
+    viewer_has_post: bool = False
+
+
 class StandardsNudgeOut(BaseModel):
     """The one thing worth asking this viewer to do, if anything.
 

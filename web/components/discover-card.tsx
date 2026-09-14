@@ -3,6 +3,7 @@
 import { ArticleCard } from "@/components/article-card";
 import { api } from "@/lib/api";
 import type { DiscoverCard as DiscoverCardData } from "@/lib/types";
+import Link from "next/link";
 import { useState } from "react";
 
 interface DiscoverCardProps {
@@ -65,9 +66,23 @@ export function DiscoverCard({ card, canMarkRead = false }: DiscoverCardProps) {
         onOpen={handleOpen}
         imageHeightClassName="h-44"
       />
-      {line ? (
-        <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{line}</p>
-      ) : null}
+      <div className="mt-1.5 flex items-baseline justify-between gap-3">
+        {line ? (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">{line}</p>
+        ) : (
+          <span />
+        )}
+        {/* The card headline opens the article; this opens the story page,
+            where the viewer's own and their friends' threads live and a new
+            conversation can be started. */}
+        <Link
+          href={`/story/${card.story_id}`}
+          scroll={false}
+          className="shrink-0 text-xs font-semibold text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+        >
+          {card.commenter_count > 0 ? "Conversations" : "Talk about it"}
+        </Link>
+      </div>
     </article>
   );
 }

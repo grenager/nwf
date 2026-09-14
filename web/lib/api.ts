@@ -32,6 +32,7 @@ import type {
   RecommendedFriend,
   ShareOutcome,
   Story,
+  StoryConversations,
   StoryKind,
   StoryList,
   StoryReader,
@@ -152,6 +153,11 @@ export const api = {
     request<StoryList>(`/stories/title-search?q=${encodeURIComponent(q)}`),
   getCommunityStats: (): Promise<CommunityStats> =>
     request<CommunityStats>("/community/stats"),
+  getStory: (storyId: UUID): Promise<Story> =>
+    request<Story>(`/stories/${storyId}`),
+  /** Threads about this story the viewer may read. Guests get none. */
+  getStoryConversations: (storyId: UUID): Promise<StoryConversations> =>
+    request<StoryConversations>(`/stories/${storyId}/conversations`),
   /** Self + friend readers of a story, most recent first - refetch target
    * for the live "reading now" indicator. */
   getStoryReaders: (storyId: UUID): Promise<StoryReader[]> =>

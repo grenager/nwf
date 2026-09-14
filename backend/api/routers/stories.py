@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import ColumnElement
 
@@ -18,16 +18,20 @@ from api.friends import (
     accepted_friend_ids,
     aggregate_engagement,
     display_name,
+    fof_engagement_clause,
     friend_activity_by_story,
     friend_profiles_map,
     friend_reactors_by_story,
     global_activity_by_story,
+    non_editorial_author_clause,
     primary_post_ids_by_story,
     top_readers,
 )
+from api.routers.feed import build_feed_cards
 from api.schemas import (
     FriendEngagementOut,
     FriendReactorOut,
+    StoryConversationsOut,
     StoryCreate,
     StoryList,
     StoryReaderOut,
@@ -265,6 +269,60 @@ async def add_story(
     else:
         model.source_name = urlparse(url).netloc or None
     return model
+
+
+@router.get("/{story_id}/conversations", response_model=StoryConversationsOut)
+async def get_story_conversations(
+    story_id: uuid.UUID, session: SessionDep, user: OptionalUser
+) -> StoryConversationsOut:
+    """Conversations about this story that the viewer may read.
+
+    The bridge from Discover to the private half of the app: a trending story
+    is public-ish, but the threads under it are not. Only the viewer's own
+    posts and those their friends engaged with come back — same rule as the
+    feed — and editorial seeding posts are never among them, since they exist
+    to surface the article, not to be replied to.
+    """
+    if user is None:
+        return StoryConversationsOut(items=[], viewer_has_post=False)
+
+    friends = await accepted_friend_ids(session, user.id)
+    post_ids = list(
+        (
+            await session.scalars(
+                select(Post.id)
+                .where(
+                    Post.story_id == story_id,
+                    or_(
+                        Post.author_id == user.id,
+                        and_(
+                            fof_engagement_clause([user.id, *friends]),
+                            non_editorial_author_clause(),
+                        ),
+                    ),
+                )
+                # Most recently active first: on a story page the live
+                # conversation matters more than which was posted first.
+                .order_by(Post.last_activity_at.desc())
+            )
+        ).all()
+    )
+    cards = await build_feed_cards(
+        session, viewer_id=user.id, friends=friends, post_ids=post_ids
+    )
+    return StoryConversationsOut(
+        items=cards,
+        viewer_has_post=any(
+            post.author_id == user.id
+            for post in (
+                await session.scalars(
+                    select(Post).where(
+                        Post.story_id == story_id, Post.author_id == user.id
+                    )
+                )
+            ).all()
+        ),
+    )
 
 
 @router.get("/{story_id}", response_model=StoryWithStatus)

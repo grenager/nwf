@@ -5,7 +5,12 @@ import { MentionInput } from "@/components/mention-input";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
-import { QUOTE_MAX_LENGTH, type Post, type PreviewCard } from "@/lib/types";
+import {
+  QUOTE_MAX_LENGTH,
+  type Post,
+  type PreviewCard,
+  type Story,
+} from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { ModalShell } from "@/components/modal-shell";
 
@@ -19,6 +24,12 @@ interface AddStoryModalProps {
    * for a take, which is the whole point of sharing with friends.
    */
   allowEmptyTake?: boolean;
+  /**
+   * Start a conversation about a story that already exists (opened from
+   * Discover or a story page). The URL is settled, so the link field and the
+   * preview scrape are skipped and only the take is asked for.
+   */
+  initialStory?: Story | null;
 }
 
 const PREVIEW_DEBOUNCE_MS: number = 500;
@@ -44,6 +55,7 @@ export function AddStoryModal({
   onClose,
   onAdded,
   allowEmptyTake = false,
+  initialStory = null,
 }: AddStoryModalProps) {
   const { notify } = useToast();
   const { requireAuth } = useAuthGate();
@@ -72,6 +84,7 @@ export function AddStoryModal({
   }, [onClose]);
 
   useEffect(() => {
+    if (initialStory !== null) return;
     const trimmed: string = url.trim();
     if (!trimmed || !isHttpUrl(trimmed)) {
       previewRequestId.current += 1;
@@ -113,34 +126,36 @@ export function AddStoryModal({
     return () => {
       clearTimeout(timer);
     };
-  }, [url]);
+  }, [url, initialStory]);
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!requireAuth("post")) return;
     const trimmedUrl: string = url.trim();
-    if (
-      (!take.trim() && !allowEmptyTake) ||
-      !trimmedUrl ||
-      preview === null ||
-      previewLoading
-    ) {
+    if (!take.trim() && !allowEmptyTake) return;
+    if (initialStory === null && (!trimmedUrl || preview === null || previewLoading)) {
       return;
     }
     setSaving(true);
     try {
       const post: Post = await api.createPost({
-        url: trimmedUrl,
+        // A known story is referenced by id, so the server reuses the row
+        // instead of re-resolving the URL.
+        ...(initialStory !== null
+          ? { story_id: initialStory.id }
+          : {
+              url: trimmedUrl,
+              canonical_url: preview?.canonical_url,
+              full_headline: preview?.full_headline,
+              summary: preview?.summary,
+              image_url: preview?.image_url,
+              publisher: preview?.publisher,
+              platform: preview?.platform,
+            }),
         take: take.trim() || null,
         shared_text: paywalled ? sharedText.trim() || null : null,
         quote: quote.trim() || null,
         kind: "news",
-        canonical_url: preview.canonical_url,
-        full_headline: preview.full_headline,
-        summary: preview.summary,
-        image_url: preview.image_url,
-        publisher: preview.publisher,
-        platform: preview.platform,
       });
       notify("Posted", "success");
       onAdded?.(post);
@@ -152,25 +167,25 @@ export function AddStoryModal({
     }
   }
 
+  const linkSettled: boolean = initialStory !== null;
   const canPost: boolean =
     (!!take.trim() || allowEmptyTake) &&
-    !!url.trim() &&
-    preview !== null &&
-    !previewLoading &&
-    !saving;
+    !saving &&
+    (linkSettled || (!!url.trim() && preview !== null && !previewLoading));
   const showPreviewPanel: boolean =
-    previewLoading || preview !== null || previewError !== null;
+    !linkSettled &&
+    (previewLoading || preview !== null || previewError !== null);
 
   return (
     <ModalShell
       onClose={onClose}
       mobile="fullscreen"
-      label="Share an article"
+      label={linkSettled ? "Start a conversation" : "Share an article"}
       padded={false}
     >
       <div className="flex shrink-0 items-center justify-between border-b border-slate-200 p-5 pb-4 dark:border-slate-700">
         <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-          Share an article
+          {linkSettled ? "Start a conversation" : "Share an article"}
         </h2>
         <button
           onClick={onClose}
@@ -183,15 +198,43 @@ export function AddStoryModal({
 
       <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
-          <div className="flex flex-col gap-2">
+          {linkSettled && initialStory !== null ? (
+            // The article is already settled, so it is shown rather than
+            // asked for: this composer was opened from the story itself.
+            <div className="border border-slate-200 p-3 dark:border-slate-700">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                {initialStory.source_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={initialStory.source_image_url}
+                    alt=""
+                    className="h-4 w-4 shrink-0 object-cover"
+                  />
+                ) : null}
+                <span className="truncate">
+                  {initialStory.source_name ??
+                    hostFromUrl(initialStory.article_url)}
+                </span>
+              </div>
+              <h3 className="mt-1 font-serif text-base font-semibold leading-snug tracking-tight text-slate-900 dark:text-slate-50">
+                {initialStory.full_headline}
+              </h3>
+            </div>
+          ) : null}
+
+          <div
+            className={
+              linkSettled ? "hidden" : "flex flex-col gap-2"
+            }
+          >
             <label className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Article URL
               </span>
               <input
                 type="url"
-                required
-                autoFocus
+                required={!linkSettled}
+                autoFocus={!linkSettled}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com/article"

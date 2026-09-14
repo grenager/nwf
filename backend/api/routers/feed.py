@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, Response
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import OptionalUser, SessionDep
 from api.friends import (
@@ -450,45 +451,24 @@ def _nudge_out(
     return StandardsNudgeOut(kind=kind, value=value, friend_name=friend_name)
 
 
-@router.get("", response_model=FeedOut)
-async def get_feed(
-    session: SessionDep,
-    user: OptionalUser,
-    response: Response,
-    limit: int = Query(default=40, le=100, ge=1),
-) -> FeedOut:
-    """Chronological feed of visible posts, newest-posted first."""
-    settings = get_settings()
-    viewer_id: uuid.UUID | None = user.id if user is not None else None
-    new_since: datetime | None = None
-    friends: list[uuid.UUID] = []
+async def build_feed_cards(
+    session: AsyncSession,
+    *,
+    viewer_id: uuid.UUID,
+    friends: list[uuid.UUID],
+    post_ids: list[uuid.UUID],
+) -> list[FeedCardOut]:
+    """Assemble one ``FeedCardOut`` per post id, in the order given.
 
-    if viewer_id is None:
-        # Guests never see posts; serve an empty payload for edge caching.
-        response.headers["Cache-Control"] = _GUEST_CACHE_CONTROL
-        return await _empty_feed(session, new_since=None)
+    Shared by the Conversations feed and the story page so a post looks and
+    behaves the same wherever it is rendered. Every related row is loaded in
+    batched ``IN (...)`` queries; nothing here is per-post.
 
-    new_since = await _touch_last_opened(session, viewer_id)
-    friends = await accepted_friend_ids(session, viewer_id)
-
-    post_ids = await visible_post_ids_for_viewer(
-        session,
-        viewer_id,
-        friend_ids=friends,
-        limit=limit,
-        since_days=settings.inbox_candidate_days,
-        # A quiet couple of weeks should not leave the feed nearly empty; reach
-        # further back until there is enough to fill it.
-        min_results=settings.feed_min_items,
-        max_since_days=settings.feed_max_lookback_days,
-    )
-
-    # Aggregate counts are only rendered by the empty state, so only pay for
-    # the full-table COUNT(*)s when the feed is actually empty.
+    One card per post: two posts about the same article stay two cards, since
+    they are two separate private conversations.
+    """
     if not post_ids:
-        return await _empty_feed(
-            session, new_since, viewer_id=viewer_id, friends=friends
-        )
+        return []
 
     participants_by_post = await _participants_by_post(session, post_ids)
 
@@ -498,11 +478,11 @@ async def get_feed(
         ).all()
     )
     posts_by_id: dict[uuid.UUID, Post] = {p.id: p for p in posts}
-
-    # Preserve created_at order from post_ids (newest first).
     ordered_posts: list[Post] = [
         posts_by_id[pid] for pid in post_ids if pid in posts_by_id
     ]
+    if not ordered_posts:
+        return []
 
     story_ids = list({p.story_id for p in ordered_posts})
     stories: dict[uuid.UUID, Story] = {
@@ -523,52 +503,42 @@ async def get_feed(
             ).all()
         }
 
-    # Viewer log state.
-    status_by_story: dict[uuid.UUID, StoryStatus] = {}
-    activity: dict[uuid.UUID, StoryActivity] = {}
-    profiles: dict[uuid.UUID, Profile] = {}
-    fof_reasons: dict[uuid.UUID, FofReasonOut] = {}
-    unread_reply_counts: dict[uuid.UUID, int] = {}
-    last_seen_by_post: dict[uuid.UUID, datetime] = {}
-    if viewer_id is not None and story_ids:
-        status_rows = (
-            await session.scalars(
-                select(StoryStatus).where(
-                    StoryStatus.user_id == viewer_id,
-                    StoryStatus.story_id.in_(story_ids),
-                )
+    status_rows = (
+        await session.scalars(
+            select(StoryStatus).where(
+                StoryStatus.user_id == viewer_id,
+                StoryStatus.story_id.in_(story_ids),
             )
-        ).all()
-        status_by_story = {r.story_id: r for r in status_rows}
-        # Self-inclusive: the "reading now"/"read" avatar stack shows the
-        # viewer's own entry too, as confirmation their open registered.
-        activity = await friend_activity_by_story(
-            session, viewer_id, story_ids, friend_ids=[*friends, viewer_id]
         )
-        profiles = await friend_profiles_map(
-            session, viewer_id, friend_ids=friends, include_self=True
-        )
-        fof_reasons = await _fof_reasons_by_post(
-            session,
-            ordered_posts,
-            viewer_id=viewer_id,
-            friends=friends,
-            participants_by_post=participants_by_post,
-            profiles=profiles,
-        )
-        participant_post_ids: set[uuid.UUID] = {
-            pid
-            for pid, users in participants_by_post.items()
-            if viewer_id in users
-        } | {
-            p.id for p in ordered_posts if p.author_id == viewer_id
-        }
-        unread_reply_counts, last_seen_by_post = await _unread_reply_counts(
-            session,
-            viewer_id,
-            [p.id for p in ordered_posts],
-            participant_post_ids=participant_post_ids,
-        )
+    ).all()
+    status_by_story: dict[uuid.UUID, StoryStatus] = {
+        r.story_id: r for r in status_rows
+    }
+    # Self-inclusive: the "reading now"/"read" avatar stack shows the viewer's
+    # own entry too, as confirmation their open registered.
+    activity = await friend_activity_by_story(
+        session, viewer_id, story_ids, friend_ids=[*friends, viewer_id]
+    )
+    profiles = await friend_profiles_map(
+        session, viewer_id, friend_ids=friends, include_self=True
+    )
+    fof_reasons = await _fof_reasons_by_post(
+        session,
+        ordered_posts,
+        viewer_id=viewer_id,
+        friends=friends,
+        participants_by_post=participants_by_post,
+        profiles=profiles,
+    )
+    participant_post_ids: set[uuid.UUID] = {
+        pid for pid, users in participants_by_post.items() if viewer_id in users
+    } | {p.id for p in ordered_posts if p.author_id == viewer_id}
+    unread_reply_counts, last_seen_by_post = await _unread_reply_counts(
+        session,
+        viewer_id,
+        [p.id for p in ordered_posts],
+        participant_post_ids=participant_post_ids,
+    )
 
     post_outs = await _build_post_outs(
         session,
@@ -584,8 +554,6 @@ async def get_feed(
         last_seen_by_post=last_seen_by_post,
     )
 
-    # One card per post. We intentionally do NOT merge multiple posts about the
-    # same article: if two people share the same link, they show as two posts.
     cards: list[FeedCardOut] = []
     for post in ordered_posts:
         story = stories.get(post.story_id)
@@ -602,22 +570,20 @@ async def get_feed(
         starred = bool(status_row.starred) if status_row else False
         my_take = status_row.take if status_row else None
 
-        engagement = FriendEngagementOut()
-        if viewer_id is not None:
-            read_map, commented_n = aggregate_engagement(activity, [sid])
-            engagement = FriendEngagementOut(
-                read=len(read_map),
-                commented=commented_n,
-                readers=[
-                    StoryReaderOut(
-                        user_id=p.id,
-                        display_name=display_name(p),
-                        image_url=p.image_url,
-                        last_read_at=read_at,
-                    )
-                    for p, read_at in top_readers(read_map, profiles)
-                ],
-            )
+        read_map, commented_n = aggregate_engagement(activity, [sid])
+        engagement = FriendEngagementOut(
+            read=len(read_map),
+            commented=commented_n,
+            readers=[
+                StoryReaderOut(
+                    user_id=p.id,
+                    display_name=display_name(p),
+                    image_url=p.image_url,
+                    last_read_at=read_at,
+                )
+                for p, read_at in top_readers(read_map, profiles)
+            ],
+        )
 
         source_name, source_image_url = resolve_attribution(
             article_url=story.article_url,
@@ -647,6 +613,50 @@ async def get_feed(
                 fof_reason=fof_reasons.get(post.id),
             )
         )
+    return cards
+
+
+@router.get("", response_model=FeedOut)
+async def get_feed(
+    session: SessionDep,
+    user: OptionalUser,
+    response: Response,
+    limit: int = Query(default=40, le=100, ge=1),
+) -> FeedOut:
+    """Chronological feed of visible posts, newest-posted first."""
+    settings = get_settings()
+    viewer_id: uuid.UUID | None = user.id if user is not None else None
+
+    if viewer_id is None:
+        # Guests never see posts; serve an empty payload for edge caching.
+        response.headers["Cache-Control"] = _GUEST_CACHE_CONTROL
+        return await _empty_feed(session, new_since=None)
+
+    new_since: datetime | None = await _touch_last_opened(session, viewer_id)
+    friends: list[uuid.UUID] = await accepted_friend_ids(session, viewer_id)
+
+    post_ids = await visible_post_ids_for_viewer(
+        session,
+        viewer_id,
+        friend_ids=friends,
+        limit=limit,
+        since_days=settings.inbox_candidate_days,
+        # A quiet couple of weeks should not leave the feed nearly empty; reach
+        # further back until there is enough to fill it.
+        min_results=settings.feed_min_items,
+        max_since_days=settings.feed_max_lookback_days,
+    )
+
+    # Aggregate counts are only rendered by the empty state, so only pay for
+    # the full-table COUNT(*)s when the feed is actually empty.
+    if not post_ids:
+        return await _empty_feed(
+            session, new_since, viewer_id=viewer_id, friends=friends
+        )
+
+    cards = await build_feed_cards(
+        session, viewer_id=viewer_id, friends=friends, post_ids=post_ids
+    )
 
     nudge = await standards_nudge(session, viewer_id, friends)
     return FeedOut(
