@@ -125,7 +125,7 @@ export function FeedClient() {
         kind: post.kind,
         read: true,
         starred: post.starred,
-        my_take: post.take,
+        my_take: post.my_take,
         engagement: post.engagement,
         posts: [
           {

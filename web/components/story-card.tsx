@@ -124,10 +124,10 @@ export function StoryCard({
           ) : null}
           <div className="min-w-0 flex-1">
             {headline}
-            {!dense && (story.post_take || story.summary) ? (
+            {!dense && (story.post_comment || story.summary) ? (
               <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-                {story.post_take
-                  ? story.post_take
+                {story.post_comment
+                  ? story.post_comment
                   : stripHtml(story.summary ?? "").slice(0, 280)}
               </p>
             ) : null}

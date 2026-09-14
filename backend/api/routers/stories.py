@@ -37,6 +37,7 @@ from api.schemas import (
     StoryReaderOut,
     StoryWithStatus,
 )
+from api.threads import opening_comment_texts
 from core.attribution import resolve_attribution
 from core.models import Comment, Post, PostParticipant, Profile, Source, Story, StoryStatus
 
@@ -89,7 +90,8 @@ class _PostSummary:
 
     author_name: str
     author_image_url: str | None
-    take: str | None
+    #: The thread's opening comment, which is what a search hit quotes.
+    opening_comment: str | None
     reply_count: int
 
 
@@ -101,11 +103,14 @@ async def _post_summaries(
 
     rows = (
         await session.execute(
-            select(Post.id, Post.take, Profile)
+            select(Post.id, Profile)
             .join(Profile, Profile.id == Post.author_id)
             .where(Post.id.in_(post_ids))
         )
     ).all()
+    # A result reads as a conversation, so it quotes the thread's opening
+    # comment; the post itself carries no text.
+    openings = await opening_comment_texts(session, post_ids)
     count_rows = (
         await session.execute(
             select(Comment.post_id, func.count(Comment.id))
@@ -120,10 +125,10 @@ async def _post_summaries(
         post_id: _PostSummary(
             author_name=display_name(author),
             author_image_url=author.image_url,
-            take=take,
+            opening_comment=openings.get(post_id),
             reply_count=counts.get(post_id, 0),
         )
-        for post_id, take, author in rows
+        for post_id, author in rows
     }
 
 
@@ -208,7 +213,7 @@ async def title_search(
             if summary is not None:
                 item.post_author_name = summary.author_name
                 item.post_author_image_url = summary.author_image_url
-                item.post_take = summary.take
+                item.post_comment = summary.opening_comment
                 item.post_reply_count = summary.reply_count
 
     source_ids = {story.source_id for story, _, _ in ranked_rows if story.source_id}

@@ -42,7 +42,6 @@ def _post(post_id: uuid.UUID, author_id: uuid.UUID, story_id: uuid.UUID) -> Post
         id=post_id,
         story_id=story_id,
         author_id=author_id,
-        take="A questionable take",
         shared_text=None,
         visibility=PostVisibility.private,
         last_activity_at=now,
@@ -73,10 +72,14 @@ class _ReportSession:
         post: Post | None,
         story: Story | None = None,
         profiles: dict[uuid.UUID, Profile] | None = None,
+        opening_comment: str | None = None,
     ) -> None:
         self._post = post
         self._story = story
         self._profiles = profiles or {}
+        # What the thread says now lives in its first comment, which the
+        # report quotes.
+        self._opening_comment = opening_comment
         self.deleted: list[Any] = []
 
     async def get(self, model: Any, key: Any) -> Any:
@@ -91,6 +94,15 @@ class _ReportSession:
     async def scalars(self, _stmt: Any) -> Any:
         admin_ids = [p.id for p in self._profiles.values() if p.is_admin]
         return type("R", (), {"all": lambda self: admin_ids})()
+
+    async def execute(self, _stmt: Any, *_args: Any, **_kwargs: Any) -> Any:
+        """Serves the opening-comment lookup: (post_id, text, created_at, id)."""
+        rows: list[Any] = []
+        if self._post is not None and self._opening_comment is not None:
+            rows = [
+                (self._post.id, self._opening_comment, None, uuid.uuid4())
+            ]
+        return type("R", (), {"all": lambda self: rows})()
 
     async def delete(self, obj: Any) -> None:
         self.deleted.append(obj)
@@ -135,6 +147,7 @@ async def test_report_emails_admins_with_post_contents_and_link() -> None:
             reporter_id: _profile(reporter_id, "Bo"),
             admin_id: _profile(admin_id, "Root", is_admin=True),
         },
+        opening_comment="A questionable take",
     )
     sent = AsyncMock(return_value=True)
     with (
@@ -240,6 +253,7 @@ def test_report_email_body_carries_contents_and_link() -> None:
         reason="Harassment & abuse",
         headline="A headline",
         article_url="https://example.com/piece",
+        # The excerpt the report quotes: the thread's opening comment.
         take="A questionable take",
         shared_text=None,
         post_url="https://app.test/post/abc",

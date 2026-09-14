@@ -532,7 +532,7 @@ export function Nav() {
 
       {addOpen ? (
         <AddStoryModal
-          allowEmptyTake={profile?.is_editorial ?? false}
+          allowEmptyComment={profile?.is_editorial ?? false}
           onClose={() => setAddOpen(false)}
           onAdded={(post) => {
             window.dispatchEvent(

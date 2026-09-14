@@ -360,7 +360,6 @@ async def _build_post_outs(
             author_id=post.author_id,
             author_name=display_name(author) if author else "Friend",
             author_image_url=author.image_url if author else None,
-            take=post.take,
             shared_text=shared_teaser,
             shared_text_truncated=shared_truncated,
             quote=post.quote,

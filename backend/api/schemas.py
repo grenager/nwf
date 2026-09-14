@@ -122,7 +122,8 @@ class StoryWithStatus(StoryOut):
     post_id: uuid.UUID | None = None
     post_author_name: str | None = None
     post_author_image_url: str | None = None
-    post_take: str | None = None
+    #: The thread's opening comment, so a search hit reads as a conversation.
+    post_comment: str | None = None
     post_reply_count: int = 0
 
 
@@ -303,7 +304,7 @@ class AttachmentCreate(BaseModel):
 
 
 class PostCreate(BaseModel):
-    """Share a story by id or URL, with optional take.
+    """Share a story by id or URL, with the sharer's opening comment.
 
     When the client has already resolved a link preview (``POST /posts/preview``),
     pass the metadata fields so create skips a second scrape.
@@ -311,6 +312,12 @@ class PostCreate(BaseModel):
 
     story_id: uuid.UUID | None = None
     url: str | None = None
+    #: What the sharer wants to say. Stored as the thread's first comment
+    #: rather than on the post, so speaking first and speaking second are the
+    #: same act.
+    comment: str | None = Field(default=None, max_length=2_000)
+    #: Former name for ``comment``. Still accepted so a client cached from
+    #: before the change keeps working; ignored when ``comment`` is set.
     take: str | None = Field(default=None, max_length=2_000)
     # Article text the author pasted from a page they can read; shown as a
     # teaser + reader view. The author chooses to share their own copy.
@@ -351,9 +358,12 @@ class PreviewOut(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    """Edit a post's take, shared reader text, or quote (author only)."""
+    """Edit a post's shared reader text or quote (author only).
 
-    take: str | None = Field(default=None, max_length=2_000)
+    The sharer's words are a comment now, so editing them goes through
+    ``PATCH /comments/{id}`` like any other comment.
+    """
+
     shared_text: str | None = Field(default=None, max_length=100_000)
     quote: str | None = Field(default=None, max_length=QUOTE_MAX_LENGTH)
 
@@ -376,7 +386,6 @@ class PostOut(ORMModel):
     author_id: uuid.UUID
     author_name: str = "Friend"
     author_image_url: str | None = None
-    take: str | None = None
     shared_text: str | None = None
     shared_text_truncated: bool = False
     quote: str | None = None

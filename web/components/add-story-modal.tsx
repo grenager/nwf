@@ -18,16 +18,16 @@ interface AddStoryModalProps {
   onClose: () => void;
   onAdded?: (post: Post) => void;
   /**
-   * Post the link with no take. Set for the editorial seeding account, whose
+   * Post the link with no comment. Set for the editorial seeding account, whose
    * posts are supply for the Discover tab rather than one person's opinion —
    * ten curated links a morning is not ten opinions. Everyone else is asked
-   * for a take, which is the whole point of sharing with friends.
+   * for a comment, which is the whole point of sharing with friends.
    */
-  allowEmptyTake?: boolean;
+  allowEmptyComment?: boolean;
   /**
    * Start a conversation about a story that already exists (opened from
    * Discover or a story page). The URL is settled, so the link field and the
-   * preview scrape are skipped and only the take is asked for.
+   * preview scrape are skipped and only the comment is asked for.
    */
   initialStory?: Story | null;
 }
@@ -54,13 +54,13 @@ function hostFromUrl(url: string): string {
 export function AddStoryModal({
   onClose,
   onAdded,
-  allowEmptyTake = false,
+  allowEmptyComment = false,
   initialStory = null,
 }: AddStoryModalProps) {
   const { notify } = useToast();
   const { requireAuth } = useAuthGate();
   const [url, setUrl] = useState<string>("");
-  const [take, setTake] = useState<string>("");
+  const [comment, setComment] = useState<string>("");
   const [paywalled, setPaywalled] = useState<boolean>(false);
   const [sharedText, setSharedText] = useState<string>("");
   const [quote, setQuote] = useState<string>("");
@@ -132,7 +132,7 @@ export function AddStoryModal({
     e.preventDefault();
     if (!requireAuth("post")) return;
     const trimmedUrl: string = url.trim();
-    if (!take.trim() && !allowEmptyTake) return;
+    if (!comment.trim() && !allowEmptyComment) return;
     if (initialStory === null && (!trimmedUrl || preview === null || previewLoading)) {
       return;
     }
@@ -152,7 +152,7 @@ export function AddStoryModal({
               publisher: preview?.publisher,
               platform: preview?.platform,
             }),
-        take: take.trim() || null,
+        comment: comment.trim() || null,
         shared_text: paywalled ? sharedText.trim() || null : null,
         quote: quote.trim() || null,
         kind: "news",
@@ -169,7 +169,7 @@ export function AddStoryModal({
 
   const linkSettled: boolean = initialStory !== null;
   const canPost: boolean =
-    (!!take.trim() || allowEmptyTake) &&
+    (!!comment.trim() || allowEmptyComment) &&
     !saving &&
     (linkSettled || (!!url.trim() && preview !== null && !previewLoading));
   const showPreviewPanel: boolean =
@@ -396,11 +396,11 @@ export function AddStoryModal({
 
           <label className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Your take{allowEmptyTake ? " (optional)" : ""}
+              Your comment{allowEmptyComment ? " (optional)" : ""}
             </span>
             <MentionInput
-              value={take}
-              onChange={setTake}
+              value={comment}
+              onChange={setComment}
               rows={5}
               className="nwf-mentions--tall"
               placeholder="What stood out? Use @ to mention a friend"

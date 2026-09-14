@@ -1,4 +1,4 @@
-"""Posts: share an article with an optional take; replies live underneath."""
+"""Posts: share an article; everything anyone says about it is a comment."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.activity_mail import notify_friends_of_new_post
@@ -32,6 +32,7 @@ from api.reactions import (
     load_post_reactions,
     upsert_post_reaction,
 )
+from api.routers.comments import sync_comment_mentions
 from api.schemas import (
     AttachmentOut,
     AudienceMemberOut,
@@ -53,6 +54,7 @@ from api.schemas import (
     StoryReaderOut,
     TypingPing,
 )
+from api.threads import opening_comment_text
 from core.attribution import resolve_attribution
 from core.classify import classify_story_kind
 from core.config import get_settings
@@ -63,13 +65,11 @@ from core.enrich import (
     hosts_match,
     registrable_host,
 )
-from core.mentions import resolve_mentioned_friend_ids
 from core.models import (
     Attachment,
     Comment,
     NotificationKind,
     Post,
-    PostMention,
     PostParticipant,
     PostReaction,
     PostRead,
@@ -257,46 +257,6 @@ async def _add_participant(
     await session.execute(stmt)
 
 
-async def _sync_post_mentions(session: SessionDep, post: Post) -> None:
-    """Replace a post's mention rows from its take; grant mentioned friends access.
-
-    Only accepted friends of the author are recorded (self and non-friends are
-    ignored). Each mentioned friend becomes a participant so they can see the
-    post even when it is private.
-    """
-    friends = await accepted_friend_ids(session, post.author_id)
-    mentioned: list[uuid.UUID] = resolve_mentioned_friend_ids(
-        post.take, allowed_ids=friends, exclude_id=post.author_id
-    )
-    previous_ids: set[uuid.UUID] = set(
-        (
-            await session.scalars(
-                select(PostMention.mentioned_user_id).where(
-                    PostMention.post_id == post.id
-                )
-            )
-        ).all()
-    )
-    await session.execute(
-        delete(PostMention).where(PostMention.post_id == post.id)
-    )
-    for mentioned_id in mentioned:
-        session.add(
-            PostMention(post_id=post.id, mentioned_user_id=mentioned_id)
-        )
-        await _add_participant(session, post.id, mentioned_id)
-        # Only alert newly mentioned friends (edits shouldn't re-ping).
-        if mentioned_id not in previous_ids:
-            await create_notification(
-                session,
-                recipient_id=mentioned_id,
-                actor_id=post.author_id,
-                kind=NotificationKind.mention,
-                post_id=post.id,
-                story_id=post.story_id,
-            )
-
-
 def _comment_out(
     comment: Comment,
     author: Profile | None,
@@ -468,7 +428,6 @@ async def serialize_post(
         author_id=post.author_id,
         author_name=display_name(author) if author else "Friend",
         author_image_url=author.image_url if author else None,
-        take=post.take,
         shared_text=post.shared_text,
         quote=post.quote,
         visibility=post.visibility,
@@ -594,7 +553,6 @@ async def create_post(
     post = Post(
         story_id=story.id,
         author_id=user.id,
-        take=(payload.take or "").strip() or None,
         shared_text=(payload.shared_text or "").strip() or None,
         quote=(payload.quote or "").strip() or None,
         visibility=PostVisibility.private,
@@ -603,9 +561,25 @@ async def create_post(
     session.add(post)
     await session.flush()
     await _add_participant(session, post.id, user.id)
-    await _sync_post_mentions(session, post)
 
-    # Writing a take also logs the story as read.
+    # The sharer's own words are the thread's first comment, not a field on
+    # the post: whoever speaks first is saying the same kind of thing as
+    # whoever speaks second. Mentions, reactions, edits and deletion then all
+    # work on it for free, which they never did on a take.
+    opening_text: str = (payload.comment or payload.take or "").strip()
+    opening: Comment | None = None
+    if opening_text:
+        opening = Comment(
+            story_id=story.id,
+            post_id=post.id,
+            user_id=user.id,
+            text=opening_text,
+        )
+        session.add(opening)
+        await session.flush()
+        await sync_comment_mentions(session, opening)
+
+    # Sharing an article also logs it as read.
     read_stmt = (
         pg_insert(StoryStatus)
         .values(
@@ -613,14 +587,12 @@ async def create_post(
             story_id=story.id,
             read=True,
             read_at=func.now(),
-            take=post.take,
         )
         .on_conflict_do_update(
             index_elements=[StoryStatus.user_id, StoryStatus.story_id],
             set_={
                 "read": True,
                 "read_at": func.now(),
-                "take": post.take,
                 "updated_at": func.now(),
             },
         )
@@ -630,7 +602,11 @@ async def create_post(
     author = await session.get(Profile, user.id)
     if author is not None:
         await notify_friends_of_new_post(
-            session, post=post, story=story, author=author
+            session,
+            post=post,
+            story=story,
+            author=author,
+            excerpt=opening_text or None,
         )
     return await serialize_post(session, post, viewer_id=user.id)
 
@@ -828,16 +804,6 @@ async def update_post(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
 
     fields = payload.model_fields_set
-    if "take" in fields:
-        new_take: str | None = (payload.take or "").strip() or None
-        post.take = new_take
-        # Keep the mirrored Log take in sync so ambient presence matches.
-        status_row = await session.get(
-            StoryStatus, {"user_id": user.id, "story_id": post.story_id}
-        )
-        if status_row is not None:
-            status_row.take = new_take
-        await _sync_post_mentions(session, post)
     if "shared_text" in fields:
         post.shared_text = (payload.shared_text or "").strip() or None
     if "quote" in fields:
@@ -906,6 +872,9 @@ async def report_post(
     author = await session.get(Profile, post.author_id)
     reporter = await session.get(Profile, user.id)
     recipients: list[str] = await _moderation_recipients(session)
+    # What a thread says is its first comment; a report with nothing quoted
+    # is much harder to act on.
+    reported_text: str | None = await opening_comment_text(session, post.id)
 
     content = ContentReportEmailContent(
         to_emails=tuple(recipients),
@@ -916,7 +885,7 @@ async def report_post(
         reason=(payload.reason or "").strip() or None,
         headline=story.full_headline if story else None,
         article_url=story.article_url if story else None,
-        take=post.take,
+        take=reported_text,
         shared_text=post.shared_text,
         post_url=get_settings().app_url(f"/post/{post.id}"),
     )

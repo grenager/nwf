@@ -105,7 +105,7 @@ export function FeedComposer({
 
       {open ? (
         <AddStoryModal
-          allowEmptyTake={me?.is_editorial ?? false}
+          allowEmptyComment={me?.is_editorial ?? false}
           onClose={() => setOpen(false)}
           onAdded={(post: Post) => {
             // Same path as the nav's post button: the event drives the feed's

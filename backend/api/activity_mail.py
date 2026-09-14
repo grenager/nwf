@@ -206,6 +206,7 @@ async def notify_friends_of_new_post(
     post: Post,
     story: Story,
     author: Profile,
+    excerpt: str | None = None,
 ) -> None:
     """Email the author's friends about a new post. Never raises.
 
@@ -239,8 +240,10 @@ async def notify_friends_of_new_post(
             if not (recipients or pending_recipients or invitees):
                 return
 
+            # The sharer's words live in the thread's first comment now, so
+            # the caller passes them in rather than reading a post field.
             ctx = await _context(
-                session, story=story, actor=author, excerpt=_truncate(post.take)
+                session, story=story, actor=author, excerpt=_truncate(excerpt)
             )
             settings: Settings = ctx.settings
             action_url: str = settings.app_url(f"/post/{post.id}")

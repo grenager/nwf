@@ -209,7 +209,17 @@ class Story(Base):
 
 
 class Post(Base):
-    """A user sharing an article with an optional take; the unified-feed unit."""
+    """A user sharing an article; the unified-feed unit.
+
+    A post carries no text of its own. What the sharer thinks is the thread's
+    first comment, so the person who shares and the person who replies are
+    doing the same thing.
+
+    The ``posts.take`` column still exists in the database and is deliberately
+    unmapped here: migration 38 copied every take into a comment, and the
+    column is dropped by a later cleanup migration once this code is
+    everywhere. Nothing may read or write it in the meantime.
+    """
 
     __tablename__ = "posts"
 
@@ -224,7 +234,6 @@ class Post(Base):
         ForeignKey("profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
-    take: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Article text the author pasted from a page they can read (e.g. behind a
     # paywall). Rendered as a teaser + a reader view; we always link back.
     shared_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -256,7 +265,12 @@ class Post(Base):
 
 
 class PostMention(Base):
-    """A friend @mentioned in a post's take; grants access + digest hooks."""
+    """A friend @mentioned in a post.
+
+    Historical: mentions arrive through comments (``CommentMention``) now,
+    since a post has no text to mention anyone in. Existing rows still grant
+    the access they always granted.
+    """
 
     __tablename__ = "post_mentions"
     __table_args__ = (

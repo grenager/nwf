@@ -4,6 +4,7 @@ import { ArticleCard } from "@/components/article-card";
 import { PostThread } from "@/components/post-thread";
 import { SharePostModal } from "@/components/share-post-modal";
 import { useAuth } from "@/components/auth-provider";
+import { openingCommentText } from "@/lib/comments";
 import { stripHtml } from "@/lib/html";
 import { api } from "@/lib/api";
 import { useStoryReaders } from "@/lib/use-story-readers";
@@ -125,7 +126,7 @@ export function PostCard({
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
         onInvite={() => setInviteOpen(true)}
-        maxTopLevelComments={2}
+        maxTopLevelComments={3}
         compact
         fofReason={card.fof_reason}
       />
@@ -136,7 +137,7 @@ export function PostCard({
           articleUrl={card.article_url}
           imageUrl={card.image_url}
           sourceName={card.source_name}
-          take={post.take}
+          take={openingCommentText(post)}
           onClose={() => setInviteOpen(false)}
         />
       ) : null}

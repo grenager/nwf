@@ -1,6 +1,7 @@
 "use client";
 
 import { Avatar } from "@/components/avatar";
+import { openingCommentText } from "@/lib/comments";
 import { relativeTime } from "@/lib/time";
 import { stripHtml } from "@/lib/html";
 import type { FeedCard } from "@/lib/types";
@@ -23,7 +24,8 @@ export function StoryConversationRow({ card }: { card: FeedCard }) {
   const latest = post.replies.length
     ? post.replies[post.replies.length - 1]
     : null;
-  const take: string = post.take?.trim() || "shared this";
+  const opening: string =
+    openingCommentText(post)?.trim() || "shared this";
 
   // Everyone visible in the thread, author first, deduped: the quickest read
   // on "which of my circles is this".
@@ -73,7 +75,7 @@ export function StoryConversationRow({ card }: { card: FeedCard }) {
         </div>
 
         <p className="mt-0.5 line-clamp-2 text-sm text-zinc-700 [overflow-wrap:anywhere] dark:text-zinc-300">
-          {stripHtml(take)}
+          {stripHtml(opening)}
         </p>
 
         {latest !== null ? (

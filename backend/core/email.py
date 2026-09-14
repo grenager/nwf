@@ -981,7 +981,7 @@ def _report_fields(content: ContentReportEmailContent) -> list[tuple[str, str]]:
     if content.article_url:
         fields.append(("Article URL", content.article_url))
     if content.take:
-        fields.append(("Their take", content.take))
+        fields.append(("What they said", content.take))
     if content.shared_text:
         fields.append(("Shared text", content.shared_text))
     return fields

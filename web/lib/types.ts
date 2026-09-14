@@ -106,7 +106,8 @@ export interface Story {
   /** The post `post_id` opens, so a result reads as a conversation. */
   post_author_name?: string | null;
   post_author_image_url?: string | null;
-  post_take?: string | null;
+  /** The thread's opening comment, so a result reads as a conversation. */
+  post_comment?: string | null;
   post_reply_count?: number;
   /** Anonymous comment activity for guest discover cards. */
 }
@@ -231,7 +232,6 @@ export interface Post {
   author_id: UUID;
   author_name: string;
   author_image_url: string | null;
-  take: string | null;
   /** Article text the author pasted from the source page (reader view). */
   shared_text: string | null;
   /** True when the feed payload omitted the tail of a long pasted body. */

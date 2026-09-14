@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import { PostThread } from "@/components/post-thread";
 import { ReaderBody } from "@/components/reader-body";
 import { SharePostModal } from "@/components/share-post-modal";
+import { openingCommentText } from "@/lib/comments";
 import { api, ApiError } from "@/lib/api";
 import { useStoryReaders } from "@/lib/use-story-readers";
 import type { Post, Profile, StoryReader, UUID } from "@/lib/types";
@@ -163,7 +164,7 @@ export function PostDetail({
           articleUrl={post.article_url}
           imageUrl={post.image_url}
           sourceName={post.source_name}
-          take={post.take}
+          take={openingCommentText(post)}
           onClose={() => setInviteOpen(false)}
         />
       ) : null}

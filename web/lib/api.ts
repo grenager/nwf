@@ -208,7 +208,8 @@ export const api = {
   createPost: (payload: {
     story_id?: UUID;
     url?: string;
-    take?: string | null;
+    /** The sharer's opening comment; stored as the thread's first comment. */
+    comment?: string | null;
     shared_text?: string | null;
     quote?: string | null;
     kind?: StoryKind;
@@ -227,7 +228,6 @@ export const api = {
   updatePost: (
     id: UUID,
     payload: {
-      take?: string | null;
       shared_text?: string | null;
       quote?: string | null;
     },

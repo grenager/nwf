@@ -18,7 +18,6 @@ def _post(visibility: PostVisibility = PostVisibility.private) -> Post:
         id=uuid.uuid4(),
         story_id=uuid.uuid4(),
         author_id=uuid.uuid4(),
-        take="hello",
         shared_text=None,
         visibility=visibility,
         last_activity_at=now,
