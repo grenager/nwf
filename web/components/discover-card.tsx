@@ -41,8 +41,12 @@ function activityLine(card: DiscoverCardData): string | null {
 
 /**
  * One trending story. Opening the article marks it read for signed-in
- * members, which both dims the card and feeds the same read signal the
- * ranking counts.
+ * members, which feeds the same read signal the ranking counts.
+ *
+ * A read story is labelled, never faded. Dimming belongs to an inbox you are
+ * clearing; Discover is a list of what the platform is discussing, where the
+ * most active story is often one you have already read — fading it makes the
+ * top of the page look dead, and takes the photo's colour with it.
  */
 export function DiscoverCard({ card, canMarkRead = false }: DiscoverCardProps) {
   const [read, setRead] = useState<boolean>(card.read);
@@ -55,7 +59,7 @@ export function DiscoverCard({ card, canMarkRead = false }: DiscoverCardProps) {
   }
 
   return (
-    <article className={read ? "opacity-60 transition-opacity" : undefined}>
+    <article>
       <ArticleCard
         articleUrl={card.article_url}
         headline={card.full_headline}
@@ -67,11 +71,14 @@ export function DiscoverCard({ card, canMarkRead = false }: DiscoverCardProps) {
         imageHeightClassName="h-44"
       />
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
-        {line ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{line}</p>
-        ) : (
-          <span />
-        )}
+        <p className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">
+          {read ? (
+            <span className="font-medium text-zinc-400 dark:text-zinc-500">
+              Read{line ? " · " : ""}
+            </span>
+          ) : null}
+          {line}
+        </p>
         {/* The card headline opens the article; this opens the story page,
             where the viewer's own and their friends' threads live and a new
             conversation can be started. */}
