@@ -67,7 +67,7 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
     summary = _PostSummary(
         author_name="Ada Lovelace",
         author_image_url=None,
-        take="Worth reading.",
+        opening_comment="Worth reading.",
         reply_count=3,
     )
 
@@ -100,7 +100,7 @@ async def test_title_search_attaches_post_id_when_visible() -> None:
     assert result.items[0].post_id == post_id
     # A result should read as the conversation it opens, not a bare article.
     assert result.items[0].post_author_name == "Ada Lovelace"
-    assert result.items[0].post_take == "Worth reading."
+    assert result.items[0].post_comment == "Worth reading."
     assert result.items[0].post_reply_count == 3
     mock_primary.assert_awaited_once()
 

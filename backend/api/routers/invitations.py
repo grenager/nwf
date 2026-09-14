@@ -30,6 +30,7 @@ from api.schemas import (
     InvitePreviewOut,
     PostOut,
 )
+from api.threads import opening_comment_text
 from core.attribution import resolve_attribution
 from core.config import Settings, get_settings
 from core.email import InviteEmailContent, send_invite_email
@@ -438,7 +439,9 @@ async def _post_teaser(
             source_image_url=source.image_url if source else None,
             publisher=story.publisher,
         )
-    return post, story, publisher, post.take
+    # The teaser quotes the thread's opening comment: a post has no text of
+    # its own any more.
+    return post, story, publisher, await opening_comment_text(session, post.id)
 
 
 async def _reply_count(session: SessionDep, post_id: uuid.UUID | None) -> int:

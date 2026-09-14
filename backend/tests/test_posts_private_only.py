@@ -18,7 +18,6 @@ def _post(visibility: PostVisibility = PostVisibility.private) -> Post:
         id=uuid.uuid4(),
         story_id=uuid.uuid4(),
         author_id=uuid.uuid4(),
-        take="hello",
         shared_text=None,
         visibility=visibility,
         last_activity_at=now,
@@ -61,6 +60,11 @@ class _ScalarBoolSession:
     async def scalar(self, *_args: object, **_kwargs: object) -> bool:
         self.scalar_calls += 1
         return self._value
+
+    async def get(self, *_args: object, **_kwargs: object) -> None:
+        # can_see_post looks the author's profile up to reject editorial
+        # seeding posts. None means "ordinary member" for these cases.
+        return None
 
 
 @pytest.mark.asyncio

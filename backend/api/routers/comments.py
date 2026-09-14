@@ -99,7 +99,7 @@ async def _add_participant(
     await session.execute(stmt)
 
 
-async def _sync_comment_mentions(
+async def sync_comment_mentions(
     session: SessionDep, comment: Comment
 ) -> None:
     """Replace a comment's mention rows; grant mentioned friends post access.
@@ -247,7 +247,7 @@ async def create_comment(
     session.add(comment)
     await session.flush()
     await _add_participant(session, post.id, user.id)
-    await _sync_comment_mentions(session, comment)
+    await sync_comment_mentions(session, comment)
     post.last_activity_at = datetime.now(UTC)
     await session.refresh(comment)
     author = await session.get(Profile, user.id)
@@ -304,7 +304,7 @@ async def update_comment(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not the author")
     comment.text = payload.text
     await session.flush()
-    await _sync_comment_mentions(session, comment)
+    await sync_comment_mentions(session, comment)
     await session.refresh(comment)
     author = await session.get(Profile, comment.user_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)
@@ -357,6 +357,9 @@ async def set_comment_reaction(
         comment_id=comment.id,
         story_id=comment.story_id,
     )
+    # Same reasoning as a post reaction: reacting is activity and must move
+    # the thread; un-reacting is not.
+    post.last_activity_at = datetime.now(UTC)
     await session.flush()
     author = await session.get(Profile, comment.user_id)
     reaction_map = await load_comment_reactions(session, [comment.id], user.id)

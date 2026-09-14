@@ -31,6 +31,9 @@ class ProfileOut(ORMModel):
     phone: str | None = None
     image_url: str | None = None
     is_admin: bool
+    #: Editorial seeding account: the composer lets it post a bare link with
+    #: no take, since a curated Discover item is not one person's opinion.
+    is_editorial: bool = False
     dense_mode: bool
     dark_mode: bool
     digest_opt_out: bool = False
@@ -119,7 +122,8 @@ class StoryWithStatus(StoryOut):
     post_id: uuid.UUID | None = None
     post_author_name: str | None = None
     post_author_image_url: str | None = None
-    post_take: str | None = None
+    #: The thread's opening comment, so a search hit reads as a conversation.
+    post_comment: str | None = None
     post_reply_count: int = 0
 
 
@@ -300,7 +304,7 @@ class AttachmentCreate(BaseModel):
 
 
 class PostCreate(BaseModel):
-    """Share a story by id or URL, with optional take.
+    """Share a story by id or URL, with the sharer's opening comment.
 
     When the client has already resolved a link preview (``POST /posts/preview``),
     pass the metadata fields so create skips a second scrape.
@@ -308,6 +312,12 @@ class PostCreate(BaseModel):
 
     story_id: uuid.UUID | None = None
     url: str | None = None
+    #: What the sharer wants to say. Stored as the thread's first comment
+    #: rather than on the post, so speaking first and speaking second are the
+    #: same act.
+    comment: str | None = Field(default=None, max_length=2_000)
+    #: Former name for ``comment``. Still accepted so a client cached from
+    #: before the change keeps working; ignored when ``comment`` is set.
     take: str | None = Field(default=None, max_length=2_000)
     # Article text the author pasted from a page they can read; shown as a
     # teaser + reader view. The author chooses to share their own copy.
@@ -348,9 +358,12 @@ class PreviewOut(BaseModel):
 
 
 class PostUpdate(BaseModel):
-    """Edit a post's take, shared reader text, or quote (author only)."""
+    """Edit a post's shared reader text or quote (author only).
 
-    take: str | None = Field(default=None, max_length=2_000)
+    The sharer's words are a comment now, so editing them goes through
+    ``PATCH /comments/{id}`` like any other comment.
+    """
+
     shared_text: str | None = Field(default=None, max_length=100_000)
     quote: str | None = Field(default=None, max_length=QUOTE_MAX_LENGTH)
 
@@ -373,7 +386,6 @@ class PostOut(ORMModel):
     author_id: uuid.UUID
     author_name: str = "Friend"
     author_image_url: str | None = None
-    take: str | None = None
     shared_text: str | None = None
     shared_text_truncated: bool = False
     quote: str | None = None
@@ -409,6 +421,20 @@ class PostOut(ORMModel):
     last_seen_at: datetime | None = None
 
 
+class CardActivityOut(BaseModel):
+    """One unread alert about this thread, shown on its card.
+
+    Replaces the separate Alerts screen for anything that belongs to a
+    conversation: a mention or a reaction is news about a thread, so it reads
+    better on the thread than in a parallel list of the same events.
+    """
+
+    kind: str
+    actor_name: str
+    actor_image_url: str | None = None
+    created_at: datetime
+
+
 class FeedCardOut(BaseModel):
     """One card per post. Two posts about the same article are two cards."""
 
@@ -428,10 +454,69 @@ class FeedCardOut(BaseModel):
     posts: list[PostOut] = Field(default_factory=list)
     score: float = 0.0
     unread_reply_count: int = 0
+    #: Unread mentions and reactions on this thread, newest first.
+    recent_activity: list[CardActivityOut] = Field(default_factory=list)
     # Set only when the viewer has no other path to this post (not the author,
     # not a direct friend of the author, not already a participant) - explains
     # why a stranger's post is showing up, via the friend who engaged with it.
     fof_reason: FofReasonOut | None = None
+
+
+class DiscoverCardOut(BaseModel):
+    """One card per story on the platform-wide Discover tab.
+
+    Counts only, never names: Discover spans the whole platform, so naming
+    who reacted or replied would leak activity from outside the viewer's own
+    friend graph. Whose conversations the viewer may actually see is decided
+    later, on the story itself.
+    """
+
+    story_id: uuid.UUID
+    full_headline: str
+    article_url: str
+    summary: str | None = None
+    image_url: str | None = None
+    source_name: str | None = None
+    source_image_url: str | None = None
+    kind: StoryKind = StoryKind.news
+    #: Posts about this story inside the ranking window.
+    post_count: int = 0
+    #: Distinct people, not rows, for each of the three engagement signals.
+    reactor_count: int = 0
+    commenter_count: int = 0
+    reader_count: int = 0
+    comment_count: int = 0
+    latest_activity_at: datetime | None = None
+    score: int = 0
+    #: Whether the viewer has already read this article. Always false for
+    #: guests, who have no log.
+    read: bool = False
+
+
+class DiscoverOut(BaseModel):
+    """Discover payload, plus the window the ranking settled on.
+
+    ``window_hours`` widens on a quiet platform, so the UI can say "most
+    active this week" instead of implying everything here happened today.
+    """
+
+    items: list[DiscoverCardOut] = Field(default_factory=list)
+    window_hours: int
+
+
+class StoryConversationsOut(BaseModel):
+    """The conversations about one story that this viewer is allowed to read.
+
+    Empty for a guest, and for a member whose friends have not touched the
+    story — which is the normal case for a story found on Discover, and the
+    point at which "Start a conversation" is the only thing to do.
+    """
+
+    items: list[FeedCardOut] = Field(default_factory=list)
+    #: True when the viewer already has a post of their own about this story,
+    #: so the UI offers "Add to your conversation" rather than starting a
+    #: second one.
+    viewer_has_post: bool = False
 
 
 class StandardsNudgeOut(BaseModel):
@@ -672,6 +757,7 @@ class AdminUserOut(BaseModel):
     email: str | None = None
     image_url: str | None = None
     last_active_at: datetime | None = None
+    is_editorial: bool = False
     friends: list[AdminFriendRef] = Field(default_factory=list)
 
 
@@ -733,6 +819,10 @@ class NotificationOut(BaseModel):
 class NotificationList(BaseModel):
     items: list[NotificationOut]
     unread_count: int = 0
+    #: Unread alerts that belong to a thread (mentions and reactions). These
+    #: now surface on the Conversations card itself, so the Alerts badge
+    #: counts only what is left: friend-graph events.
+    unread_thread_count: int = 0
 
 
 class NotificationsReadRequest(BaseModel):

@@ -223,7 +223,6 @@ export function PostThread({
   const [composerActive, setComposerActive] = useState<boolean>(false);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [editing, setEditing] = useState<boolean>(false);
-  const [editDraft, setEditDraft] = useState<string>(post.take ?? "");
   const [editSharedDraft, setEditSharedDraft] = useState<string>(
     post.shared_text ?? "",
   );
@@ -237,7 +236,7 @@ export function PostThread({
     post.last_seen_at ?? null,
   );
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const editTakeRef = useRef<HTMLTextAreaElement | null>(null);
+  const editSharedRef = useRef<HTMLTextAreaElement | null>(null);
   const startedEditRef = useRef<boolean>(false);
   const markedSeenRef = useRef<boolean>(false);
   const firstUnreadRef = useRef<HTMLDivElement | null>(null);
@@ -359,7 +358,11 @@ export function PostThread({
       return tops;
     }
     if (tops.length <= maxTopLevelComments) return tops;
-    return tops.slice(-maxTopLevelComments);
+    // The first comment is what the post says — the sharer's own words — so
+    // it is always kept, and the rest of the budget goes to the newest
+    // replies. Taking the last N outright would hide it on a busy thread.
+    if (maxTopLevelComments === 1) return [tops[0]];
+    return [tops[0], ...tops.slice(-(maxTopLevelComments - 1))];
   }, [tops, maxTopLevelComments]);
 
   const displayedReplyCount: number = useMemo(() => {
@@ -457,18 +460,18 @@ export function PostThread({
   }
 
   function beginEdit(): void {
-    setEditDraft(post.take ?? "");
     setEditSharedDraft(post.shared_text ?? "");
     setEditQuoteDraft(post.quote ?? "");
     setEditing(true);
   }
 
-  // Editing is meant to be typed into immediately: drop the caret at the end of
-  // the existing take and bring the field into view.
+  // Editing is meant to be typed into immediately: drop the caret at the end
+  // of the existing text and bring the field into view. What the author said
+  // is a comment now, so this edits the article text and quote only.
   useEffect(() => {
     if (!editing) return;
     requestAnimationFrame(() => {
-      const field: HTMLTextAreaElement | null = editTakeRef.current;
+      const field: HTMLTextAreaElement | null = editSharedRef.current;
       if (field === null) return;
       field.focus();
       const end: number = field.value.length;
@@ -489,13 +492,11 @@ export function PostThread({
   }, [startEditing, isAuthor, isPreviewMode]);
 
   async function saveEdit(): Promise<void> {
-    const text: string = editDraft.trim();
     const shared: string = editSharedDraft.trim();
     const quote: string = editQuoteDraft.trim();
     setSavingEdit(true);
     try {
       const updated: Post = await api.updatePost(post.id, {
-        take: text || null,
         shared_text: shared || null,
         quote: quote || null,
       });
@@ -688,19 +689,6 @@ export function PostThread({
             <div className="mt-1 space-y-2">
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                  Your take
-                </span>
-                <MentionInput
-                  value={editDraft}
-                  onChange={setEditDraft}
-                  rows={2}
-                  autoFocus
-                  inputRef={editTakeRef}
-                  placeholder="Your take…"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                   Quote from the article{" "}
                   <span className="font-normal text-zinc-400">optional</span>
                 </span>
@@ -722,6 +710,7 @@ export function PostThread({
                   Article text
                 </span>
                 <textarea
+                  ref={editSharedRef}
                   value={editSharedDraft}
                   onChange={(e) => setEditSharedDraft(e.target.value)}
                   rows={5}
@@ -742,7 +731,6 @@ export function PostThread({
                   type="button"
                   onClick={() => {
                     setEditing(false);
-                    setEditDraft(post.take ?? "");
                     setEditSharedDraft(post.shared_text ?? "");
                     setEditQuoteDraft(post.quote ?? "");
                   }}
@@ -752,16 +740,7 @@ export function PostThread({
                 </button>
               </div>
             </div>
-          ) : post.take ? (
-            <MentionText
-              text={post.take}
-              className="-mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
-            />
-          ) : (
-            <p className="-mt-0.5 text-sm italic leading-snug text-zinc-400">
-              shared this
-            </p>
-          )}
+          ) : null}
 
           {post.attachments.length > 0 ? (
             <ul className="mt-2 space-y-1">

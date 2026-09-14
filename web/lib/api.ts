@@ -9,7 +9,9 @@ import type {
   ConnectionStatus,
   CommunityStats,
   ConversationList,
+  DiscoverPayload,
   FeedPayload,
+  FeedSort,
   FriendProfile,
   FriendRequests,
   FriendsOverview,
@@ -31,6 +33,7 @@ import type {
   RecommendedFriend,
   ShareOutcome,
   Story,
+  StoryConversations,
   StoryKind,
   StoryList,
   StoryReader,
@@ -151,13 +154,24 @@ export const api = {
     request<StoryList>(`/stories/title-search?q=${encodeURIComponent(q)}`),
   getCommunityStats: (): Promise<CommunityStats> =>
     request<CommunityStats>("/community/stats"),
+  getStory: (storyId: UUID): Promise<Story> =>
+    request<Story>(`/stories/${storyId}`),
+  /** Threads about this story the viewer may read. Guests get none. */
+  getStoryConversations: (storyId: UUID): Promise<StoryConversations> =>
+    request<StoryConversations>(`/stories/${storyId}/conversations`),
   /** Self + friend readers of a story, most recent first - refetch target
    * for the live "reading now" indicator. */
   getStoryReaders: (storyId: UUID): Promise<StoryReader[]> =>
     request<StoryReader[]>(`/stories/${storyId}/readers`),
 
+  // --- discover ---
+  /** Platform-wide trending stories. Readable by guests. */
+  getDiscover: (): Promise<DiscoverPayload> =>
+    request<DiscoverPayload>("/discover"),
+
   // --- feed / posts ---
-  getFeed: (): Promise<FeedPayload> => request<FeedPayload>("/feed"),
+  getFeed: (sort: FeedSort = "activity"): Promise<FeedPayload> =>
+    request<FeedPayload>(`/feed?sort=${sort}`),
   getPost: (id: UUID): Promise<Post> => request<Post>(`/posts/${id}`),
   getPostAudience: (id: UUID): Promise<PostAudience> =>
     request<PostAudience>(`/posts/${id}/audience`),
@@ -194,7 +208,8 @@ export const api = {
   createPost: (payload: {
     story_id?: UUID;
     url?: string;
-    take?: string | null;
+    /** The sharer's opening comment; stored as the thread's first comment. */
+    comment?: string | null;
     shared_text?: string | null;
     quote?: string | null;
     kind?: StoryKind;
@@ -213,7 +228,6 @@ export const api = {
   updatePost: (
     id: UUID,
     payload: {
-      take?: string | null;
       shared_text?: string | null;
       quote?: string | null;
     },

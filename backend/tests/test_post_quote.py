@@ -35,7 +35,7 @@ def test_update_rejects_an_over_long_quote() -> None:
 
 def test_update_omitting_quote_leaves_it_untouched() -> None:
     """``update_post`` only writes fields present in ``model_fields_set``."""
-    payload = PostUpdate(take="new take")
+    payload = PostUpdate(shared_text="pasted article text")
     assert "quote" not in payload.model_fields_set
 
 
@@ -51,7 +51,6 @@ def test_post_model_carries_a_quote() -> None:
         id=uuid.uuid4(),
         story_id=uuid.uuid4(),
         author_id=uuid.uuid4(),
-        take="hello",
         shared_text=None,
         quote="the line that made me share it",
         visibility=PostVisibility.private,
@@ -74,3 +73,16 @@ def test_post_out_defaults_quote_to_none() -> None:
         updated_at=datetime.now(UTC),
     )
     assert out.quote is None
+
+
+def test_create_accepts_the_opening_comment_under_either_name() -> None:
+    """``comment`` is the field; ``take`` stays accepted for stale clients."""
+    assert PostCreate(url="https://example.com/a", comment="hello").comment == "hello"
+    legacy = PostCreate(url="https://example.com/a", take="hello")
+    assert legacy.comment is None
+    assert legacy.take == "hello"
+
+
+def test_post_out_has_no_text_of_its_own() -> None:
+    """A post is a shared article; what people say are comments."""
+    assert "take" not in PostOut.model_fields

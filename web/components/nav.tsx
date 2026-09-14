@@ -16,8 +16,8 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 const BADGE_POLL_MS: number = 60_000;
 
 const DESKTOP_LINKS: { href: string; label: string }[] = [
-  { href: "/", label: "Feed" },
-  { href: "/notifications", label: "Alerts" },
+  { href: "/", label: "Discover" },
+  { href: "/conversations", label: "Conversations" },
   { href: "/friends", label: "People" },
 ];
 
@@ -54,7 +54,7 @@ function TabIcon({
   );
 }
 
-function IconFeed({
+function IconDiscover({
   className,
   filled = false,
 }: {
@@ -70,7 +70,16 @@ function IconFeed({
         className={className}
         aria-hidden
       >
-        <path d="M11.47 3.84a.75.75 0 0 1 1.06 0l8.25 7.5a.75.75 0 1 1-1.01 1.11l-.77-.7V19.5A1.5 1.5 0 0 1 17.5 21h-3.75v-5.25a.75.75 0 0 0-.75-.75h-1.5a.75.75 0 0 0-.75.75V21H6.5A1.5 1.5 0 0 1 5 19.5v-7.75l-.77.7a.75.75 0 1 1-1.01-1.11l8.25-7.5Z" />
+        {/* The needle is knocked out of the disc (hence evenodd) as a rhombus
+            whose four points average to exactly (12,12), so it sits centred
+            however the icon is scaled. The earlier path was hand-drawn and
+            averaged to (12.7, 10.7), which read as a needle pushed up and to
+            the right. */}
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5ZM16 8l-2.3 5.7L8 16l2.3-5.7L16 8Z"
+        />
       </svg>
     );
   }
@@ -84,21 +93,36 @@ function IconFeed({
       className={className}
       aria-hidden
     >
+      <circle cx="12" cy="12" r="9" />
       <path
-        d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
+        d="M15.8 8.2 13.6 13.6 8.2 15.8l2.2-5.4 5.4-2.2Z"
         strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );
 }
 
-function IconAlerts({
+function IconConversations({
   className,
   filled = false,
 }: {
   className?: string;
   filled?: boolean;
 }) {
+  // Two overlapping speech bubbles: the back one offset up-right, the front
+  // one carrying the tail. Both states use the same geometry so the icon does
+  // not shift when the tab becomes active.
+  const back: string =
+    "M9 3.5h9A2.5 2.5 0 0 1 20.5 6v3A2.5 2.5 0 0 1 18 11.5H9A2.5 2.5 0 0 1 6.5 9V6A2.5 2.5 0 0 1 9 3.5Z";
+  // Stroked, a closed back bubble draws its edges straight through the front
+  // one and the pair reads as a grid. Open it where the front bubble covers
+  // it, and it reads as one bubble sitting behind another.
+  const backOpen: string =
+    "M8.2 9V6A2.5 2.5 0 0 1 10.7 3.5H18A2.5 2.5 0 0 1 20.5 6v3A2.5 2.5 0 0 1 18 11.5h-.6";
+  const front: string =
+    "M6 9h9a2.5 2.5 0 0 1 2.5 2.5V15a2.5 2.5 0 0 1-2.5 2.5H9.6l-3 2.9v-2.9H6A2.5 2.5 0 0 1 3.5 15v-3.5A2.5 2.5 0 0 1 6 9Z";
+
   if (filled) {
     return (
       <svg
@@ -108,8 +132,10 @@ function IconAlerts({
         className={className}
         aria-hidden
       >
-        <path d="M12 2.5a6.5 6.5 0 0 0-6.5 6.5c0 3.2-1.2 4.85-1.85 5.75A1 1 0 0 0 4.45 16.5h15.1a1 1 0 0 0 .8-1.75C19.7 13.85 18.5 12.2 18.5 9A6.5 6.5 0 0 0 12 2.5Z" />
-        <path d="M9.75 18.25a2.25 2.25 0 0 0 4.5 0h-4.5Z" />
+        {/* evenodd leaves the overlap unfilled, which is what separates the
+            two bubbles without needing a background-coloured stroke — the tab
+            bar sits on both light and dark grounds. */}
+        <path fillRule="evenodd" clipRule="evenodd" d={`${back} ${front}`} />
       </svg>
     );
   }
@@ -123,11 +149,8 @@ function IconAlerts({
       className={className}
       aria-hidden
     >
-      <path
-        d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"
-        strokeLinejoin="round"
-      />
-      <path d="M10 19a2 2 0 0 0 4 0" strokeLinecap="round" />
+      <path d={backOpen} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={front} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -225,7 +248,7 @@ export function Nav() {
   const [sharePostId, setSharePostId] = useState<UUID | null>(null);
   const [incomingCount, setIncomingCount] = useState<number>(0);
   const [convosUnread, setConvosUnread] = useState<number>(0);
-  const [alertsUnread, setAlertsUnread] = useState<number>(0);
+  const [threadAlerts, setThreadAlerts] = useState<number>(0);
 
   const isGuest: boolean = !session;
 
@@ -233,7 +256,7 @@ export function Nav() {
     if (!user?.id) {
       setIncomingCount(0);
       setConvosUnread(0);
-      setAlertsUnread(0);
+      setThreadAlerts(0);
       return;
     }
     const [reqs, convos, alerts] = await Promise.all([
@@ -243,7 +266,9 @@ export function Nav() {
     ]);
     if (reqs) setIncomingCount(reqs.incoming.length);
     if (convos) setConvosUnread(convos.threads_with_unread);
-    if (alerts) setAlertsUnread(alerts.unread_count);
+    // Mentions and reactions are counted on Conversations, where they are now
+    // shown, so they must not also be counted here.
+    if (alerts) setThreadAlerts(alerts.unread_thread_count);
   }, [user?.id]);
 
   useEffect(() => {
@@ -251,7 +276,7 @@ export function Nav() {
       setProfile(null);
       setIncomingCount(0);
       setConvosUnread(0);
-      setAlertsUnread(0);
+      setThreadAlerts(0);
       return;
     }
     let active = true;
@@ -285,21 +310,19 @@ export function Nav() {
     void refreshBadges();
   });
 
-  // Replying in the feed stamps the read cursor, answering a friend request
-  // settles one, and visiting the Alerts tab clears its own unread state —
-  // all without a route change, so the badge needs telling directly instead
-  // of waiting for the next poll or pathname change.
+  // Replying in the feed stamps the read cursor and answering a friend
+  // request settles one, both without a route change, so the badge needs
+  // telling directly instead of waiting for the next poll or pathname
+  // change.
   useEffect(() => {
     function onStale(): void {
       void refreshBadges();
     }
     window.addEventListener("nwf:thread-seen", onStale);
     window.addEventListener("nwf:connections-changed", onStale);
-    window.addEventListener("nwf:alerts-viewed", onStale);
     return () => {
       window.removeEventListener("nwf:thread-seen", onStale);
       window.removeEventListener("nwf:connections-changed", onStale);
-      window.removeEventListener("nwf:alerts-viewed", onStale);
     };
   }, [refreshBadges]);
 
@@ -326,7 +349,9 @@ export function Nav() {
   }
 
   function badgeFor(href: string): number {
-    if (href === "/notifications") return alertsUnread + convosUnread;
+    // One number, one meaning: everything that happened in a thread counts on
+    // Conversations, and friend requests count on People.
+    if (href === "/conversations") return convosUnread + threadAlerts;
     if (href === "/friends") return incomingCount;
     return 0;
   }
@@ -425,22 +450,25 @@ export function Nav() {
             }`}
           >
             <TabIcon>
-              <IconFeed className="h-5 w-5" filled={tabActive("/")} />
+              <IconDiscover className="h-5 w-5" filled={tabActive("/")} />
             </TabIcon>
-            Feed
+            Discover
           </Link>
           <Link
-            href="/friends"
+            href="/conversations"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/friends")
+              tabActive("/conversations")
                 ? "font-semibold text-zinc-900 dark:text-zinc-50"
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={incomingCount}>
-              <IconFriends className="h-5 w-5" filled={tabActive("/friends")} />
+            <TabIcon badge={convosUnread + threadAlerts}>
+              <IconConversations
+                className="h-5 w-5"
+                filled={tabActive("/conversations")}
+              />
             </TabIcon>
-            People
+            Conversations
           </Link>
           <button
             type="button"
@@ -453,20 +481,17 @@ export function Nav() {
             </span>
           </button>
           <Link
-            href="/notifications"
+            href="/friends"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
-              tabActive("/notifications")
+              tabActive("/friends")
                 ? "font-semibold text-zinc-900 dark:text-zinc-50"
                 : "font-medium text-zinc-500"
             }`}
           >
-            <TabIcon badge={alertsUnread + convosUnread}>
-              <IconAlerts
-                className="h-5 w-5"
-                filled={tabActive("/notifications")}
-              />
+            <TabIcon badge={incomingCount}>
+              <IconFriends className="h-5 w-5" filled={tabActive("/friends")} />
             </TabIcon>
-            Alerts
+            People
           </Link>
           {isGuest ? (
             <Link
@@ -507,6 +532,7 @@ export function Nav() {
 
       {addOpen ? (
         <AddStoryModal
+          allowEmptyComment={profile?.is_editorial ?? false}
           onClose={() => setAddOpen(false)}
           onAdded={(post) => {
             window.dispatchEvent(

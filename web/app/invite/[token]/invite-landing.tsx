@@ -565,14 +565,8 @@ export function InviteLandingClient({ token }: InviteLandingClientProps) {
                   {relativeTime(post.created_at)}
                 </span>
               </div>
-              {post.take ? (
-                <MentionText
-                  text={post.take}
-                  className="mt-0.5 block whitespace-pre-line text-sm leading-snug text-zinc-700 dark:text-zinc-300"
-                />
-              ) : (
-                <p className="mt-0.5 text-sm italic text-zinc-400">shared this</p>
-              )}
+              {/* No post text to show: what the sharer said is the first
+                  entry in the reply list below. */}
             </div>
           </div>
 

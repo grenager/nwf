@@ -35,7 +35,6 @@ def _post(post_id: uuid.UUID, author_id: uuid.UUID, story_id: uuid.UUID) -> Post
         id=post_id,
         story_id=story_id,
         author_id=author_id,
-        take="A take",
         shared_text=None,
         visibility=PostVisibility.private,
         last_activity_at=now,

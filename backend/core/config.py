@@ -162,6 +162,20 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Discover ---------------------------------------------------------
+    # Trailing windows tried in order when ranking the platform-wide Discover
+    # tab. A quiet day widens the window rather than showing a near-empty
+    # page; the last entry is the ceiling.
+    discover_windows_hours: list[int] = Field(default=[24, 72, 168])
+    discover_min_items: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Stories Discover tries to show before it stops widening the window"
+        ),
+    )
+    discover_limit: int = Field(default=30, ge=1, le=100)
+
     # --- Logging ----------------------------------------------------------
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=False)

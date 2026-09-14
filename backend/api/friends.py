@@ -10,7 +10,17 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import ColumnElement, Select, bindparam, exists, func, or_, select, text
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    bindparam,
+    exists,
+    func,
+    or_,
+    select,
+    text,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -795,9 +805,27 @@ async def post_participant_ids(
     return list(rows.all())
 
 
-def _fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
+def non_editorial_author_clause() -> ColumnElement[bool]:
+    """True when the Post's author is not an editorial seeding account.
+
+    Editorial posts exist to fill the Discover tab, so they must never reach a
+    friend/friend-of-friend surface. Having no friends is not enough on its
+    own: :func:`fof_engagement_clause` unlocks *every* post on a story once a
+    friend marks that story read, so an editorial post about a widely-read
+    article would otherwise appear in Conversations.
+    """
+    return ~exists().where(
+        Profile.id == Post.author_id,
+        Profile.is_editorial.is_(True),
+    )
+
+
+def fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
     """True when any of `user_ids` engaged with Post (via post_participants /
     post_reactions) or its Story (via story_statuses.read).
+
+    Shared by the feed's candidate query and the story page, so "which
+    conversations may I read" is decided in exactly one place.
 
     Story-level engagement (reading) unlocks every Post tied to that
     story_id, not just one - a friend reading an article is vouching for the
@@ -840,6 +868,12 @@ async def can_see_post(
         return False
     if post.author_id == viewer_id:
         return True
+    # An editorial post is a Discover seed, not a conversation: nobody but its
+    # author may open, reply to or react to it. Readers start their own post
+    # about the story instead.
+    author = await session.get(Profile, post.author_id)
+    if author is not None and author.is_editorial:
+        return False
     participants: list[uuid.UUID] = (
         participant_ids
         if participant_ids is not None
@@ -880,6 +914,13 @@ def audience_label(visibility: PostVisibility, participant_count: int) -> str:
     return f"visible to friends of {participant_count} participants"
 
 
+#: How the Conversations feed may be ordered. ``activity`` puts the thread
+#: someone just replied to or reacted on first, which is what folding Alerts
+#: into Conversations needs; ``created`` keeps the original "newest posted"
+#: reading, where an old thread never jumps the queue.
+FeedSort = Literal["activity", "created"]
+
+
 async def visible_post_ids_for_viewer(
     session: AsyncSession,
     viewer_id: uuid.UUID | None,
@@ -889,21 +930,23 @@ async def visible_post_ids_for_viewer(
     since_days: int = 14,
     min_results: int = 0,
     max_since_days: int | None = None,
+    sort: FeedSort = "created",
 ) -> list[uuid.UUID]:
-    """Candidate post ids the viewer may see, newest-posted first.
+    """Candidate post ids the viewer may see.
 
     Authenticated users see private posts where they are the author or a
     direct friend engaged with the post or its story (participant, reaction,
     or reading). Guests see nothing.
-    Sorted by ``created_at`` so a new reply - or a friend's later engagement -
-    does not bump a post to the top.
+
+    ``sort`` picks both the ordering and the column the lookback window
+    applies to, and the two must match: windowing on ``created_at`` while
+    ordering by ``last_activity_at`` would silently drop exactly the old
+    threads that a fresh reply is supposed to bring back.
 
     ``since_days`` keeps the common case cheap by only scanning recent posts. If
     that window yields fewer than ``min_results`` posts, the lookback widens to
     ``max_since_days`` (``None`` for no cutoff) so a quiet week still produces a
-    full feed instead of a near-empty one. Note this windows on the post's own
-    ``created_at``, not on when a friend engaged with it - a friend engaging
-    with a post outside the lookback window does not resurrect it.
+    full feed instead of a near-empty one.
     """
     if viewer_id is None:
         return []
@@ -914,17 +957,24 @@ async def visible_post_ids_for_viewer(
         else await accepted_friend_ids(session, viewer_id)
     )
 
+    order_column = (
+        Post.last_activity_at if sort == "activity" else Post.created_at
+    )
+
     def query(since: datetime | None) -> Select[tuple[uuid.UUID]]:
         participant_filter = [viewer_id, *friends]
         stmt = select(Post.id).where(
             or_(
                 Post.author_id == viewer_id,
-                _fof_engagement_clause(participant_filter),
+                and_(
+                    fof_engagement_clause(participant_filter),
+                    non_editorial_author_clause(),
+                ),
             ),
         )
         if since is not None:
-            stmt = stmt.where(Post.created_at >= since)
-        return stmt.order_by(Post.created_at.desc()).limit(limit)
+            stmt = stmt.where(order_column >= since)
+        return stmt.order_by(order_column.desc()).limit(limit)
 
     now = datetime.now(UTC)
     recent = await session.scalars(query(now - timedelta(days=since_days)))
@@ -968,7 +1018,10 @@ async def viewer_visible_post_ids(
             Post.id.in_(post_ids),
             or_(
                 Post.author_id == viewer_id,
-                _fof_engagement_clause(participant_filter),
+                and_(
+                    fof_engagement_clause(participant_filter),
+                    non_editorial_author_clause(),
+                ),
             ),
         )
     )
@@ -999,7 +1052,10 @@ async def primary_post_ids_by_story(
                 Post.story_id.in_(story_ids),
                 or_(
                     Post.author_id == viewer_id,
-                    _fof_engagement_clause(participant_filter),
+                    and_(
+                        fof_engagement_clause(participant_filter),
+                        non_editorial_author_clause(),
+                    ),
                 ),
             )
             .order_by(Post.created_at.desc())

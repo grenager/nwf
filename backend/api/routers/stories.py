@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import ColumnElement
 
@@ -18,21 +18,26 @@ from api.friends import (
     accepted_friend_ids,
     aggregate_engagement,
     display_name,
+    fof_engagement_clause,
     friend_activity_by_story,
     friend_profiles_map,
     friend_reactors_by_story,
     global_activity_by_story,
+    non_editorial_author_clause,
     primary_post_ids_by_story,
     top_readers,
 )
+from api.routers.feed import build_feed_cards
 from api.schemas import (
     FriendEngagementOut,
     FriendReactorOut,
+    StoryConversationsOut,
     StoryCreate,
     StoryList,
     StoryReaderOut,
     StoryWithStatus,
 )
+from api.threads import opening_comment_texts
 from core.attribution import resolve_attribution
 from core.models import Comment, Post, PostParticipant, Profile, Source, Story, StoryStatus
 
@@ -85,7 +90,8 @@ class _PostSummary:
 
     author_name: str
     author_image_url: str | None
-    take: str | None
+    #: The thread's opening comment, which is what a search hit quotes.
+    opening_comment: str | None
     reply_count: int
 
 
@@ -97,11 +103,14 @@ async def _post_summaries(
 
     rows = (
         await session.execute(
-            select(Post.id, Post.take, Profile)
+            select(Post.id, Profile)
             .join(Profile, Profile.id == Post.author_id)
             .where(Post.id.in_(post_ids))
         )
     ).all()
+    # A result reads as a conversation, so it quotes the thread's opening
+    # comment; the post itself carries no text.
+    openings = await opening_comment_texts(session, post_ids)
     count_rows = (
         await session.execute(
             select(Comment.post_id, func.count(Comment.id))
@@ -116,10 +125,10 @@ async def _post_summaries(
         post_id: _PostSummary(
             author_name=display_name(author),
             author_image_url=author.image_url,
-            take=take,
+            opening_comment=openings.get(post_id),
             reply_count=counts.get(post_id, 0),
         )
-        for post_id, take, author in rows
+        for post_id, author in rows
     }
 
 
@@ -204,7 +213,7 @@ async def title_search(
             if summary is not None:
                 item.post_author_name = summary.author_name
                 item.post_author_image_url = summary.author_image_url
-                item.post_take = summary.take
+                item.post_comment = summary.opening_comment
                 item.post_reply_count = summary.reply_count
 
     source_ids = {story.source_id for story, _, _ in ranked_rows if story.source_id}
@@ -265,6 +274,60 @@ async def add_story(
     else:
         model.source_name = urlparse(url).netloc or None
     return model
+
+
+@router.get("/{story_id}/conversations", response_model=StoryConversationsOut)
+async def get_story_conversations(
+    story_id: uuid.UUID, session: SessionDep, user: OptionalUser
+) -> StoryConversationsOut:
+    """Conversations about this story that the viewer may read.
+
+    The bridge from Discover to the private half of the app: a trending story
+    is public-ish, but the threads under it are not. Only the viewer's own
+    posts and those their friends engaged with come back — same rule as the
+    feed — and editorial seeding posts are never among them, since they exist
+    to surface the article, not to be replied to.
+    """
+    if user is None:
+        return StoryConversationsOut(items=[], viewer_has_post=False)
+
+    friends = await accepted_friend_ids(session, user.id)
+    post_ids = list(
+        (
+            await session.scalars(
+                select(Post.id)
+                .where(
+                    Post.story_id == story_id,
+                    or_(
+                        Post.author_id == user.id,
+                        and_(
+                            fof_engagement_clause([user.id, *friends]),
+                            non_editorial_author_clause(),
+                        ),
+                    ),
+                )
+                # Most recently active first: on a story page the live
+                # conversation matters more than which was posted first.
+                .order_by(Post.last_activity_at.desc())
+            )
+        ).all()
+    )
+    cards = await build_feed_cards(
+        session, viewer_id=user.id, friends=friends, post_ids=post_ids
+    )
+    return StoryConversationsOut(
+        items=cards,
+        viewer_has_post=any(
+            post.author_id == user.id
+            for post in (
+                await session.scalars(
+                    select(Post).where(
+                        Post.story_id == story_id, Post.author_id == user.id
+                    )
+                )
+            ).all()
+        ),
+    )
 
 
 @router.get("/{story_id}", response_model=StoryWithStatus)

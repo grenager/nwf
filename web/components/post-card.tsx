@@ -4,10 +4,11 @@ import { ArticleCard } from "@/components/article-card";
 import { PostThread } from "@/components/post-thread";
 import { SharePostModal } from "@/components/share-post-modal";
 import { useAuth } from "@/components/auth-provider";
+import { openingCommentText } from "@/lib/comments";
 import { stripHtml } from "@/lib/html";
 import { api } from "@/lib/api";
 import { useStoryReaders } from "@/lib/use-story-readers";
-import type { FeedCard, Post, Profile } from "@/lib/types";
+import type { CardActivity, FeedCard, Post, Profile } from "@/lib/types";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
@@ -17,6 +18,29 @@ interface PostCardProps {
   onCardChange: (card: FeedCard) => void;
   /** Top border between feed items (suppressed when a section divider sits above). */
   showTopBorder?: boolean;
+}
+
+/**
+ * What is new on this thread, in one line.
+ *
+ * Replaces the Alerts screen for thread-scoped events: a mention or a
+ * reaction is news about a conversation, so it reads better above the
+ * conversation than in a parallel list of the same things. Names at most two
+ * people, because a line that lists six is a list, not a line.
+ */
+function activitySentence(activity: CardActivity[]): string {
+  const verbs: Record<string, string> = {
+    mention: "mentioned you",
+    post_reaction: "reacted to your post",
+    comment_reaction: "reacted to your comment",
+  };
+  const shown = activity.slice(0, 2);
+  const rest = activity.length - shown.length;
+  const parts = shown.map(
+    (a) => `${a.actor_name} ${verbs[a.kind] ?? "replied"}`,
+  );
+  if (rest > 0) parts.push(`+${rest} more`);
+  return parts.join(" · ");
 }
 
 export function PostCard({
@@ -89,6 +113,11 @@ export function PostCard({
     <article
       className={`py-7 ${showTopBorder ? "border-t border-zinc-200 dark:border-zinc-800" : ""}`}
     >
+      {card.recent_activity.length > 0 ? (
+        <p className="mb-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+          {activitySentence(card.recent_activity)}
+        </p>
+      ) : null}
       <PostThread
         post={post}
         me={me}
@@ -97,7 +126,7 @@ export function PostCard({
         onPostChange={onPostChange}
         onDelete={() => onCardChange({ ...card, posts: [] })}
         onInvite={() => setInviteOpen(true)}
-        maxTopLevelComments={2}
+        maxTopLevelComments={3}
         compact
         fofReason={card.fof_reason}
       />
@@ -108,7 +137,7 @@ export function PostCard({
           articleUrl={card.article_url}
           imageUrl={card.image_url}
           sourceName={card.source_name}
-          take={post.take}
+          take={openingCommentText(post)}
           onClose={() => setInviteOpen(false)}
         />
       ) : null}

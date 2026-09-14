@@ -17,6 +17,7 @@ from api.routers import (
     community,
     connections,
     conversations,
+    discover,
     email_prefs,
     feed,
     health,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(community.router)
     app.include_router(posts.router)
     app.include_router(feed.router)
+    app.include_router(discover.router)
     app.include_router(conversations.router)
     app.include_router(notifications.router)
     app.include_router(attachments.router)

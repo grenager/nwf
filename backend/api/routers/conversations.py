@@ -6,15 +6,17 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.deps import CurrentUser, SessionDep
 from api.friends import can_see_post, display_name
+from api.routers.feed import THREAD_ALERT_KINDS
 from api.schemas import ConversationList, ConversationOut
 from core.attribution import resolve_attribution
 from core.models import (
     Comment,
+    Notification,
     Post,
     PostParticipant,
     PostRead,
@@ -206,3 +208,16 @@ async def mark_thread_seen(
         )
     )
     await session.execute(stmt)
+    # Mentions and reactions on this thread now show on its own card, so
+    # opening the thread is what clears them. Friend-graph alerts are left
+    # alone: they belong to the People tab, not to any thread.
+    await session.execute(
+        update(Notification)
+        .where(
+            Notification.recipient_id == user.id,
+            Notification.post_id == post_id,
+            Notification.read_at.is_(None),
+            Notification.kind.in_(THREAD_ALERT_KINDS),
+        )
+        .values(read_at=now)
+    )

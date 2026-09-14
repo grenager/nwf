@@ -9,6 +9,12 @@ export interface Profile {
   phone: string | null;
   image_url: string | null;
   is_admin: boolean;
+  /**
+   * Editorial seeding account: posts curated links that fill the Discover
+   * tab. The composer lets it post a bare link with no take, since a seeded
+   * item is supply rather than one person's opinion.
+   */
+  is_editorial: boolean;
   dense_mode: boolean;
   dark_mode: boolean;
   digest_opt_out: boolean;
@@ -100,7 +106,8 @@ export interface Story {
   /** The post `post_id` opens, so a result reads as a conversation. */
   post_author_name?: string | null;
   post_author_image_url?: string | null;
-  post_take?: string | null;
+  /** The thread's opening comment, so a result reads as a conversation. */
+  post_comment?: string | null;
   post_reply_count?: number;
   /** Anonymous comment activity for guest discover cards. */
 }
@@ -225,7 +232,6 @@ export interface Post {
   author_id: UUID;
   author_name: string;
   author_image_url: string | null;
-  take: string | null;
   /** Article text the author pasted from the source page (reader view). */
   shared_text: string | null;
   /** True when the feed payload omitted the tail of a long pasted body. */
@@ -302,6 +308,20 @@ export interface PreviewCard {
   platform: string | null;
 }
 
+/**
+ * One unread alert about a thread, shown on its Conversations card.
+ *
+ * Mentions and reactions used to live on a separate Alerts screen, which
+ * meant the same event was listed twice: once as an alert and once as the
+ * thread it happened in.
+ */
+export interface CardActivity {
+  kind: string;
+  actor_name: string;
+  actor_image_url: string | null;
+  created_at: string;
+}
+
 export interface FeedCard {
   card_id: UUID;
   story_id: UUID;
@@ -319,7 +339,62 @@ export interface FeedCard {
   posts: Post[];
   score: number;
   unread_reply_count: number;
+  /** Unread mentions and reactions on this thread, newest first. */
+  recent_activity: CardActivity[];
   fof_reason: FofReason | null;
+}
+
+/** How the Conversations feed is ordered. */
+export type FeedSort = "activity" | "created";
+
+/**
+ * The conversations about one story that the viewer is allowed to read.
+ *
+ * Usually empty for a story found on Discover — a trending article is
+ * platform-wide, but the threads under it are private — which is exactly
+ * when starting one is the only thing to do.
+ */
+export interface StoryConversations {
+  items: FeedCard[];
+  /** The viewer already has a post here, so they add to it rather than start a second. */
+  viewer_has_post: boolean;
+}
+
+/**
+ * One card on the Discover tab: a story, with how much the whole platform is
+ * doing with it.
+ *
+ * Counts only, never names. Discover spans every member, so naming who
+ * reacted would leak activity from outside the viewer's friend graph; who
+ * they may actually read is decided on the story itself.
+ */
+export interface DiscoverCard {
+  story_id: UUID;
+  full_headline: string;
+  article_url: string;
+  summary: string | null;
+  image_url: string | null;
+  source_name: string | null;
+  source_image_url: string | null;
+  kind: StoryKind;
+  post_count: number;
+  reactor_count: number;
+  commenter_count: number;
+  reader_count: number;
+  comment_count: number;
+  latest_activity_at: string | null;
+  score: number;
+  read: boolean;
+}
+
+export interface DiscoverPayload {
+  items: DiscoverCard[];
+  /**
+   * The window the ranking settled on: widens past 24h when the platform is
+   * quiet, so the header can say "this week" instead of implying everything
+   * here happened today.
+   */
+  window_hours: number;
 }
 
 /**
@@ -403,6 +478,12 @@ export interface NotificationItem {
 export interface NotificationList {
   items: NotificationItem[];
   unread_count: number;
+  /**
+   * Unread alerts that belong to a thread. They now show on the
+   * Conversations card, so the Alerts badge subtracts them rather than
+   * counting the same mention on two tabs.
+   */
+  unread_thread_count: number;
 }
 
 export type ConnectionStatus = "pending" | "accepted" | "blocked";
