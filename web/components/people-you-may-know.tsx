@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { Avatar } from "@/components/avatar";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -107,14 +108,11 @@ export function PeopleYouMayKnow() {
               key={rec.user_id}
               className="relative flex w-36 shrink-0 flex-col items-center border border-zinc-200 p-3 pt-4 dark:border-zinc-800"
             >
-              <button
-                type="button"
-                onClick={() => dismiss(rec.user_id)}
-                aria-label={`Dismiss ${rec.display_name}`}
-                className="absolute right-1 top-1 px-1.5 py-0.5 text-xs leading-none text-zinc-300 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                ✕
-              </button>
+              <CloseButton
+                onClose={() => dismiss(rec.user_id)}
+                label={`Dismiss ${rec.display_name}`}
+                className="absolute right-0 top-0 text-zinc-300 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300"
+              />
               <Avatar name={rec.display_name} imageUrl={rec.image_url} size="xl" />
               <p className="mt-2 line-clamp-2 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 {rec.display_name}

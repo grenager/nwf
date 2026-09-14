@@ -25,7 +25,7 @@ export function StoryDetailModal({ storyId }: { storyId: UUID }) {
         <button
           onClick={() => router.back()}
           aria-label="Close"
-          className="flex h-11 w-11 items-center justify-center text-zinc-500 hover:text-zinc-900 sm:h-auto sm:w-auto sm:text-zinc-400 dark:hover:text-zinc-200"
+          className="flex h-11 w-11 items-center justify-center text-zinc-500 hover:text-zinc-900 sm:text-zinc-400 [@media(pointer:fine)]:h-9 [@media(pointer:fine)]:w-9 dark:hover:text-zinc-200"
         >
           {/* Full screen reads as a pushed page, so mobile gets a back
               chevron and a thumb-sized target instead of a bare glyph. */}

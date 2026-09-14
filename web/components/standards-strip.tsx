@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { useAuthGate } from "@/components/auth-gate";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -137,14 +138,11 @@ export function StandardsStrip() {
             {inviting ? "Creating…" : "Invite someone"}
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss"
-          className="ml-auto shrink-0 px-1 text-sm leading-none opacity-70 transition hover:opacity-100"
-        >
-          ✕
-        </button>
+        <CloseButton
+          onClose={dismiss}
+          label="Dismiss"
+          className="ml-auto opacity-70 hover:opacity-100"
+        />
       </div>
     </div>
   );

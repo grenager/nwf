@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { useAuthGate } from "@/components/auth-gate";
 import { MentionInput } from "@/components/mention-input";
 import { useToast } from "@/components/toast";
@@ -188,13 +189,10 @@ export function AddStoryModal({
         <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
           {linkSettled ? "Start a conversation" : "Share an article"}
         </h2>
-        <button
-          onClick={onClose}
-          aria-label="Close"
+        <CloseButton
+          onClose={onClose}
           className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-        >
-          ✕
-        </button>
+        />
       </div>
 
       <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
