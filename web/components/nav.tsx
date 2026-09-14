@@ -447,6 +447,16 @@ export function Nav() {
             </TabIcon>
             Talk
           </Link>
+          <button
+            type="button"
+            onClick={openAddStory}
+            aria-label="New post"
+            className="flex flex-col items-center justify-center py-1"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-[9999px] bg-slate-900 text-xl font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+              +
+            </span>
+          </button>
           <Link
             href="/friends"
             className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] ${
@@ -460,16 +470,6 @@ export function Nav() {
             </TabIcon>
             People
           </Link>
-          <button
-            type="button"
-            onClick={openAddStory}
-            aria-label="New post"
-            className="flex flex-col items-center justify-center py-1"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-[9999px] bg-slate-900 text-xl font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-              +
-            </span>
-          </button>
           {isGuest ? (
             <Link
               href="/signin"
