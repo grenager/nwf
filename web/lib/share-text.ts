@@ -114,9 +114,16 @@ function stripWrappers(text: string): string {
 export function extractUrlFromShareText(input: string): string {
   if (!input.trim()) return input;
 
-  // Newlines and non-breaking spaces are separators like any other.
+  // Zero-width characters are deleted rather than turned into separators:
+  // some apps inject them into a long link so it can wrap, and treating
+  // one as a space cuts the URL in half at that point. The visible exotic
+  // spaces (en, em, thin, non-breaking) really are separators, so those
+  // collapse along with newlines and tabs.
   const flat: string = stripWrappers(
-    input.replace(/[  -‍﻿]/g, " ").replace(/\s+/g, " "),
+    input
+      .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
+      .replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ")
+      .replace(/\s+/g, " "),
   );
 
   const schemed: RegExpMatchArray | null = flat.match(SCHEMED);

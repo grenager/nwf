@@ -235,9 +235,25 @@ export function AddStoryModal({
                 required={!linkSettled}
                 autoFocus={!linkSettled}
                 value={url}
-                // Share sheets hand over a headline and a link, or a link and
-                // a sign-off. Keep only the link, so the preview loads instead
-                // of the member having to trim the paste by hand.
+                // Read the clipboard directly rather than waiting for the
+                // value to arrive through onChange. A type="url" input
+                // sanitises line breaks out of the pasted text first, and
+                // browsers disagree on whether a space is left behind — where
+                // none is, the sign-off after the link gets glued onto the
+                // end of it ("…/a/bSent from my iPhone") and the preview
+                // fetches a URL that does not exist. The raw clipboard text
+                // still has its newlines, so the link is unambiguous.
+                //
+                // Only prose is taken over: a paste with no whitespace is a
+                // link or a fragment of one, and replacing the whole field
+                // would break appending to what is already there.
+                onPaste={(e) => {
+                  const raw: string = e.clipboardData?.getData("text") ?? "";
+                  if (!raw.trim() || !/\s/.test(raw)) return;
+                  e.preventDefault();
+                  setUrl(extractUrlFromShareText(raw));
+                }}
+                // Typed input, and any browser that gives no clipboard data.
                 onChange={(e) =>
                   setUrl(extractUrlFromShareText(e.target.value))
                 }
