@@ -5,6 +5,7 @@ import { MentionInput } from "@/components/mention-input";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
 import { stripHtml } from "@/lib/html";
+import { extractUrlFromShareText } from "@/lib/share-text";
 import {
   QUOTE_MAX_LENGTH,
   type Post,
@@ -236,7 +237,12 @@ export function AddStoryModal({
                 required={!linkSettled}
                 autoFocus={!linkSettled}
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                // Share sheets hand over a headline and a link, or a link and
+                // a sign-off. Keep only the link, so the preview loads instead
+                // of the member having to trim the paste by hand.
+                onChange={(e) =>
+                  setUrl(extractUrlFromShareText(e.target.value))
+                }
                 placeholder="https://example.com/article"
                 className="border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
