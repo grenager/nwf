@@ -10,7 +10,17 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import ColumnElement, Select, bindparam, exists, func, or_, select, text
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    bindparam,
+    exists,
+    func,
+    or_,
+    select,
+    text,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -795,6 +805,21 @@ async def post_participant_ids(
     return list(rows.all())
 
 
+def non_editorial_author_clause() -> ColumnElement[bool]:
+    """True when the Post's author is not an editorial seeding account.
+
+    Editorial posts exist to fill the Discover tab, so they must never reach a
+    friend/friend-of-friend surface. Having no friends is not enough on its
+    own: :func:`_fof_engagement_clause` unlocks *every* post on a story once a
+    friend marks that story read, so an editorial post about a widely-read
+    article would otherwise appear in Conversations.
+    """
+    return ~exists().where(
+        Profile.id == Post.author_id,
+        Profile.is_editorial.is_(True),
+    )
+
+
 def _fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
     """True when any of `user_ids` engaged with Post (via post_participants /
     post_reactions) or its Story (via story_statuses.read).
@@ -840,6 +865,12 @@ async def can_see_post(
         return False
     if post.author_id == viewer_id:
         return True
+    # An editorial post is a Discover seed, not a conversation: nobody but its
+    # author may open, reply to or react to it. Readers start their own post
+    # about the story instead.
+    author = await session.get(Profile, post.author_id)
+    if author is not None and author.is_editorial:
+        return False
     participants: list[uuid.UUID] = (
         participant_ids
         if participant_ids is not None
@@ -919,7 +950,10 @@ async def visible_post_ids_for_viewer(
         stmt = select(Post.id).where(
             or_(
                 Post.author_id == viewer_id,
-                _fof_engagement_clause(participant_filter),
+                and_(
+                    _fof_engagement_clause(participant_filter),
+                    non_editorial_author_clause(),
+                ),
             ),
         )
         if since is not None:
@@ -968,7 +1002,10 @@ async def viewer_visible_post_ids(
             Post.id.in_(post_ids),
             or_(
                 Post.author_id == viewer_id,
-                _fof_engagement_clause(participant_filter),
+                and_(
+                    _fof_engagement_clause(participant_filter),
+                    non_editorial_author_clause(),
+                ),
             ),
         )
     )
@@ -999,7 +1036,10 @@ async def primary_post_ids_by_story(
                 Post.story_id.in_(story_ids),
                 or_(
                     Post.author_id == viewer_id,
-                    _fof_engagement_clause(participant_filter),
+                    and_(
+                        _fof_engagement_clause(participant_filter),
+                        non_editorial_author_clause(),
+                    ),
                 ),
             )
             .order_by(Post.created_at.desc())

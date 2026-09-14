@@ -31,6 +31,9 @@ class ProfileOut(ORMModel):
     phone: str | None = None
     image_url: str | None = None
     is_admin: bool
+    #: Editorial seeding account: the composer lets it post a bare link with
+    #: no take, since a curated Discover item is not one person's opinion.
+    is_editorial: bool = False
     dense_mode: bool
     dark_mode: bool
     digest_opt_out: bool = False
@@ -434,6 +437,48 @@ class FeedCardOut(BaseModel):
     fof_reason: FofReasonOut | None = None
 
 
+class DiscoverCardOut(BaseModel):
+    """One card per story on the platform-wide Discover tab.
+
+    Counts only, never names: Discover spans the whole platform, so naming
+    who reacted or replied would leak activity from outside the viewer's own
+    friend graph. Whose conversations the viewer may actually see is decided
+    later, on the story itself.
+    """
+
+    story_id: uuid.UUID
+    full_headline: str
+    article_url: str
+    summary: str | None = None
+    image_url: str | None = None
+    source_name: str | None = None
+    source_image_url: str | None = None
+    kind: StoryKind = StoryKind.news
+    #: Posts about this story inside the ranking window.
+    post_count: int = 0
+    #: Distinct people, not rows, for each of the three engagement signals.
+    reactor_count: int = 0
+    commenter_count: int = 0
+    reader_count: int = 0
+    comment_count: int = 0
+    latest_activity_at: datetime | None = None
+    score: int = 0
+    #: Whether the viewer has already read this article. Always false for
+    #: guests, who have no log.
+    read: bool = False
+
+
+class DiscoverOut(BaseModel):
+    """Discover payload, plus the window the ranking settled on.
+
+    ``window_hours`` widens on a quiet platform, so the UI can say "most
+    active this week" instead of implying everything here happened today.
+    """
+
+    items: list[DiscoverCardOut] = Field(default_factory=list)
+    window_hours: int
+
+
 class StandardsNudgeOut(BaseModel):
     """The one thing worth asking this viewer to do, if anything.
 
@@ -672,6 +717,7 @@ class AdminUserOut(BaseModel):
     email: str | None = None
     image_url: str | None = None
     last_active_at: datetime | None = None
+    is_editorial: bool = False
     friends: list[AdminFriendRef] = Field(default_factory=list)
 
 

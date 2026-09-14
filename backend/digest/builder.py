@@ -401,6 +401,10 @@ async def build_user_digest(
 
     for post in friend_posts:
         author_profile: Profile | None = profiles.get(post.author_id)
+        # Editorial posts seed the Discover tab and never belong to a friend's
+        # activity, so they never earn a digest line.
+        if author_profile is not None and author_profile.is_editorial:
+            continue
         author: str = first_name(author_profile.first if author_profile is not None else None)
         comment_count: int = len(
             {c.user_id for c in friend_comments_by_post.get(post.id, [])}

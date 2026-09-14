@@ -131,6 +131,7 @@ async def test_notify_friends_of_new_post_fans_out() -> None:
     story.image_url = None
 
     author = MagicMock()
+    author.is_editorial = False
     author.id = author_id
     author.first = "Shalom"
     author.last = None
@@ -219,6 +220,7 @@ async def test_notify_friends_of_new_post_reaches_pending_audiences() -> None:
     story.image_url = None
 
     author = MagicMock()
+    author.is_editorial = False
     author.id = author_id
     author.first = "Shalom"
     author.last = None
@@ -330,6 +332,7 @@ async def test_invitee_nudge_not_recorded_when_send_fails() -> None:
     story.image_url = None
 
     author = MagicMock()
+    author.is_editorial = False
     author.id = author_id
     author.first = "Shalom"
     author.last = None
@@ -753,6 +756,7 @@ async def test_email_db_failure_does_not_poison_caller_transaction() -> None:
     post.take = "a take"
     story = MagicMock()
     author = MagicMock()
+    author.is_editorial = False
     author.id = post.author_id
 
     rolled_back: list[bool] = []
@@ -791,3 +795,21 @@ def test_activity_html_makes_card_and_lead_clickable() -> None:
     assert "</a>" not in body[card_anchor:headline_start]
     # images inside anchors must not pick up a link border in Outlook/Gmail
     assert body.count('border="0"') == 2
+
+
+@pytest.mark.asyncio
+async def test_editorial_author_sends_no_activity_email() -> None:
+    """Ten curated Discover links a morning must not become ten emails."""
+    session = MagicMock()
+    author = MagicMock()
+    author.is_editorial = True
+
+    with patch(
+        "api.activity_mail.send_activity_email",
+        new=AsyncMock(return_value=True),
+    ) as send_mock:
+        await notify_friends_of_new_post(
+            session, post=MagicMock(), story=MagicMock(), author=author
+        )
+
+    assert send_mock.await_count == 0

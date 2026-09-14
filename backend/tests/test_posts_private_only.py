@@ -62,6 +62,11 @@ class _ScalarBoolSession:
         self.scalar_calls += 1
         return self._value
 
+    async def get(self, *_args: object, **_kwargs: object) -> None:
+        # can_see_post looks the author's profile up to reject editorial
+        # seeding posts. None means "ordinary member" for these cases.
+        return None
+
 
 @pytest.mark.asyncio
 async def test_can_see_post_true_when_friend_engaged_via_reaction_or_read() -> None:

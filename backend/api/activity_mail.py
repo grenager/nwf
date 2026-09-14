@@ -212,7 +212,12 @@ async def notify_friends_of_new_post(
     Reaches three audiences: accepted friends, people with an unanswered friend
     request from the author, and addresses the author invited that have not
     signed up. The latter two get a note explaining they need to accept first.
+
+    Editorial posts send nothing: they seed the Discover tab, and ~10 curated
+    links a morning must not become ~10 emails.
     """
+    if author.is_editorial:
+        return
     try:
         async with session.begin_nested():
             friend_ids: list[uuid.UUID] = await accepted_friend_ids(

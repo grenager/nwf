@@ -111,6 +111,12 @@ class Profile(Base):
     phone: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # An account that exists to seed the Discover tab. Its posts are ranked
+    # into Discover but excluded from every friend/FoF surface (feed, digest,
+    # activity email), so curated links never land in anyone's Conversations.
+    is_editorial: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     dense_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dark_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_opened_at: Mapped[datetime | None] = mapped_column(
