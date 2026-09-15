@@ -151,3 +151,61 @@ def test_the_api_key_never_reaches_a_log_line() -> None:
     redacted = _redact(message, "secret-key")
     assert "secret-key" not in redacted
     assert "***" in redacted
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_is_reported_as_refused_not_just_empty() -> None:
+    """A challenged page is a real article we cannot read, not a bad link."""
+    from core.enrich import fetch_url_outcome
+
+    client, _calls = _client([_response(403), _response(403)])
+    settings = MagicMock()
+    settings.url_fetch_timeout_seconds = 5.0
+    settings.scrapingbee_api_key = None
+
+    with (
+        patch("core.enrich.httpx.AsyncClient", _factory(client)),
+        patch("core.enrich.get_settings", return_value=settings),
+    ):
+        outcome = await fetch_url_outcome("https://example.com/a")
+
+    assert outcome.refused is True
+    assert outcome.metadata.title is None
+
+
+@pytest.mark.asyncio
+async def test_a_missing_page_is_not_a_refusal() -> None:
+    """A 404 stays a bad link, so the composer keeps blocking it."""
+    from core.enrich import fetch_url_outcome
+
+    client, _calls = _client([_response(404), _response(404)])
+    settings = MagicMock()
+    settings.url_fetch_timeout_seconds = 5.0
+    settings.scrapingbee_api_key = None
+
+    with (
+        patch("core.enrich.httpx.AsyncClient", _factory(client)),
+        patch("core.enrich.get_settings", return_value=settings),
+    ):
+        outcome = await fetch_url_outcome("https://example.com/missing")
+
+    assert outcome.refused is False
+
+
+@pytest.mark.asyncio
+async def test_a_page_that_answers_is_never_marked_refused() -> None:
+    from core.enrich import fetch_url_outcome
+
+    client, _calls = _client([_response(200, OG_HTML)])
+    settings = MagicMock()
+    settings.url_fetch_timeout_seconds = 5.0
+    settings.scrapingbee_api_key = None
+
+    with (
+        patch("core.enrich.httpx.AsyncClient", _factory(client)),
+        patch("core.enrich.get_settings", return_value=settings),
+    ):
+        outcome = await fetch_url_outcome("https://example.com/a")
+
+    assert outcome.refused is False
+    assert outcome.metadata.title == "A Headline"

@@ -287,21 +287,32 @@ async def _fetch_once(
         return None, None
 
 
-async def _fetch_direct(url: str, timeout_seconds: float) -> UrlMetadata | None:
-    """Direct fetch. Returns None when the fetch/parse failed (should retry).
+async def _fetch_direct_with_status(
+    url: str, timeout_seconds: float
+) -> tuple[UrlMetadata | None, int | None]:
+    """Direct fetch, with the status that explains a failure.
 
     Tries the whitelisted crawler UA, then a browser UA when the answer was a
     refusal aimed at the crawler rather than a broken page. Publishers split
-    both ways on which one they serve metadata to.
+    both ways on which one they serve metadata to. The status returned is the
+    last one seen, so a caller can tell a refusal from a dead link.
     """
     meta, status = await _fetch_once(url, timeout_seconds, _CRAWLER_USER_AGENT)
     if meta is not None and _worth_keeping(meta):
-        return meta
+        return meta, status
     if status in _UA_REJECTED_STATUSES:
-        retry, _ = await _fetch_once(url, timeout_seconds, _BROWSER_USER_AGENT)
+        retry, retry_status = await _fetch_once(
+            url, timeout_seconds, _BROWSER_USER_AGENT
+        )
         if retry is not None and _worth_keeping(retry):
-            return retry
-        return meta or retry
+            return retry, retry_status
+        return meta or retry, retry_status or status
+    return meta, status
+
+
+async def _fetch_direct(url: str, timeout_seconds: float) -> UrlMetadata | None:
+    """Direct fetch. Returns None when the fetch/parse failed (should retry)."""
+    meta, _status = await _fetch_direct_with_status(url, timeout_seconds)
     return meta
 
 
@@ -361,27 +372,57 @@ async def _fetch_via_scrapingbee(url: str) -> UrlMetadata | None:
     return last
 
 
-async def fetch_url_metadata(url: str) -> UrlMetadata:
-    """Fetch a URL and parse its head metadata; never raises on failure.
+@dataclass(frozen=True)
+class FetchOutcome:
+    """What a preview fetch produced, and whether the page refused us.
+
+    ``refused`` separates "this link is fine, the publisher will not serve it
+    to a server" from "this link is broken". The Economist, for instance,
+    answers every non-browser client with a Cloudflare challenge; the article
+    is real and worth sharing, we simply cannot read its metadata. A 404 or a
+    dead host is a different thing and should still be treated as a bad link.
+    """
+
+    metadata: UrlMetadata
+    refused: bool = False
+
+
+#: Answers that mean the page exists but will not be served to us.
+_REFUSAL_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429, 451})
+
+
+async def fetch_url_outcome(url: str) -> FetchOutcome:
+    """Fetch a URL's head metadata, reporting refusal separately.
 
     Tries a cheap direct fetch first, then falls back to ScrapingBee (when
     configured) if the site blocks us or returns no usable preview metadata.
+    Never raises.
     """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return UrlMetadata()
+        return FetchOutcome(UrlMetadata())
 
     settings = get_settings()
-    direct = await _fetch_direct(url, settings.url_fetch_timeout_seconds)
+    direct, status = await _fetch_direct_with_status(
+        url, settings.url_fetch_timeout_seconds
+    )
     if direct is not None and _worth_keeping(direct):
-        return direct
+        return FetchOutcome(direct)
 
     proxied = await _fetch_via_scrapingbee(url)
     if proxied is not None and _worth_keeping(proxied):
-        return proxied
+        return FetchOutcome(proxied)
 
     # Neither yielded usable metadata; return whatever we have (possibly empty).
-    return direct or proxied or UrlMetadata()
+    return FetchOutcome(
+        direct or proxied or UrlMetadata(),
+        refused=status in _REFUSAL_STATUSES,
+    )
+
+
+async def fetch_url_metadata(url: str) -> UrlMetadata:
+    """Metadata only, for callers that cannot act on a refusal."""
+    return (await fetch_url_outcome(url)).metadata
 
 
 def registrable_host(url: str | None) -> str | None:

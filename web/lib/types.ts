@@ -306,6 +306,14 @@ export interface PreviewCard {
   kind: StoryKind;
   publisher: string | null;
   platform: string | null;
+  /**
+   * The publisher refused to serve its metadata, so the headline came from
+   * the URL rather than the page. The article is real — The Economist, for
+   * one, challenges every non-browser client — so posting is still allowed
+   * and the composer says the card will be plain. A link that is simply
+   * broken never gets this far.
+   */
+  unverified: boolean;
 }
 
 /**

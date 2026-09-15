@@ -355,6 +355,17 @@ export function AddStoryModal({
                         Refreshing preview…
                       </p>
                     ) : null}
+                    {preview.unverified && !previewLoading ? (
+                      // The publisher refused to hand over its metadata, so
+                      // this headline came from the URL. Say so rather than
+                      // presenting a guess as the article's own title — and
+                      // still allow the post, since the link is fine.
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+                        This publisher won&rsquo;t share a preview with us, so
+                        the card will just show the link. Your comment is what
+                        friends will read.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
