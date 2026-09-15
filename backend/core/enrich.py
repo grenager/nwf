@@ -223,16 +223,33 @@ def parse_html_metadata(page_html: str) -> UrlMetadata:
     )
 
 
-_LINK_PREVIEW_HEADERS: dict[str, str] = {
-    # Identify as the canonical link-preview crawler. Publishers (e.g. NYT)
-    # whitelist this UA to serve OpenGraph tags for social embeds, whereas
-    # generic/bot UAs get a 403 that would drop us to a bare-slug title.
-    "User-Agent": (
-        "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
-    ),
+_BASE_PREVIEW_HEADERS: dict[str, str] = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+# Identify as the canonical link-preview crawler first: publishers (e.g. NYT)
+# whitelist this UA to serve OpenGraph tags for social embeds.
+_CRAWLER_USER_AGENT: str = (
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+)
+
+# Some publishers do the opposite and refuse crawlers outright — a gift link
+# from The Economist 403s the UA above — so a plain browser is worth one more
+# try before paying for the proxy.
+_BROWSER_USER_AGENT: str = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+)
+
+_LINK_PREVIEW_HEADERS: dict[str, str] = {
+    **_BASE_PREVIEW_HEADERS,
+    "User-Agent": _CRAWLER_USER_AGENT,
+}
+
+# Statuses that mean "not you, specifically": worth one retry as a browser.
+# A 404 is included because some paywalls answer crawlers that way.
+_UA_REJECTED_STATUSES: frozenset[int] = frozenset({401, 403, 404, 451})
 
 # Metadata worth keeping. Some sites (e.g. X/Twitter) block direct fetches but
 # yield rich cards through the proxy, so treat a title-less result as a miss
@@ -241,22 +258,86 @@ def _worth_keeping(meta: UrlMetadata) -> bool:
     return bool(meta.title or meta.description or meta.image_url)
 
 
-async def _fetch_direct(url: str, timeout_seconds: float) -> UrlMetadata | None:
-    """Direct fetch. Returns None when the fetch/parse failed (should retry)."""
+async def _fetch_once(
+    url: str, timeout_seconds: float, user_agent: str
+) -> tuple[UrlMetadata | None, int | None]:
+    """One direct fetch. Returns (metadata or None, status code or None)."""
+    headers = {**_BASE_PREVIEW_HEADERS, "User-Agent": user_agent}
     try:
         async with httpx.AsyncClient(
             timeout=timeout_seconds,
             follow_redirects=True,
-            headers=_LINK_PREVIEW_HEADERS,
+            headers=headers,
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             if "html" not in resp.headers.get("content-type", "").lower():
-                return UrlMetadata()
-            return parse_html_metadata(resp.text)
+                return UrlMetadata(), resp.status_code
+            return parse_html_metadata(resp.text), resp.status_code
+    except httpx.HTTPStatusError as exc:
+        log.info(
+            "enrich.fetch_failed",
+            url=url,
+            status=exc.response.status_code,
+            error=str(exc),
+        )
+        return None, exc.response.status_code
     except (httpx.HTTPError, ValueError) as exc:
         log.info("enrich.fetch_failed", url=url, error=str(exc))
-        return None
+        return None, None
+
+
+async def _fetch_direct_with_status(
+    url: str, timeout_seconds: float
+) -> tuple[UrlMetadata | None, int | None]:
+    """Direct fetch, with the status that explains a failure.
+
+    Tries the whitelisted crawler UA, then a browser UA when the answer was a
+    refusal aimed at the crawler rather than a broken page. Publishers split
+    both ways on which one they serve metadata to. The status returned is the
+    last one seen, so a caller can tell a refusal from a dead link.
+    """
+    meta, status = await _fetch_once(url, timeout_seconds, _CRAWLER_USER_AGENT)
+    if meta is not None and _worth_keeping(meta):
+        return meta, status
+    if status in _UA_REJECTED_STATUSES:
+        retry, retry_status = await _fetch_once(
+            url, timeout_seconds, _BROWSER_USER_AGENT
+        )
+        if retry is not None and _worth_keeping(retry):
+            return retry, retry_status
+        return meta or retry, retry_status or status
+    return meta, status
+
+
+async def _fetch_direct(url: str, timeout_seconds: float) -> UrlMetadata | None:
+    """Direct fetch. Returns None when the fetch/parse failed (should retry)."""
+    meta, _status = await _fetch_direct_with_status(url, timeout_seconds)
+    return meta
+
+
+SCRAPINGBEE_ENDPOINT: str = "https://app.scrapingbee.com/api/v1/"
+
+# Attempts in order of cost. The cheap pass is usually enough because
+# OG/Twitter-card tags live in the initial <head>; the escalation is for sites
+# that answer a plain proxy request with an error (ScrapingBee surfaces the
+# target's refusal as its own 500) and only serve the head to something that
+# looks like a real browser session.
+_SCRAPINGBEE_ATTEMPTS: tuple[dict[str, str], ...] = (
+    {"render_js": "false", "premium_proxy": "true"},
+    {"render_js": "true", "stealth_proxy": "true"},
+)
+
+
+def _redact(text: str, secret: str | None) -> str:
+    """Keep an API key out of a log line.
+
+    ScrapingBee takes its key as a query parameter, so the key is part of
+    every request URL — and httpx puts the whole URL in the exception message.
+    """
+    if not secret:
+        return text
+    return text.replace(secret, "***")
 
 
 async def _fetch_via_scrapingbee(url: str) -> UrlMetadata | None:
@@ -265,50 +346,83 @@ async def _fetch_via_scrapingbee(url: str) -> UrlMetadata | None:
     api_key = settings.scrapingbee_api_key
     if not api_key:
         return None
-    params: dict[str, str] = {
-        "api_key": api_key,
-        "url": url,
-        # OG/Twitter-card tags live in the initial <head>, so skip JS rendering
-        # (~10x cheaper). Premium proxies are what get us past bot walls that
-        # 403/404 a direct fetch (e.g. Economist).
-        "render_js": "false",
-        "premium_proxy": "true",
-    }
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.scrapingbee_timeout_seconds,
-        ) as client:
-            resp = await client.get(
-                "https://app.scrapingbee.com/api/v1/", params=params
+
+    last: UrlMetadata | None = None
+    for attempt, options in enumerate(_SCRAPINGBEE_ATTEMPTS, start=1):
+        params: dict[str, str] = {"api_key": api_key, "url": url, **options}
+        try:
+            async with httpx.AsyncClient(
+                timeout=settings.scrapingbee_timeout_seconds,
+            ) as client:
+                resp = await client.get(SCRAPINGBEE_ENDPOINT, params=params)
+                resp.raise_for_status()
+                parsed = parse_html_metadata(resp.text)
+        except (httpx.HTTPError, ValueError) as exc:
+            log.info(
+                "enrich.scrapingbee_failed",
+                url=url,
+                attempt=attempt,
+                render_js=options.get("render_js"),
+                error=_redact(str(exc), api_key),
             )
-            resp.raise_for_status()
-            return parse_html_metadata(resp.text)
-    except (httpx.HTTPError, ValueError) as exc:
-        log.info("enrich.scrapingbee_failed", url=url, error=str(exc))
-        return None
+            continue
+        if _worth_keeping(parsed):
+            return parsed
+        last = parsed
+    return last
 
 
-async def fetch_url_metadata(url: str) -> UrlMetadata:
-    """Fetch a URL and parse its head metadata; never raises on failure.
+@dataclass(frozen=True)
+class FetchOutcome:
+    """What a preview fetch produced, and whether the page refused us.
+
+    ``refused`` separates "this link is fine, the publisher will not serve it
+    to a server" from "this link is broken". The Economist, for instance,
+    answers every non-browser client with a Cloudflare challenge; the article
+    is real and worth sharing, we simply cannot read its metadata. A 404 or a
+    dead host is a different thing and should still be treated as a bad link.
+    """
+
+    metadata: UrlMetadata
+    refused: bool = False
+
+
+#: Answers that mean the page exists but will not be served to us.
+_REFUSAL_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429, 451})
+
+
+async def fetch_url_outcome(url: str) -> FetchOutcome:
+    """Fetch a URL's head metadata, reporting refusal separately.
 
     Tries a cheap direct fetch first, then falls back to ScrapingBee (when
     configured) if the site blocks us or returns no usable preview metadata.
+    Never raises.
     """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return UrlMetadata()
+        return FetchOutcome(UrlMetadata())
 
     settings = get_settings()
-    direct = await _fetch_direct(url, settings.url_fetch_timeout_seconds)
+    direct, status = await _fetch_direct_with_status(
+        url, settings.url_fetch_timeout_seconds
+    )
     if direct is not None and _worth_keeping(direct):
-        return direct
+        return FetchOutcome(direct)
 
     proxied = await _fetch_via_scrapingbee(url)
     if proxied is not None and _worth_keeping(proxied):
-        return proxied
+        return FetchOutcome(proxied)
 
     # Neither yielded usable metadata; return whatever we have (possibly empty).
-    return direct or proxied or UrlMetadata()
+    return FetchOutcome(
+        direct or proxied or UrlMetadata(),
+        refused=status in _REFUSAL_STATUSES,
+    )
+
+
+async def fetch_url_metadata(url: str) -> UrlMetadata:
+    """Metadata only, for callers that cannot act on a refusal."""
+    return (await fetch_url_outcome(url)).metadata
 
 
 def registrable_host(url: str | None) -> str | None:

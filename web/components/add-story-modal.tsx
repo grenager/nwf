@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { useAuthGate } from "@/components/auth-gate";
 import { MentionInput } from "@/components/mention-input";
 import { useToast } from "@/components/toast";
@@ -188,13 +189,10 @@ export function AddStoryModal({
         <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
           {linkSettled ? "Start a conversation" : "Share an article"}
         </h2>
-        <button
-          onClick={onClose}
-          aria-label="Close"
+        <CloseButton
+          onClose={onClose}
           className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-        >
-          ✕
-        </button>
+        />
       </div>
 
       <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
@@ -237,9 +235,25 @@ export function AddStoryModal({
                 required={!linkSettled}
                 autoFocus={!linkSettled}
                 value={url}
-                // Share sheets hand over a headline and a link, or a link and
-                // a sign-off. Keep only the link, so the preview loads instead
-                // of the member having to trim the paste by hand.
+                // Read the clipboard directly rather than waiting for the
+                // value to arrive through onChange. A type="url" input
+                // sanitises line breaks out of the pasted text first, and
+                // browsers disagree on whether a space is left behind — where
+                // none is, the sign-off after the link gets glued onto the
+                // end of it ("…/a/bSent from my iPhone") and the preview
+                // fetches a URL that does not exist. The raw clipboard text
+                // still has its newlines, so the link is unambiguous.
+                //
+                // Only prose is taken over: a paste with no whitespace is a
+                // link or a fragment of one, and replacing the whole field
+                // would break appending to what is already there.
+                onPaste={(e) => {
+                  const raw: string = e.clipboardData?.getData("text") ?? "";
+                  if (!raw.trim() || !/\s/.test(raw)) return;
+                  e.preventDefault();
+                  setUrl(extractUrlFromShareText(raw));
+                }}
+                // Typed input, and any browser that gives no clipboard data.
                 onChange={(e) =>
                   setUrl(extractUrlFromShareText(e.target.value))
                 }
@@ -339,6 +353,17 @@ export function AddStoryModal({
                     {previewLoading ? (
                       <p className="mt-2 text-xs text-slate-400">
                         Refreshing preview…
+                      </p>
+                    ) : null}
+                    {preview.unverified && !previewLoading ? (
+                      // The publisher refused to hand over its metadata, so
+                      // this headline came from the URL. Say so rather than
+                      // presenting a guess as the article's own title — and
+                      // still allow the post, since the link is fine.
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+                        This publisher won&rsquo;t share a preview with us, so
+                        the card will just show the link. Your comment is what
+                        friends will read.
                       </p>
                     ) : null}
                   </div>
