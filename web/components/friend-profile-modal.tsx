@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { ReactionIcon } from "@/components/reaction-icon";
 import { useToast } from "@/components/toast";
 import { api, ApiError } from "@/lib/api";
@@ -431,13 +432,10 @@ export function FriendProfileModal({
       <div className="flex shrink-0 items-center justify-end gap-1 border-b border-slate-200 px-1 pb-1 pt-[calc(0.25rem+env(safe-area-inset-top))] sm:px-3 sm:py-1.5 dark:border-slate-800">
         {!editing && !loading && profile ? <ProfileMenu items={menuItems} /> : null}
         {onClose ? (
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-11 w-11 items-center justify-center text-xl text-slate-500 hover:text-slate-900 sm:h-9 sm:w-9 sm:text-lg dark:hover:text-slate-100"
-          >
-            ✕
-          </button>
+          <CloseButton
+            onClose={onClose}
+            className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+          />
         ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">

@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { Avatar } from "@/components/avatar";
 import { FriendProfileModal } from "@/components/friend-profile-modal";
 import { ModalShell } from "@/components/modal-shell";
@@ -47,14 +48,7 @@ export function PeopleListModal({
         <h2 className="font-serif text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           {title}
         </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-zinc-400 hover:text-zinc-700"
-          aria-label="Close"
-        >
-          ✕
-        </button>
+        <CloseButton onClose={onClose} className="text-zinc-400 hover:text-zinc-700" />
       </div>
 
       {error !== null ? (

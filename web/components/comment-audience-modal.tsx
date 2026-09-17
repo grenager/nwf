@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseButton } from "@/components/close-button";
 import { Avatar } from "@/components/avatar";
 import { api, ApiError } from "@/lib/api";
 import type { AudienceMember, PostAudience, UUID } from "@/lib/types";
@@ -111,14 +112,7 @@ export function CommentAudienceModal({
             Who will see this?
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-zinc-400 hover:text-zinc-700"
-          aria-label="Close"
-        >
-          ✕
-        </button>
+        <CloseButton onClose={onClose} className="text-zinc-400 hover:text-zinc-700" />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5">

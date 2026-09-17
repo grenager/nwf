@@ -62,6 +62,7 @@ from core.email import ContentReportEmailContent, send_content_report_email
 from core.enrich import (
     UrlMetadata,
     fetch_url_metadata,
+    fetch_url_outcome,
     hosts_match,
     registrable_host,
 )
@@ -468,8 +469,13 @@ async def preview_url(
     """Resolve OpenGraph metadata for a URL without creating a post.
 
     Used by the share composer to show a live preview before the user posts.
-    Returns 422 when the page yields no usable metadata so the client can
-    block posting rather than creating a bare-host card.
+
+    Returns 422 when the link yields nothing and looks broken, so the client
+    can block posting rather than creating a bare-host card. A link the
+    publisher *refused* is different: The Economist answers any non-browser
+    client with a Cloudflare challenge, so its metadata is unreachable however
+    hard we try, while the article itself is real and worth sharing. Those come
+    back flagged ``unverified`` instead of erroring.
     """
     del user  # auth required; value unused
     clean_url: str = payload.url.strip()
@@ -480,11 +486,12 @@ async def preview_url(
             "Couldn't load a preview for this link",
         )
 
-    metadata = await fetch_url_metadata(clean_url)
+    outcome = await fetch_url_outcome(clean_url)
+    metadata = outcome.metadata
     has_usable: bool = bool(
         metadata.title or metadata.description or metadata.image_url
     )
-    if not has_usable:
+    if not has_usable and not outcome.refused:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Couldn't load a preview for this link",
@@ -518,6 +525,7 @@ async def preview_url(
         kind=resolved_kind,
         publisher=publisher,
         platform=metadata.platform,
+        unverified=not has_usable,
     )
 
 

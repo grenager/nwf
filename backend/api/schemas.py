@@ -355,6 +355,11 @@ class PreviewOut(BaseModel):
     kind: StoryKind
     publisher: str | None = None
     platform: str | None = None
+    #: True when the publisher refused to serve its metadata, so the headline
+    #: here is derived from the URL rather than read from the page. The
+    #: composer says so and still allows posting: the article is real, we just
+    #: cannot read it. A link that is simply broken 422s instead.
+    unverified: bool = False
 
 
 class PostUpdate(BaseModel):
