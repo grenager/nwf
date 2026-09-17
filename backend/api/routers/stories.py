@@ -301,7 +301,7 @@ async def get_story_conversations(
                     or_(
                         Post.author_id == user.id,
                         and_(
-                            fof_engagement_clause([user.id, *friends]),
+                            fof_engagement_clause(user.id, friends),
                             non_editorial_author_clause(),
                         ),
                     ),

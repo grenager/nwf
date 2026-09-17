@@ -6,8 +6,9 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import select
 
-from api.friends import can_see_post, visible_post_ids_for_viewer
+from api.friends import can_see_post, fof_engagement_clause, visible_post_ids_for_viewer
 from api.schemas import PostCreate, PostUpdate
 from core.models import Post, PostVisibility
 
@@ -114,3 +115,26 @@ async def test_can_see_post_skips_engagement_query_with_no_friends() -> None:
     )
     assert result is False
     assert session.scalar_calls == 0
+
+
+def test_fof_engagement_clause_mirrors_can_see_post_ids() -> None:
+    """The candidate query must bind the viewer's id only to participation.
+
+    `fof_engagement_clause` decides which conversations the feed and story
+    page list; `can_see_post` decides which may be opened. If the viewer's
+    id reached the reaction or story-read branches, their own reading of a
+    trending story would unlock strangers' threads - listed, then 403 on
+    open. So the viewer appears once (participation) and friends appear
+    three times (participation, reaction, story read).
+    """
+    viewer = uuid.uuid4()
+    friend = uuid.uuid4()
+    stmt = select(Post.id).where(fof_engagement_clause(viewer, [friend]))
+    # in_() binds as one list-valued parameter, so flatten before counting.
+    bound_ids = [
+        item
+        for value in stmt.compile().params.values()
+        for item in (value if isinstance(value, list) else [value])
+    ]
+    assert bound_ids.count(viewer) == 1
+    assert bound_ids.count(friend) == 3
