@@ -820,14 +820,23 @@ def non_editorial_author_clause() -> ColumnElement[bool]:
     )
 
 
-def fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
-    """True when any of `user_ids` engaged with Post (via post_participants /
-    post_reactions) or its Story (via story_statuses.read).
+def fof_engagement_clause(
+    viewer_id: uuid.UUID, friend_ids: Iterable[uuid.UUID]
+) -> ColumnElement[bool]:
+    """True when the viewer participates in Post, or a friend engaged with it
+    (via post_participants / post_reactions) or its Story (via
+    story_statuses.read).
 
-    Shared by the feed's candidate query and the story page, so "which
-    conversations may I read" is decided in exactly one place.
+    The SQL mirror of :func:`can_see_post`'s engagement rule, shared by the
+    feed's candidate query and the story page, so "which conversations may I
+    read" is decided in exactly one place. The two must agree exactly: a
+    candidate row this clause admits but `can_see_post` rejects is a listed
+    conversation that 403s when opened. So the viewer's own engagement counts
+    only where `can_see_post` counts it - participating. Their own reaction
+    and, above all, their own story read unlock nothing: reading a trending
+    article on Discover must not unlock strangers' threads about it.
 
-    Story-level engagement (reading) unlocks every Post tied to that
+    Friends' story-level engagement (reading) unlocks every Post tied to that
     story_id, not just one - a friend reading an article is vouching for the
     article, not for any one person's take on it, and there's often no single
     post to narrow to (e.g. a friend who read but never posted or replied).
@@ -835,20 +844,20 @@ def fof_engagement_clause(user_ids: Iterable[uuid.UUID]) -> ColumnElement[bool]:
     Uses EXISTS (a semi-join) rather than outerjoin so combining engagement
     types doesn't fan out result rows.
     """
-    ids = list(user_ids)
+    friends = list(friend_ids)
     return or_(
         exists().where(
             PostParticipant.post_id == Post.id,
-            PostParticipant.user_id.in_(ids),
+            PostParticipant.user_id.in_([viewer_id, *friends]),
         ),
         exists().where(
             PostReaction.post_id == Post.id,
-            PostReaction.user_id.in_(ids),
+            PostReaction.user_id.in_(friends),
         ),
         exists().where(
             StoryStatus.story_id == Post.story_id,
             StoryStatus.read.is_(True),
-            StoryStatus.user_id.in_(ids),
+            StoryStatus.user_id.in_(friends),
         ),
     )
 
@@ -962,12 +971,11 @@ async def visible_post_ids_for_viewer(
     )
 
     def query(since: datetime | None) -> Select[tuple[uuid.UUID]]:
-        participant_filter = [viewer_id, *friends]
         stmt = select(Post.id).where(
             or_(
                 Post.author_id == viewer_id,
                 and_(
-                    fof_engagement_clause(participant_filter),
+                    fof_engagement_clause(viewer_id, friends),
                     non_editorial_author_clause(),
                 ),
             ),
@@ -1012,14 +1020,13 @@ async def viewer_visible_post_ids(
         if friend_ids is not None
         else await accepted_friend_ids(session, viewer_id)
     )
-    participant_filter: list[uuid.UUID] = [viewer_id, *friends]
     rows = await session.scalars(
         select(Post.id).where(
             Post.id.in_(post_ids),
             or_(
                 Post.author_id == viewer_id,
                 and_(
-                    fof_engagement_clause(participant_filter),
+                    fof_engagement_clause(viewer_id, friends),
                     non_editorial_author_clause(),
                 ),
             ),
@@ -1044,7 +1051,6 @@ async def primary_post_ids_by_story(
         if friend_ids is not None
         else await accepted_friend_ids(session, viewer_id)
     )
-    participant_filter: list[uuid.UUID] = [viewer_id, *friends]
     rows = (
         await session.execute(
             select(Post.id, Post.story_id, Post.created_at)
@@ -1053,7 +1059,7 @@ async def primary_post_ids_by_story(
                 or_(
                     Post.author_id == viewer_id,
                     and_(
-                        fof_engagement_clause(participant_filter),
+                        fof_engagement_clause(viewer_id, friends),
                         non_editorial_author_clause(),
                     ),
                 ),

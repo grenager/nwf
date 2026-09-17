@@ -1,6 +1,7 @@
 "use client";
 
 import { stripHtml } from "@/lib/html";
+import Link from "next/link";
 
 function hostFromUrl(url: string): string {
   try {
@@ -13,6 +14,9 @@ function hostFromUrl(url: string): string {
 
 interface ArticleCardProps {
   articleUrl: string;
+  /** Internal link that replaces the external article link (e.g. a story
+   * page, which the router can intercept into a modal). */
+  href?: string;
   headline: string;
   summary?: string | null;
   /** Excerpt the author picked from the article. Replaces the summary. */
@@ -20,7 +24,8 @@ interface ArticleCardProps {
   imageUrl?: string | null;
   sourceName?: string | null;
   sourceImageUrl?: string | null;
-  /** Fired when the card link is opened (e.g. to mark the story read). */
+  /** Fired when the external article link is opened (e.g. to mark the story
+   * read). Never fires when `href` replaces the external link. */
   onOpen?: () => void;
   /** Tailwind height class for the hero image. Defaults to a tall feed image. */
   imageHeightClassName?: string;
@@ -40,6 +45,7 @@ interface ArticleCardProps {
  */
 export function ArticleCard({
   articleUrl,
+  href,
   headline,
   summary = null,
   quote = null,
@@ -50,14 +56,10 @@ export function ArticleCard({
   imageHeightClassName = "h-56",
   summaryClampClassName = "line-clamp-2",
 }: ArticleCardProps) {
-  return (
-    <a
-      href={articleUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={onOpen}
-      className="group block border border-zinc-200 transition-colors hover:border-zinc-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 active:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-600 dark:focus-visible:outline-zinc-100 dark:active:border-zinc-500"
-    >
+  const className =
+    "group block border border-zinc-200 transition-colors hover:border-zinc-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 active:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-600 dark:focus-visible:outline-zinc-100 dark:active:border-zinc-500";
+  const content = (
+    <>
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -97,6 +99,25 @@ export function ArticleCard({
           </p>
         ) : null}
       </div>
+    </>
+  );
+
+  if (href !== undefined) {
+    return (
+      <Link href={href} scroll={false} className={className}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <a
+      href={articleUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={onOpen}
+      className={className}
+    >
+      {content}
     </a>
   );
 }

@@ -127,11 +127,7 @@ export function DiscoverList({ embedded = false }: DiscoverListProps) {
     body = (
       <div className="space-y-6">
         {data.items.map((card) => (
-          <DiscoverCard
-            key={card.story_id}
-            card={card}
-            canMarkRead={isSignedIn}
-          />
+          <DiscoverCard key={card.story_id} card={card} />
         ))}
       </div>
     );
