@@ -23,20 +23,15 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:54322/postgres"
     )
-    # Connection budget. Supabase's pooler in session mode caps the whole
-    # project at a fixed number of clients (15 by default) and rejects the
-    # rest outright with EMAXCONNSESSION -- which surfaces as 500s, not as
-    # backpressure. Every process sharing DATABASE_URL draws on that one
-    # budget, so these ceilings are deliberately well under it:
-    #
-    #     nwf-api     pool_size 5 + overflow 4  =  9
-    #     nwf-digest  digest_concurrency + 1    =  6  (only while a cycle runs)
-    #                                             ---
-    #                                              15
-    #
-    # Raising either value means checking that sum against the pooler's limit
-    # first. More headroom really wants the pooler's transaction mode, which
-    # allows far more clients than session mode does.
+    # Connection budget. Supabase's pooler in session mode (port 5432) caps
+    # the whole project at a fixed number of clients (15 by default) and
+    # rejects the rest outright with EMAXCONNSESSION -- which surfaces as
+    # 500s, not as backpressure. Every process sharing DATABASE_URL draws on
+    # that one budget: nwf-api + nwf-digest already sum to 15, so any PR
+    # preview deploy or local checkout pointing at the same database takes
+    # the project over the limit. Production therefore runs on the pooler's
+    # transaction mode (port 6543), which multiplexes clients and allows far
+    # more connections; these sizes are then just per-process politeness.
     db_pool_size: int = Field(default=5)
     db_max_overflow: int = Field(default=4)
     # Wait this long for a free connection before giving up. Without it a
