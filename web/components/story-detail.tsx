@@ -37,6 +37,7 @@ export function StoryDetail({ storyId, inModal = false }: StoryDetailProps) {
   const [story, setStory] = useState<Story | null>(null);
   const [convos, setConvos] = useState<StoryConversations | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [composerOpen, setComposerOpen] = useState<boolean>(false);
   const [sharePostId, setSharePostId] = useState<UUID | null>(null);
 
@@ -50,7 +51,9 @@ export function StoryDetail({ storyId, inModal = false }: StoryDetailProps) {
         ]);
         setStory(s);
         setConvos(c);
+        setLoadError(null);
       } catch (err) {
+        setLoadError(err instanceof ApiError ? err : null);
         notify(
           err instanceof ApiError ? err.message : "Couldn't load this story",
           "error",
@@ -84,9 +87,24 @@ export function StoryDetail({ storyId, inModal = false }: StoryDetailProps) {
   if (story === null) {
     return (
       <div className={inModal ? "" : "mx-auto max-w-2xl py-8"}>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">
-          This story isn&apos;t available.
-        </p>
+        {loadError?.status === 404 ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
+            This story isn&apos;t available.
+          </p>
+        ) : (
+          <div className="text-center">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              Couldn&apos;t load this story.
+            </p>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="mt-3 text-sm font-semibold text-zinc-900 underline underline-offset-2 dark:text-zinc-50"
+            >
+              Try again
+            </button>
+          </div>
+        )}
       </div>
     );
   }

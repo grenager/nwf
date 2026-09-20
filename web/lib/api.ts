@@ -82,6 +82,13 @@ async function authHeader(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function parseResponse<T>(resp: Response): Promise<T> {
+  if (resp.status === 204) {
+    return undefined as T;
+  }
+  return (await resp.json()) as T;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -89,7 +96,31 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...((init.headers as Record<string, string>) ?? {}),
   };
 
-  const resp: Response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  let resp: Response = await fetch(`${API_URL}${path}`, { ...init, headers });
+
+  // An expired access token 401s every request while the cache replays it —
+  // the story modal dies with "isn't available", polling endpoints pour 401s
+  // into the log. Recover exactly once: drop the cache, ask Supabase for a
+  // session (getSession() refreshes an expired access token when the refresh
+  // token is still good), and retry only with a genuinely different token so
+  // this can't loop. An unrecoverable 401 surfaces like any other error;
+  // Supabase's SIGNED_OUT event then clears the app's auth state.
+  if (resp.status === 401 && headers.Authorization) {
+    const sentToken: string = headers.Authorization.slice("Bearer ".length);
+    setApiAuthToken(null);
+    const supabase = getSupabaseBrowserClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const refreshedToken: string | undefined = session?.access_token;
+    if (refreshedToken && refreshedToken !== sentToken) {
+      setApiAuthToken(refreshedToken);
+      resp = await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers: { ...headers, Authorization: `Bearer ${refreshedToken}` },
+      });
+    }
+  }
 
   if (!resp.ok) {
     let detail = resp.statusText;
@@ -111,10 +142,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(resp.status, detail, errorId);
   }
 
-  if (resp.status === 204) {
-    return undefined as T;
-  }
-  return (await resp.json()) as T;
+  return parseResponse(resp);
 }
 
 export const api = {
