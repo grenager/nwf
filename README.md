@@ -175,8 +175,12 @@ start command to `nwf-api`); the digest service overrides its start command to
 `nwf-digest` in the Railway dashboard. The web service uses `web/railway.json`.
 
 - `nwf-api` — root `backend`, start `nwf-api`. Attach domain
-`api.newswithfriends.org`. Env:
-  - `DATABASE_URL` (Supabase pooled async URL, `postgresql+asyncpg://…`)
+  `api.newswithfriends.org`. Env:
+  - `DATABASE_URL` (Supabase **transaction-mode** pooler URL, port 6543:
+  `postgresql+asyncpg://postgres.<ref>…pooler.supabase.com:6543/postgres`.
+  Session mode on 5432 caps the whole project at 15 clients, which the API
+  and digest alone exhaust — previews or local checkouts sharing the URL
+  then get `EMAXCONNSESSION` 500s)
   - `SUPABASE_URL=https://<ref>.supabase.co`
   - `APP_BASE_URL=https://www.newswithfriends.org`
   - `CORS_ORIGINS=["https://newswithfriends.org","https://www.newswithfriends.org"]`
@@ -193,9 +197,10 @@ start command to `nwf-api`); the digest service overrides its start command to
   previews that a direct fetch cannot read
   - `MODERATION_REPORT_EMAIL` (optional) — where reported posts are sent
   - `ADMIN_API_SECRET` (random), `LOG_JSON=true`
-- `nwf-digest` — root `backend`, start `nwf-digest`. Env: `DATABASE_URL`,
-`SUPABASE_URL`, `APP_BASE_URL=https://www.newswithfriends.org`,
-`RESEND_API_KEY`, `EMAIL_FROM`, `DIGEST_SEND_HOUR_PT=4`, `LOG_JSON=true`.
+- `nwf-digest` — root `backend`, start `nwf-digest`. Env: `DATABASE_URL`
+  (transaction-mode pooler, see above), `SUPABASE_URL`,
+  `APP_BASE_URL=https://www.newswithfriends.org`,
+  `RESEND_API_KEY`, `EMAIL_FROM`, `DIGEST_SEND_HOUR_PT=4`, `LOG_JSON=true`.
 - `nwf-web` — root `web` (Nixpacks/`npm run build` → `npm run start`).
 Attach `newswithfriends.org` + `www`. Env:
   - `NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co`
